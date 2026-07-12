@@ -260,9 +260,16 @@ public:
 
     virtual ss::sstring store_name() const { return "config_store"; }
 
+    /// Whether this store's property values have been marked as ready to
+    /// consume.
+    bool is_ready() const { return _ready; }
+    void mark_ready(bool ready) { _ready = ready; }
+
 private:
     friend class base_property;
     std::unordered_map<std::string_view, base_property*> _properties;
+
+    bool _ready{true};
 
     // If a property has some aliases for backward compat, they are tracked
     // here: a property must appear at least in _properties, and may appear

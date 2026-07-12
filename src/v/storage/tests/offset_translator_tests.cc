@@ -62,7 +62,7 @@ struct base_fixture : public ::testing::Test {
             [this]() { return make_log_cfg(); },
             std::ref(_feature_table))
           .get();
-        _api.invoke_on_all(&storage::api::start).get();
+        _api.invoke_on_all([](storage::api& a) { return a.start(); }).get();
     }
 
     storage::kvstore_config make_kv_cfg() const {

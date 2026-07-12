@@ -15,9 +15,21 @@
 #include "kafka/client/configuration.h"
 
 namespace cluster_link {
+
+net::certificate to_certificate(const model::tls_file_or_value& v) {
+    return ss::visit(
+      v,
+      [](const model::tls_file_path& path) {
+          return net::certificate{std::filesystem::path{path()}};
+      },
+      [](const model::tls_value& value) { return net::certificate{value()}; });
+}
+
 namespace {
 
-struct tls_visitor {
+// Namespace-scoped because a local class cannot host a member template
+// ([class.local]); the template arm rejects (file, value) key/cert mismatches.
+struct key_store_visitor {
     net::key_store operator()(
       const model::tls_file_path& key, const model::tls_file_path& cert) {
         return net::key_cert_path{
@@ -36,24 +48,25 @@ struct tls_visitor {
     }
 };
 
+} // namespace
+
+net::key_store to_key_store(
+  const model::tls_file_or_value& key, const model::tls_file_or_value& cert) {
+    return std::visit(key_store_visitor{}, key, cert);
+}
+
+namespace {
+
 kafka::client::tls_configuration
 create_tls_configuration(const model::connection_config& link) {
     kafka::client::tls_configuration tls_cfg;
 
     if (link.ca.has_value()) {
-        tls_cfg.truststore = ss::visit(
-          link.ca.value(),
-          [](const model::tls_file_path& path) {
-              return net::certificate{std::filesystem::path{path()}};
-          },
-          [](const model::tls_value& value) {
-              return net::certificate{value()};
-          });
+        tls_cfg.truststore = to_certificate(link.ca.value());
     }
 
     if (link.key.has_value() && link.cert.has_value()) {
-        tls_cfg.k_store = std::visit(
-          tls_visitor{}, link.key.value(), link.cert.value());
+        tls_cfg.k_store = to_key_store(link.key.value(), link.cert.value());
     }
 
     tls_cfg.provide_sni_hostname = bool(link.tls_provide_sni);

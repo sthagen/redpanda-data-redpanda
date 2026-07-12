@@ -40,6 +40,7 @@
 #include "model/timeout_clock.h"
 #include "rpc/connection_cache.h"
 #include "rpc/errc.h"
+#include "ssx/sformat.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/sharded.hh>
@@ -87,36 +88,57 @@ service::service(
   , _quotas_frontend(quotas_frontend)
   , _cluster_link_frontend(cluster_link_frontend) {}
 
-ss::future<join_node_reply>
-service::join_node(join_node_request req, rpc::streaming_context&) {
-    cluster_version expect_version
-      = _feature_table.local().get_active_version();
-    if (expect_version == invalid_version) {
-        // Feature table isn't initialized, fall back to requiring that
-        // joining node is as recent as this node.
+namespace {
+
+/// Returns true if the requester's [earliest, latest] logical-version range
+/// is compatible with our active cluster version, OR if
+/// `config::node().upgrade_override_checks` is set. This gate is required for
+/// RPCs that attempt to fetch a controller snapshot for application on the
+/// requesting node.
+bool is_request_logical_version_compatible(
+  const features::feature_table& ft,
+  cluster_version req_earliest,
+  cluster_version req_latest,
+  std::string_view rpc_label) {
+    cluster_version expect_version = ft.get_active_version();
+    if (expect_version == cluster::invalid_version) {
+        // Feature table isn't initialized, fall back to requiring that the
+        // requester is as recent as this node.
         expect_version = features::feature_table::get_latest_logical_version();
     }
 
-    if (
-      (req.earliest_logical_version != cluster::invalid_version
-       && req.earliest_logical_version > expect_version)
-      || (req.latest_logical_version != cluster::invalid_version && req.latest_logical_version < expect_version)) {
-        // Our active version is outside the range of versions the
-        // joining node is compatible with.
-        bool permit_join = config::node().upgrade_override_checks();
-        vlog(
-          clusterlog.warn,
-          "{}join request from incompatible node {}, our version {} vs "
-          "their {}-{}",
-          permit_join ? "" : "Rejecting ",
-          req.node,
-          expect_version,
+    const bool incompatible
+      = (req_earliest != cluster::invalid_version
+         && req_earliest > expect_version)
+        || (req_latest != cluster::invalid_version && req_latest < expect_version);
+
+    if (!incompatible) {
+        return true;
+    }
+
+    const bool permit = config::node().upgrade_override_checks();
+    vlog(
+      clusterlog.warn,
+      "{}{} from incompatible node, our version {} vs their {}-{}",
+      permit ? "" : "Rejecting ",
+      rpc_label,
+      expect_version,
+      req_earliest,
+      req_latest);
+    return permit;
+}
+
+} // namespace
+
+ss::future<join_node_reply>
+service::join_node(join_node_request req, rpc::streaming_context&) {
+    if (!is_request_logical_version_compatible(
+          _feature_table.local(),
           req.earliest_logical_version,
-          req.latest_logical_version);
-        if (!permit_join) {
-            return ss::make_ready_future<join_node_reply>(join_node_reply{
-              join_node_reply::status_code::incompatible, model::node_id{-1}});
-        }
+          req.latest_logical_version,
+          ssx::sformat("join request from node {}", req.node))) {
+        return ss::make_ready_future<join_node_reply>(join_node_reply{
+          join_node_reply::status_code::incompatible, model::node_id{-1}});
     }
 
     return ss::with_scheduling_group(
@@ -138,6 +160,28 @@ service::join_node(join_node_request req, rpc::streaming_context&) {
                     return join_node_reply{status, model::node_id{-1}};
                 }
                 return std::move(r.value());
+            });
+      });
+}
+
+ss::future<fetch_controller_snapshot_reply> service::fetch_controller_snapshot(
+  fetch_controller_snapshot_request req, rpc::streaming_context&) {
+    if (!is_request_logical_version_compatible(
+          _feature_table.local(),
+          req.earliest_logical_version,
+          req.latest_logical_version,
+          "fetch_controller_snapshot request")) {
+        return ss::make_ready_future<fetch_controller_snapshot_reply>(
+          fetch_controller_snapshot_reply{});
+    }
+
+    return ss::with_scheduling_group(
+      get_scheduling_group(), [this, req]() mutable {
+          return _members_manager.invoke_on(
+            members_manager::shard,
+            get_smp_service_group(),
+            [req](members_manager& mm) mutable {
+                return mm.handle_fetch_controller_snapshot(req);
             });
       });
 }

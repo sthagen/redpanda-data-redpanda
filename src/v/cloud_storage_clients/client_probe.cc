@@ -250,7 +250,9 @@ void client_probe::setup_internal_metrics(
           [this] { return _total_multipart_aborts; },
           sm::description("Number of multipart uploads aborted"),
           labels),
-      });
+      },
+      {},
+      {sm::shard_label});
 }
 
 void client_probe::setup_public_metrics(

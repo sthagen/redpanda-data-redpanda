@@ -383,6 +383,13 @@ class DatalakeServices:
             self.redpanda.logger.debug(
                 f"Current counts for {table_name}: {counts}, want {op=} {msg_count}"
             )
+            if op is operator.eq:
+                overshot = {name: c for name, c in counts.items() if c > msg_count}
+                if overshot:
+                    raise RuntimeError(
+                        f"Table {table_name} count exceeded expected {msg_count}: "
+                        f"{overshot}."
+                    )
             return all([op(c, msg_count) for _, c in counts.items()])
 
         wait_until_with_progress_check(

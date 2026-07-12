@@ -91,7 +91,6 @@ TEST_F(kvstore_test_fixture, kvstore_empty) {
     set_configuration("disable_metrics", true);
 
     // empty started then stopped
-    storage::storage_resources resources;
     auto kvs = make_kvstore();
     kvs->start().get();
     kvs->stop().get();
@@ -155,7 +154,6 @@ TEST_F(kvstore_test_fixture, kvstore) {
 
     std::unordered_map<bytes, iobuf> truth;
 
-    storage::storage_resources resources;
     auto kvs = make_kvstore();
     kvs->start().get();
     for (int i = 0; i < 500; i++) {

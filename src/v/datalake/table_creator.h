@@ -10,7 +10,7 @@
 #pragma once
 
 #include "base/format_to.h"
-#include "datalake/schema_identifier.h"
+#include "datalake/record_translator.h"
 
 namespace datalake {
 
@@ -38,7 +38,7 @@ public:
     virtual ss::future<checked<std::nullopt_t, errc>> ensure_table(
       const model::topic&,
       model::revision_id topic_revision,
-      record_schema_components) const = 0;
+      const record_type&) const = 0;
 
     virtual ss::future<checked<std::nullopt_t, errc>> ensure_dlq_table(
       const model::topic&, model::revision_id topic_revision) const = 0;

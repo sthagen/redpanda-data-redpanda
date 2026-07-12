@@ -1,31 +1,31 @@
-load("//bazel:test.bzl", "redpanda_cc_bench", "redpanda_cc_btest", "redpanda_cc_gtest", "redpanda_test_cc_library")
+load("//bazel:test.bzl", "redpanda_cc_bench", "redpanda_cc_fuzz_test", "redpanda_cc_gtest", "redpanda_test_cc_library")
 
 redpanda_cc_gtest(
-    name = "chunked_hash_map_test",
+    name = "radix_tree_test",
     timeout = "short",
     srcs = [
-        "chunked_hash_map_test.cc",
+        "radix_tree_test.cc",
     ],
     deps = [
-        "//src/v/container:chunked_hash_map",
+        "//src/v/container:radix_tree",
+        "//src/v/random:generators",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
     ],
 )
 
-redpanda_cc_gtest(
-    name = "chunked_vector_test",
+redpanda_cc_fuzz_test(
+    name = "radix_tree_fuzz",
     timeout = "short",
     srcs = [
-        "chunked_vector_test.cc",
+        "radix_tree_fuzz.cc",
+    ],
+    args = [
+        "-max_total_time=30",
+        "-rss_limit_mb=8192",
     ],
     deps = [
-        "//src/v/container:chunked_vector",
-        "//src/v/random:generators",
-        "//src/v/serde",
-        "//src/v/serde:vector",
-        "//src/v/test_utils:gtest",
-        "@googletest//:gtest",
+        "//src/v/container:radix_tree",
     ],
 )
 
@@ -77,20 +77,6 @@ redpanda_cc_gtest(
     ],
 )
 
-redpanda_cc_btest(
-    name = "chunked_vector_async_test",
-    timeout = "short",
-    srcs = [
-        "chunked_vector_async_test.cc",
-    ],
-    deps = [
-        "//src/v/base",
-        "//src/v/container:chunked_vector",
-        "//src/v/test_utils:seastar_boost",
-        "@seastar//:testing",
-    ],
-)
-
 redpanda_test_cc_library(
     name = "bench_utils",
     hdrs = [
@@ -99,6 +85,19 @@ redpanda_test_cc_library(
     visibility = ["//visibility:private"],
     deps = [
         "//src/v/base",
+        "@seastar//:benchmark",
+    ],
+)
+
+redpanda_cc_bench(
+    name = "radix_tree_rpbench",
+    srcs = [
+        "radix_tree_bench.cc",
+    ],
+    deps = [
+        "//src/v/container:radix_tree",
+        "//src/v/random:generators",
+        "@fmt",
         "@seastar//:benchmark",
     ],
 )

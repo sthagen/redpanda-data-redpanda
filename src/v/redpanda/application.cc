@@ -16,6 +16,7 @@
 #include "cloud_storage_clients/client_pool.h"
 #include "cluster/cloud_metadata/offsets_upload_router.h"
 #include "cluster/cloud_metadata/offsets_uploader.h"
+#include "cluster/cluster_discovery.h"
 #include "cluster/config_manager.h"
 #include "cluster/controller.h"
 #include "cluster/node_isolation_watcher.h"
@@ -30,10 +31,12 @@
 #include "datalake/credential_manager.h"
 #include "datalake/datalake_manager.h"
 #include "datalake/datalake_usage_aggregator.h"
+#include "features/feature_table.h"
 #include "kafka/client/configuration.h"
 #include "kafka/server/rm_group_frontend.h"
 #include "metrics/prometheus_sanitize.h"
 #include "migrations/migrators.h"
+#include "net/tls_certificate_probe.h"
 #include "pandaproxy/rest/api.h"
 #include "pandaproxy/rest/configuration.h"
 #include "pandaproxy/schema_registry/api.h"
@@ -343,19 +346,24 @@ int application::run(int ac, char** av) {
                 // Cluster config validation uses OpenSSL (e.g. TLS cipher
                 // checks), so crypto must be initialized first.
                 wire_up_and_start_crypto_services();
+                mark_config_ready(false).get();
                 hydrate_cluster_config(node_cfg_yaml);
+                wire_up_bootstrap_services();
+                bootstrap_from_kvstore();
+                establish_cluster_view();
+                log_cluster_config();
                 init_crashtracker(app_signal);
                 initialize();
                 check_environment();
                 setup_metrics();
-                cloud_topics::test_fixture_cfg ct_cfg;
-                ct_cfg.skip_flush_loop
+                test_cfg cfg;
+                cfg.ct_test_cfg.skip_flush_loop
                   = config::shard_local_cfg()
                       .cloud_topics_disable_metastore_flush_loop_for_tests();
-                ct_cfg.skip_level_zero_gc
+                cfg.ct_test_cfg.skip_level_zero_gc
                   = config::shard_local_cfg()
                       .cloud_topics_disable_level_zero_gc_for_tests();
-                wire_up_and_start(app_signal, false, ct_cfg);
+                wire_up_and_start(app_signal, false, cfg);
                 post_start_tasks();
                 app_signal.wait().get();
                 if (!audit_mgr.local().report_redpanda_app_event(
@@ -395,6 +403,7 @@ void application::initialize(
         // initialize memory groups now that our configuration is loaded
         memory_groups();
     }).get();
+
     construct_service(
       _memory_sampling, std::ref(_log), ss::sharded_parameter([]() {
           return config::shard_local_cfg().sampled_memory_profile.bind();
@@ -465,21 +474,6 @@ void application::initialize(
           "data directory", config::node().data_directory().path);
         syschecks::pidfile_create(config::node().pidfile_path());
     }
-    smp_groups::config smp_groups_cfg{
-      .raft_group_max_non_local_requests
-      = config::shard_local_cfg().raft_smp_max_non_local_requests().value_or(
-        smp_groups::default_raft_non_local_requests(
-          config::shard_local_cfg().topic_partitions_per_shard())),
-      .proxy_group_max_non_local_requests
-      = config::shard_local_cfg().pp_sr_smp_max_non_local_requests().value_or(
-        smp_groups::default_max_nonlocal_requests)};
-
-    smp_service_groups.create_groups(smp_groups_cfg).get();
-    _deferred.emplace_back(
-      [this] { smp_service_groups.destroy_groups().get(); });
-
-    // Ensure the scheduling groups singleton is initialized early
-    std::ignore = scheduling_groups::instance();
 
     construct_service(_scheduling_groups_probe).get();
     _scheduling_groups_probe
@@ -738,30 +732,60 @@ YAML::Node application::hydrate_node_config(const po::variables_map& cfg) {
     return config;
 }
 
-void application::hydrate_cluster_config(const YAML::Node& config) {
-    auto config_printer = [this](std::string_view service, const auto& cfg) {
-        std::vector<ss::sstring> items;
-        cfg.for_each([&items, &service](const auto& item) {
-            items.push_back(
-              ssx::sformat("{}.{}\t- {}", service, item, item.desc()));
-        });
-        std::sort(items.begin(), items.end());
-        for (const auto& item : items) {
-            vlog(_log.info, "{}", item);
-        }
-    };
+// Forward declarations of helper functions defined in application_config.cc
+std::optional<storage::file_sanitize_config> read_file_sanitizer_config();
 
+storage::kvstore_config kvstore_config_from_global_config(
+  std::optional<storage::file_sanitize_config> sanitizer_config);
+
+storage::log_config manager_config_from_global_config(
+  scheduling_groups& sgs,
+  std::optional<storage::file_sanitize_config> sanitizer_config);
+
+void application::wire_up_bootstrap_services() {
+    // Ensure the scheduling groups singleton is initialized early
+    std::ignore = scheduling_groups::instance();
+
+    // Construct the feature table
+    syschecks::systemd_message("Creating feature table").get();
+    construct_service(feature_table).get();
+
+    // Construct local storage
+    const auto sanitizer_config = read_file_sanitizer_config();
+    syschecks::systemd_message("Creating storage").get();
+    construct_service(
+      storage,
+      [c = sanitizer_config]() mutable {
+          return kvstore_config_from_global_config(std::move(c));
+      },
+      [c = sanitizer_config]() mutable {
+          auto log_cfg = manager_config_from_global_config(
+            scheduling_groups::instance(), std::move(c));
+          log_cfg.reclaim_opts.background_reclaimer_sg
+            = scheduling_groups::instance().cache_background_reclaim_sg();
+          return log_cfg;
+      },
+      std::ref(feature_table))
+      .get();
+}
+
+void application::establish_cluster_view() {
+    bootstrap_controller_view().get();
+
+    // The shard_local_cfg() is now safe to use as we have a view consistent
+    // with the rest of the cluster.
+    mark_config_ready(true).get();
+}
+
+ss::future<> application::mark_config_ready(bool ready) {
+    co_await ss::smp::invoke_on_all(
+      [ready] { config::shard_local_cfg().mark_ready(ready); });
+}
+
+void application::hydrate_cluster_config(const YAML::Node& config) {
     // This includes loading from local bootstrap file or legacy
     // config file on first-start or upgrade cases.
     _config_preload = cluster::config_manager::preload(config).get();
-
-    vlog(_log.info, "Cluster configuration properties:");
-    vlog(_log.info, "(use `rpk cluster config edit` to change)");
-    config_printer("redpanda", config::shard_local_cfg());
-
-    vlog(_log.info, "Node configuration properties:");
-    vlog(_log.info, "(use `rpk redpanda config set <cfg> <value>` to change)");
-    config_printer("redpanda", config::node());
 
     if (config["pandaproxy"]) {
         _proxy_config.emplace(config["pandaproxy"]);
@@ -782,8 +806,6 @@ void application::hydrate_cluster_config(const YAML::Node& config) {
             set_local_kafka_client_config(_proxy_client_config, config::node());
         }
         set_pp_kafka_client_defaults(*_proxy_config, *_proxy_client_config);
-        config_printer("pandaproxy", *_proxy_config);
-        config_printer("pandaproxy_client", *_proxy_client_config);
     }
     if (config["schema_registry"]) {
         _schema_reg_config.emplace(config["schema_registry"]);
@@ -794,8 +816,6 @@ void application::hydrate_cluster_config(const YAML::Node& config) {
               _schema_reg_client_config, config::node());
         }
         set_sr_kafka_client_defaults(*_schema_reg_client_config);
-        config_printer("schema_registry", *_schema_reg_config);
-        config_printer("schema_registry_client", *_schema_reg_client_config);
     }
     /// Auditing will be toggled via cluster config settings, internal audit
     /// client options can be configured via local config properties
@@ -805,7 +825,44 @@ void application::hydrate_cluster_config(const YAML::Node& config) {
         set_local_kafka_client_config(_audit_log_client_config, config::node());
     }
     set_auditing_kafka_client_defaults(*_audit_log_client_config);
-    config_printer("audit_log_client", *_audit_log_client_config);
+}
+
+void application::log_cluster_config() {
+    auto config_printer = [this](std::string_view service, const auto& cfg) {
+        std::vector<ss::sstring> items;
+        cfg.for_each([&items, &service](const auto& item) {
+            items.push_back(
+              ssx::sformat("{}.{}\t- {}", service, item, item.desc()));
+        });
+        std::sort(items.begin(), items.end());
+        for (const auto& item : items) {
+            vlog(_log.info, "{}", item);
+        }
+    };
+
+    vlog(_log.info, "Cluster configuration properties:");
+    vlog(_log.info, "(use `rpk cluster config edit` to change)");
+    config_printer("redpanda", config::shard_local_cfg());
+
+    vlog(_log.info, "Node configuration properties:");
+    vlog(_log.info, "(use `rpk redpanda config set <cfg> <value>` to change)");
+    config_printer("redpanda", config::node());
+
+    if (_proxy_config) {
+        config_printer("pandaproxy", *_proxy_config);
+    }
+    if (_proxy_client_config) {
+        config_printer("pandaproxy_client", *_proxy_client_config);
+    }
+    if (_schema_reg_config) {
+        config_printer("schema_registry", *_schema_reg_config);
+    }
+    if (_schema_reg_client_config) {
+        config_printer("schema_registry_client", *_schema_reg_client_config);
+    }
+    if (_audit_log_client_config) {
+        config_printer("audit_log_client", *_audit_log_client_config);
+    }
 }
 
 void application::check_environment() {

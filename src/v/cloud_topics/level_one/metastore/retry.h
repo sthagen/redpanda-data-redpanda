@@ -24,15 +24,11 @@ namespace cloud_topics::l1 {
 
 using namespace std::chrono_literals;
 
-static constexpr auto default_metastore_retry_timeout = 5s;
 static constexpr auto default_metastore_retry_backoff = 100ms;
 
-inline retry_chain_node make_default_metastore_rtc(ss::abort_source& as) {
-    return {
-      as,
-      ss::lowres_clock::now() + default_metastore_retry_timeout,
-      default_metastore_retry_backoff};
-}
+/// Build a retry_chain_node whose overall deadline is driven by the
+/// cloud_topics_metastore_retry_timeout_ms cluster config property.
+retry_chain_node make_default_metastore_rtc(ss::abort_source& as);
 
 template<typename Func>
 concept metastore_operation = requires(Func f) {

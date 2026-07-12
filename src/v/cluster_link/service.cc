@@ -29,11 +29,13 @@
 #include "cluster_link/replication/deps.h"
 #include "cluster_link/replication/mux_remote_consumer.h"
 #include "cluster_link/replication/types.h"
+#include "cluster_link/roles_migrator.h"
+#include "cluster_link/schema_registry_sync/http_source_reader.h"
 #include "cluster_link/schema_registry_sync/mirroring_task.h"
-#include "cluster_link/schema_registry_sync/unavailable_source_reader.h"
 #include "cluster_link/security_migrator.h"
 #include "cluster_link/shadow_linking_rpc_service.h"
 #include "cluster_link/source_topic_syncer.h"
+#include "cluster_link/sr_preflight_checker.h"
 #include "config/node_config.h"
 #include "kafka/client/direct_consumer/direct_consumer.h"
 #include "kafka/data/make_exact_offset_replicator.h"
@@ -1171,12 +1173,10 @@ service::delete_cluster_link(model::name_t name, bool force_delete_link) {
       });
 }
 
-ss::future<cl_result<void>>
-service::test_connection(model::name_t name, model::connection_config config) {
+ss::future<cl_result<void>> service::test_connection(model::metadata md) {
     auto h = _gate.hold();
-    return with_manager([name = std::move(name),
-                         config = std::move(config)](manager* mgr) mutable {
-        return mgr->test_connection(std::move(name), std::move(config));
+    return with_manager([md = std::move(md)](manager* mgr) mutable {
+        return mgr->test_connection(std::move(md));
     });
 }
 
@@ -1196,6 +1196,9 @@ void service::register_notifications() {
     auto pl_notif_id = _plf->local().register_for_updates(
       [this](model::id_t id, ::model::revision_id revision) {
           _manager->on_link_change(id, revision);
+          // A newly created or changed link may use SR-API mode; bootstrap the
+          // destination `_schemas` topic on demand, off the notification path.
+          _queue.submit([this] { return maybe_bootstrap_destination_sr(); });
       });
     _notification_cleanups.emplace_back([this, pl_notif_id] {
         _plf->local().unregister_for_updates(pl_notif_id);
@@ -1272,6 +1275,12 @@ ss::future<> service::maybe_start_manager() {
     if (_manager) {
         co_return;
     }
+    // The destination Schema Registry is owned by the service so it outlives
+    // the manager and its tasks. Construct it before the manager so it can be
+    // handed in for the Schema Registry preflight checks.
+    _schema_registry_dest = schema::registry::make_default(
+      _schema_registry_api);
+
     _manager = std::make_unique<manager>(
       _self,
       partition_leader_cache::make_default(_partition_leaders_table),
@@ -1279,7 +1288,10 @@ ss::future<> service::maybe_start_manager() {
         _shard_table, _partition_manager, _smp_group),
       topic_metadata_cache::make_default(_metadata_cache),
       topic_creator::make_default(_controller),
-      security_service::make_default(_security_fe),
+      security_service::make_default(
+        _security_fe,
+        &_controller->get_role_store(),
+        &_controller->get_feature_table()),
       std::make_unique<link_registry_adapter>(&_plf->local(), this),
       std::make_unique<default_link_factory>(
         _partition_manager,
@@ -1292,20 +1304,22 @@ ss::future<> service::maybe_start_manager() {
         _hm_frontend),
       kafka_rpc_client_service::make_default(_kafka_data_rpc_client),
       members_table_provider::make_default(&_controller->get_members_table()),
+      sr_preflight_checker::make_default(
+        *_schema_registry_dest, source_sr_prober::make_default()),
+      &_controller->get_feature_table(),
       30s, // Temporary until we have a proper configuration for this
       config::shard_local_cfg().default_topic_replication.bind(),
       _scheduling_group);
     co_await _manager->register_task_factory<source_topic_syncer_factory>();
     co_await _manager->register_task_factory<group_mirroring_task_factory>();
     co_await _manager->register_task_factory<security_migrator_factory>();
+    co_await _manager->register_task_factory<roles_migrator_factory>();
 
-    // The destination Schema Registry and source reader factory are owned by
-    // the service so they outlive the tasks. The source reader is unavailable
-    // until the real HTTP client is wired.
-    _schema_registry_dest = schema::registry::make_default(
-      _schema_registry_api);
-    _source_reader_factory = std::make_unique<
-      schema_registry_sync::unavailable_source_reader_factory>();
+    // The source reader factory is owned by the service so it outlives the
+    // tasks. Each link's mirroring task asks the factory for an HTTP-backed
+    // reader bound to its configured source.
+    _source_reader_factory
+      = std::make_unique<schema_registry_sync::http_source_reader_factory>();
     co_await _manager
       ->register_task_factory<schema_registry_sync::mirroring_task_factory>(
         _schema_registry_dest.get(), _source_reader_factory.get());
@@ -1324,6 +1338,50 @@ ss::future<> service::maybe_start_manager() {
         std::rethrow_exception(ex);
     }
     std::move(manager_start).get();
+
+    // Bootstrap the destination Schema Registry now for any pre-existing
+    // SR-API-mode link; links created later are handled by the link-change
+    // notification in register_notifications.
+    co_await maybe_bootstrap_destination_sr();
+}
+
+ss::future<> service::maybe_bootstrap_destination_sr() {
+    // Topic creation is cluster-wide; one shard suffices even though the
+    // manager start and the link-change notification fire on every shard.
+    if (ss::this_shard_id() != 0 || _schema_registry_dest == nullptr) {
+        co_return;
+    }
+    // Create the destination `_schemas` topic only when a shadow link actually
+    // uses SR-API mode. The sync task runs on the `_schemas/0` leader and the
+    // Schema Registry otherwise creates `_schemas` lazily on the first client
+    // request, so without this an SR-API link on an untouched destination would
+    // never start syncing. Only the topic is created; the full start-up (store
+    // load) is left to the `_schemas/0` leader, where the sync task triggers
+    // it on its first destination operation. Gating on an api-mode link keeps
+    // a cluster that enabled shadow linking without one clean. Idempotent; a
+    // no-op when the destination Schema Registry is disabled.
+    for (const auto& id : _plf->local().get_all_link_ids()) {
+        auto md = _plf->local().find_link_by_id(id);
+        if (
+          md != nullptr
+          && md->configuration.schema_registry_sync_cfg.api_mode() != nullptr) {
+            // Best-effort: a failure must not fail link handling.
+            auto created = co_await ss::coroutine::as_future(
+              _schema_registry_dest->ensure_internal_topic());
+            if (created.failed()) {
+                auto ex = created.get_exception();
+                auto lvl = ssx::is_shutdown_exception(ex) ? ss::log_level::debug
+                                                          : ss::log_level::warn;
+                vlogl(
+                  cllog,
+                  lvl,
+                  "Failed to bootstrap destination Schema Registry for shadow "
+                  "linking: {}",
+                  ex);
+            }
+            co_return;
+        }
+    }
 }
 
 ss::future<> service::maybe_stop_manager() {

@@ -15,4 +15,5 @@ namespace cluster_link {
 class link;
 class manager;
 class service;
+class sr_preflight_checker;
 } // namespace cluster_link

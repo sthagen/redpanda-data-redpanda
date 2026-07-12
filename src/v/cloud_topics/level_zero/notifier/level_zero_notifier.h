@@ -12,6 +12,7 @@
 
 #include "cloud_topics/level_zero/stm/ctp_stm_api.h"
 #include "cluster/fwd.h"
+#include "features/fwd.h"
 #include "model/fundamental.h"
 #include "rpc/fwd.h"
 #include "ssx/semaphore.h"
@@ -35,6 +36,18 @@ namespace cloud_topics {
 /// replicates the floor through ctp_stm_api, retrying transient failures up to
 /// max_attempts. The replication result is returned to the caller, which
 /// decides whether a failure is fatal -- the call is not fire-and-forget.
+///
+/// While the tiered_cloud_topics feature is not active (the cluster is not
+/// fully upgraded to v26.2) every notification attempt is a no-op that
+/// reports success. The gate is not hypothetical: storage.mode=cloud topics
+/// may exist during the upgrade (only tiered_cloud creation is blocked) and
+/// L1 compaction of a cloud topic hands the notifier a new floor like any
+/// other, so without the gate the set_min_allowed_local_threshold stm
+/// command would be replicated to pre-v26.2 replicas that cannot apply it.
+/// Skipping the floor update is safe in the meantime: cloud-mode reads are
+/// routed through the last reconciled offset rather than the floor, and no
+/// tiered_cloud topic (the only reader of local data below the floor) can
+/// exist until the feature is active.
 class level_zero_notifier
   : public ss::peering_sharded_service<level_zero_notifier> {
 public:
@@ -54,6 +67,7 @@ public:
       ss::sharded<cluster::shard_table>* shard_table,
       ss::sharded<cluster::partition_manager>* partition_manager,
       ss::sharded<rpc::connection_cache>* connections,
+      ss::sharded<features::feature_table>* features,
       std::chrono::milliseconds retry_backoff = default_retry_backoff);
 
     ss::future<> stop();
@@ -85,6 +99,10 @@ public:
     replicate(model::ntp ntp, ctp_stm_api& api, kafka::offset new_floor);
 
 private:
+    // True once the tiered_cloud_topics feature is active (the cluster is
+    // fully upgraded to v26.2). A null feature table reads as inactive.
+    bool notifications_enabled() const;
+
     // Resolve a topic_id_partition to an ntp via the metadata cache. Returns
     // nullopt when the topic id is unknown (e.g. deleted topic or stale
     // metadata on this node).
@@ -122,6 +140,7 @@ private:
     ss::sharded<cluster::shard_table>* _shard_table;
     ss::sharded<cluster::partition_manager>* _partition_manager;
     ss::sharded<rpc::connection_cache>* _connections;
+    ss::sharded<features::feature_table>* _features;
     std::chrono::milliseconds _retry_backoff;
     ssx::semaphore _inflight{
       max_concurrent_replications, "level_zero_notifier::inflight"};

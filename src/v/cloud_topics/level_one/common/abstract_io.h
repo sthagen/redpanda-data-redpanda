@@ -11,7 +11,7 @@
 #pragma once
 
 #include "bytes/iobuf.h"
-#include "cloud_io/scheduler_types.h"
+#include "cloud_io/admission_control_types.h"
 #include "cloud_storage_clients/multipart_upload.h"
 #include "cloud_topics/level_one/common/object_id.h"
 #include "container/chunked_vector.h"
@@ -84,14 +84,24 @@ public:
     // Read part of an object from object storage, returning an input stream
     // representing the object data.
     //
-    // Behind the scenes, there may or may not be caching going on.
-    virtual ss::future<std::expected<ss::input_stream<char>, errc>>
-    read_object(object_extent, ss::abort_source*, cloud_io::group_id g) = 0;
+    // Behind the scenes, there may or may not be caching going on. When
+    // `skip_cache` is set the cache is still consulted first, but a miss is
+    // streamed directly from object storage without being written to the cache.
+    // This is intended for bulk, one-shot reads (e.g. leveling and compaction)
+    // that would otherwise pollute the cache with data that won't be re-read.
+    virtual ss::future<std::expected<ss::input_stream<char>, errc>> read_object(
+      object_extent,
+      ss::abort_source*,
+      cloud_io::group_id g,
+      bool skip_cache = false) = 0;
 
     // The same as `read_object` except that instead of returning an input
     // stream, the data is fully buffered into an `iobuf`.
     virtual ss::future<std::expected<iobuf, errc>> read_object_as_iobuf(
-      object_extent, ss::abort_source*, cloud_io::group_id g);
+      object_extent,
+      ss::abort_source*,
+      cloud_io::group_id g,
+      bool skip_cache = false);
 
     // Delete the specified objects from object storage.
     virtual ss::future<std::expected<void, errc>>

@@ -13,6 +13,7 @@
 #include "cloud_topics/level_zero/stm/ctp_stm.h"
 #include "cloud_topics/level_zero/stm/ctp_stm_api.h"
 #include "cloud_topics/logger.h"
+#include "features/feature_table.h"
 #include "model/fundamental.h"
 #include "raft/tests/raft_fixture.h"
 #include "rpc/errc.h"
@@ -54,7 +55,14 @@ TEST_F_CORO(level_zero_notifier_fixture, replicate_to_leader_succeeds) {
     co_await wait_for_leader(raft::default_timeout());
 
     ct::level_zero_notifier notifier(
-      self_node, nullptr, nullptr, nullptr, nullptr, nullptr, tiny_backoff);
+      self_node,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      tiny_backoff);
     auto leader_api = api(node(*get_leader()));
     auto res = co_await notifier.replicate(
       test_ntp, leader_api, kafka::offset(42));
@@ -80,13 +88,52 @@ TEST_F_CORO(level_zero_notifier_fixture, gives_up_on_follower) {
     ASSERT_TRUE_CORO(follower != nullptr);
 
     ct::level_zero_notifier notifier(
-      self_node, nullptr, nullptr, nullptr, nullptr, nullptr, tiny_backoff);
+      self_node,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      tiny_backoff);
     auto follower_api = api(*follower);
     auto res = co_await notifier.replicate(
       test_ntp, follower_api, kafka::offset(7));
     co_await notifier.stop();
 
     ASSERT_FALSE_CORO(res.has_value());
+}
+
+// While the tiered_cloud_topics feature is not active, notification attempts
+// are no-ops that report success without touching any of the notifier's
+// dependencies (all null here, so reaching past the gate would crash).
+TEST_F_CORO(
+  level_zero_notifier_fixture, notification_is_noop_until_feature_active) {
+    ss::sharded<features::feature_table> features;
+    co_await features.start();
+
+    ct::level_zero_notifier notifier(
+      self_node,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      &features,
+      tiny_backoff);
+    const model::topic_id_partition tidp(
+      model::topic_id(), model::partition_id(0));
+
+    auto res = co_await notifier.set_min_allowed_local_threshold(
+      tidp, kafka::offset(42));
+    ASSERT_TRUE_CORO(res.has_value());
+
+    auto local_res = co_await notifier.set_min_allowed_local_threshold_locally(
+      tidp, kafka::offset(42));
+    ASSERT_TRUE_CORO(local_res.has_value());
+
+    co_await notifier.stop();
+    co_await features.stop();
 }
 
 TEST(level_zero_notifier_routing, map_transport_error) {

@@ -41,7 +41,8 @@ public:
     ~impl() override = default;
 
     ss::future<optional_pointer<random_access_file_reader>>
-    open_random_access_reader(internal::file_handle h) override {
+    open_random_access_reader(
+      internal::file_handle h, uint64_t /*file_size*/) override {
         try {
             auto filepath = path(internal::sst_file_name(h));
             auto file = co_await ss::open_file_dma(

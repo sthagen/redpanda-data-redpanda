@@ -17,7 +17,10 @@
 #
 # Package Bazel-built C++ binaries into Antithesis-compatible Docker
 # images. Supports single targets, multiple targets, and Bazel patterns.
-# Builds Docker images directly using named build contexts.
+# Builds Docker images directly using named build contexts, then uploads
+# the workload/config images to the registry (unless --skip-registry-upload)
+# and optionally launches an Antithesis test run (--submit; reads the API
+# password from $AT_PASSWORD).
 #
 # Usage:
 #   # Single target:
@@ -39,7 +42,6 @@ import functools
 import re
 import shlex
 import shutil
-import subprocess
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
@@ -48,9 +50,21 @@ from pathlib import Path
 
 from jinja2 import Template
 
+from at_common import (
+    add_common_args,
+    maybe_submit,
+    registry_help_str,
+    run as _run,
+    upload_images,
+    validate_common_args,
+)
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEPS_DIR = Path(__file__).resolve().parent / "single_binary_deps"
+
+# bazel and docker commands in this script must run from the repo root.
+run = functools.partial(_run, cwd=REPO_ROOT)
 
 _BASE_BAZEL_ARGS = [
     "--@seastar//:shuffle_task_queue=true",
@@ -91,18 +105,6 @@ class BinaryInfo:
     runtime_args: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
     data_files: dict[str, Path] = field(default_factory=dict)
-
-
-def run(
-    cmd: list[str],
-    *,
-    check: bool = True,
-    capture: bool = False,
-) -> subprocess.CompletedProcess:
-    print(f"  $ {' '.join(str(c) for c in cmd)}")
-    return subprocess.run(
-        cmd, check=check, capture_output=capture, text=True, cwd=REPO_ROOT
-    )
 
 
 def render_template(template_path: Path, **kwargs) -> str:
@@ -460,7 +462,10 @@ def main() -> None:
         action="store_true",
         help="Only package cc_test targets, excluding cc_binary",
     )
+    add_common_args(parser)
     args = parser.parse_args()
+
+    validate_common_args(parser, args)
 
     # Resolve patterns and query target info.
     targets, target_info = resolve_and_query_targets(
@@ -511,6 +516,16 @@ def main() -> None:
     compose_out.mkdir(parents=True, exist_ok=True)
     (compose_out / "docker-compose.yaml").write_text(compose)
 
+    config_key = f"{target_name}-config"
+    images = {
+        target_name: image_tag,
+        config_key: config_tag,
+    }
+    if not args.skip_registry_upload:
+        upload_images(args.registry, images)
+
+    maybe_submit(args, name=target_name, images=images, config_key=config_key)
+
     binary_names = [b.name for b in binaries]
     drivers_list = "\n".join(
         f"  {DRIVER_DIR}/singleton_driver_{n}.sh" for n in binary_names
@@ -530,13 +545,7 @@ Run locally:
       {DRIVER_DIR}/singleton_driver_<binary>.sh
   docker compose -f {compose_out}/docker-compose.yaml down
 
-Push to Antithesis registry:
-  TENANT=<your-tenant-name>
-  REGISTRY=us-central1-docker.pkg.dev/molten-verve-216720/$TENANT-repository
-  docker tag {image_tag} $REGISTRY/{target_name}:latest
-  docker push $REGISTRY/{target_name}:latest
-  docker tag {config_tag} $REGISTRY/{target_name}-config:latest
-  docker push $REGISTRY/{target_name}-config:latest
+{registry_help_str(args.registry, skipped=args.skip_registry_upload, images=images)}
 """)
 
 

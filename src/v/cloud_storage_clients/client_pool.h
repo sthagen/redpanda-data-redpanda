@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include "cloud_io/scheduler.h"
+#include "cloud_io/admission_control.h"
 #include "cloud_storage_clients/bucket_name_parts.h"
 #include "cloud_storage_clients/client.h"
 #include "cloud_storage_clients/client_probe.h"
@@ -116,7 +116,7 @@ public:
       upstream_registry& registry,
       size_t size,
       client_configuration conf,
-      cloud_io::scheduler_config scheduler_cfg = {},
+      cloud_io::admission_control_config admission_control_cfg = {},
       client_pool_overdraft_policy policy
       = client_pool_overdraft_policy::wait_if_empty);
 
@@ -137,7 +137,7 @@ public:
     ///       before it gets released (release happens implicitly, when
     ///       the lifetime of the pointer ends).
     /// \param g - cloud_io::group_id used to gate the lease through the
-    ///            per-shard scheduler.
+    ///            per-shard admission_control.
     /// \param as
     /// \param deadline - Optional timeout. If deadline is reached before a
     ///                   client becomes available, throw ss::timed_out_error
@@ -166,7 +166,7 @@ public:
     ///     deadline before a client becomes available.
     ///
     /// \param g - cloud_io::group_id used to gate the lease through the
-    ///            per-shard scheduler.
+    ///            per-shard admission_control.
     /// \param as
     /// \param deadline - Lease expiration time, after which the client is
     ///                   forcibly shut down.
@@ -201,7 +201,7 @@ public:
 
     bool has_waiters() const noexcept {
         return _cvar.has_waiters() || _pool_ready_barrier.waiters() > 0
-               || (_sched && _sched->has_waiters());
+               || (_admission_control && _admission_control->has_waiters());
     }
 
 private:
@@ -264,7 +264,7 @@ private:
     /// Configured capacity per shard
     const size_t _capacity;
 
-    cloud_io::scheduler_config _scheduler_cfg;
+    cloud_io::admission_control_config _admission_control_cfg;
 
     client_configuration _config;
 
@@ -282,7 +282,7 @@ private:
     // connections.
     intrusive_list<client_lease, &client_lease::_hook> _leased;
 
-    std::unique_ptr<cloud_io::scheduler> _sched;
+    std::unique_ptr<cloud_io::admission_control> _admission_control;
     ss::condition_variable _cvar;
     ss::abort_source _as;
     ss::gate _gate;

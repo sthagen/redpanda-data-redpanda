@@ -732,6 +732,8 @@ class CreateTopicsResponseTest(RedpandaTest):
         describe_configs = [line.split() for line in res]
 
         for key, value, source in describe_configs:
+            # kcl appends '*' to read-only properties
+            key = key.rstrip("*")
             topic_config = self.get_config_by_name(topic_response, key)
 
             assert topic_config, (

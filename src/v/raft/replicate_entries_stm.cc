@@ -9,6 +9,7 @@
 
 #include "raft/replicate_entries_stm.h"
 
+#include "absl/container/inlined_vector.h"
 #include "base/outcome.h"
 #include "base/outcome_future_utils.h"
 #include "model/fundamental.h"
@@ -238,13 +239,15 @@ inline bool replicate_entries_stm::should_skip_follower_request(vnode id) {
 
 ss::future<result<replicate_result>> replicate_entries_stm::apply(units_t u) {
     // first append lo leader log, no flushing
-    auto cfg = _ptr->config();
-    cfg.for_each_replica([this](const vnode& rni) {
+    const auto& config_replicas = _ptr->config().replicas();
+    absl::InlinedVector<vnode, 5> replicas(
+      config_replicas.begin(), config_replicas.end());
+    for (const auto& rni : replicas) {
         // suppress follower heartbeat, before appending to self log
         if (rni != _ptr->_self) {
             _inflight_appends.emplace(rni, _ptr->track_append_inflight(rni));
         }
-    });
+    }
     _units = ss::make_lw_shared<units_t>(std::move(u));
     _append_result = co_await append_to_self();
 
@@ -255,12 +258,12 @@ ss::future<result<replicate_result>> replicate_entries_stm::apply(units_t u) {
     // store committed offset to check if it advanced
     _initial_committed_offset = _ptr->committed_offset();
     // dispatch requests to followers & leader flush
-    cfg.for_each_replica([this](const vnode& rni) {
+    for (const auto& rni : replicas) {
         // We are not dispatching request to followers that are
         // recovering
         if (should_skip_follower_request(rni)) {
             _inflight_appends[rni].mark_finished();
-            return;
+            continue;
         }
         if (rni != _ptr->self()) {
             auto it = _ptr->_fstates.find(rni);
@@ -271,7 +274,7 @@ ss::future<result<replicate_result>> replicate_entries_stm::apply(units_t u) {
         }
         ++_requests_count;
         (void)dispatch_one(rni); // background
-    });
+    }
 
     // wait for the requests to be dispatched in background and then release
     // units

@@ -42,33 +42,16 @@ iceberg::unresolved_partition_spec day_partition_spec() {
     };
 }
 
-direct_table_creator::direct_table_creator(
-  type_resolver& tr, schema_manager& sm)
-  : type_resolver_(tr)
-  , schema_mgr_(sm) {}
+direct_table_creator::direct_table_creator(schema_manager& sm)
+  : schema_mgr_(sm) {}
 
 ss::future<checked<std::nullopt_t, table_creator::errc>>
 direct_table_creator::ensure_table(
-  const model::topic& topic,
-  model::revision_id,
-  record_schema_components comps) const {
+  const model::topic& topic, model::revision_id, const record_type& rt) const {
     auto table_id = table_id_provider::table_id(topic);
-
-    std::optional<shared_resolved_type_t> val_type;
-    if (comps.val_identifier) {
-        auto type_res = co_await type_resolver_.resolve_identifier(
-          comps.val_identifier.value(),
-          pandaproxy::schema_registry::default_context);
-        if (type_res.has_error()) {
-            co_return errc::failed;
-        }
-        val_type = std::move(type_res.value());
-    }
-
-    auto record_type = default_translator{}.build_type(std::move(val_type));
     auto ensure_res = co_await schema_mgr_.ensure_table_schema(
       table_id,
-      record_type.type,
+      rt.type,
       hour_partition_spec(),
       iceberg::field_name_comparison::verbatim);
     if (ensure_res.has_error()) {
@@ -90,7 +73,8 @@ direct_table_creator::ensure_dlq_table(
   const model::topic& topic, model::revision_id) const {
     auto table_id = table_id_provider::dlq_table_id(topic);
 
-    auto record_type = key_value_translator{}.build_type(std::nullopt);
+    auto record_type = record_translator{}.build_type(
+      std::nullopt, std::nullopt);
     auto ensure_res = co_await schema_mgr_.ensure_table_schema(
       table_id,
       record_type.type,

@@ -43,7 +43,7 @@ def is_int(msg):
         )
 
 
-def is_int_with_prefix(msg):
+def is_int_with_prefix(msg: str) -> str:
     """
     Method used check whether the given message is of format 'integer_prefix'.'integer_value'
 

@@ -206,17 +206,6 @@ public:
       config::binding<std::chrono::milliseconds> heartbeat_interval,
       bool with_offset_translation = false);
 
-    raft_node_instance(
-      model::node_id id,
-      model::revision_id revision,
-      raft_node_map& node_map,
-      ss::sharded<features::feature_table>& feature_table,
-      leader_update_clb_t leader_update_clb,
-      bool enable_longest_log_detection,
-      config::binding<std::chrono::milliseconds> election_timeout,
-      config::binding<std::chrono::milliseconds> heartbeat_interval,
-      bool with_offset_translation = false);
-
     raft_node_instance(const raft_node_instance&) = delete;
     raft_node_instance(raft_node_instance&&) noexcept = delete;
     raft_node_instance& operator=(raft_node_instance&&) = delete;
@@ -348,8 +337,7 @@ class raft_fixture_base : public raft_node_map {
 public:
     using leader_update_clb_t
       = ss::noncopyable_function<void(model::node_id, leadership_status)>;
-    raft_fixture_base()
-      : _logger("raft-fixture") {}
+    raft_fixture_base();
     using raft_nodes_t = absl::
       flat_hash_map<model::node_id, std::unique_ptr<raft_node_instance>>;
     static constexpr raft::group_id group_id = raft::group_id(123);
@@ -639,6 +627,7 @@ private:
     config::mock_property<std::chrono::milliseconds> _election_timeout{500ms};
     config::mock_property<std::chrono::milliseconds> _heartbeat_interval{50ms};
     bool _with_offset_translation = false;
+    std::filesystem::path _test_dir;
 };
 
 std::ostream& operator<<(std::ostream& o, msg_type type);

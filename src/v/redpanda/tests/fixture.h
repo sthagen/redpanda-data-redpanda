@@ -318,6 +318,11 @@ public:
       const ss::sstring& username,
       const ss::sstring& password);
 
+    YAML::Node make_minimal_cfg() {
+        static const YAML::Node minimal_cfg = YAML::Load("redpanda: {}");
+        return minimal_cfg;
+    }
+
     application app;
     std::optional<uint16_t> proxy_port;
     std::optional<uint16_t> schema_reg_port;

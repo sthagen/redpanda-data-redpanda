@@ -10,7 +10,7 @@
  */
 #include "kafka/data/cloud_topic_partition.h"
 
-#include "cloud_io/scheduler_types.h"
+#include "cloud_io/admission_control_types.h"
 #include "cloud_topics/frontend/errc.h"
 #include "cloud_topics/frontend/frontend.h"
 #include "cloud_topics/level_zero/frontend_reader/level_zero_reader.h"

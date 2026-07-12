@@ -134,8 +134,6 @@ private:
     using proto_t = cloud_topics::l1::rpc::impl::l1_rpc_client_protocol;
     using client = cloud_topics::l1::rpc::impl::l1_rpc_client_protocol;
 
-    static constexpr std::chrono::seconds rpc_timeout{5};
-
     // utilities for boiler plate RPC code.
 
     template<auto Func, typename req_t>

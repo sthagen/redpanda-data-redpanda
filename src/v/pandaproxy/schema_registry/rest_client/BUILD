@@ -8,6 +8,8 @@ redpanda_cc_library(
         "parse.cc",
     ],
     hdrs = [
+        "config.h",
+        "mode.h",
         "parse.h",
     ],
     implementation_deps = [
@@ -19,6 +21,7 @@ redpanda_cc_library(
         "//src/v/bytes:iobuf",
         "//src/v/container:chunked_vector",
         "//src/v/pandaproxy/schema_registry:types",
+        "//src/v/strings:string_switch",
         "@seastar",
     ],
 )
@@ -27,6 +30,10 @@ redpanda_cc_library(
     name = "error",
     hdrs = [
         "error.h",
+    ],
+    visibility = [
+        "//src/v/cluster_link:__subpackages__",
+        "//src/v/pandaproxy:__subpackages__",
     ],
     deps = [
         ":parse",
@@ -75,6 +82,10 @@ redpanda_cc_library(
     hdrs = [
         "credentials.h",
     ],
+    visibility = [
+        "//src/v/cluster_link:__subpackages__",
+        "//src/v/pandaproxy:__subpackages__",
+    ],
     deps = [
         "//src/v/base",
         "@seastar",
@@ -95,6 +106,10 @@ redpanda_cc_library(
         "//src/v/http:utils",
         "//src/v/ssx:future_util",
         "@boost//:beast",
+    ],
+    visibility = [
+        "//src/v/cluster_link:__subpackages__",
+        "//src/v/pandaproxy:__subpackages__",
     ],
     deps = [
         ":credentials",

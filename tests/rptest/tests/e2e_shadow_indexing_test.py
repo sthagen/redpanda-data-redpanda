@@ -150,38 +150,7 @@ def num_manifests_downloaded(test_self):
     return s
 
 
-def all_uploads_done(rpk, topic, redpanda, logger):
-    topic_description = rpk.describe_topic(topic)
-    partition = next(topic_description)
-
-    hwm = partition.high_watermark
-
-    manifest = None
-    try:
-        bucket = BucketView(redpanda)
-        manifest = bucket.manifest_for_ntp(topic, partition.id)
-    except Exception as e:
-        logger.info(f"Exception thrown while retrieving the manifest: {e}")
-        return False
-
-    top_segment = max(manifest["segments"].values(), key=lambda seg: seg["base_offset"])
-    uploaded_raft_offset = top_segment["committed_offset"]
-    uploaded_kafka_offset = uploaded_raft_offset - top_segment["delta_offset_end"]
-    logger.info(
-        f"Remote HWM {uploaded_kafka_offset} (raft {uploaded_raft_offset}), local hwm {hwm}"
-    )
-
-    # -1 because uploaded offset is inclusive, hwm is exclusive
-    if uploaded_kafka_offset < (hwm - 1):
-        return False
-
-    return True
-
-
 class EndToEndShadowIndexingTest(EndToEndShadowIndexingBase):
-    def _all_uploads_done(self):
-        return all_uploads_done(self.rpk, self.topic, self.redpanda, self.logger)
-
     @cluster(num_nodes=4)
     @matrix(cloud_storage_type=get_cloud_storage_type()[0:1])
     def test_reset(self, cloud_storage_type):
@@ -200,9 +169,7 @@ class EndToEndShadowIndexingTest(EndToEndShadowIndexingBase):
         producer.wait(timeout_sec=60)
         producer.free()
 
-        wait_until(
-            lambda: self._all_uploads_done() == True, timeout_sec=60, backoff_sec=5
-        )
+        quiesce_uploads(self.redpanda, [self.topic], timeout_sec=60)
 
         s3_snapshot = BucketView(self.redpanda, topics=self.topics)
         manifest = s3_snapshot.manifest_for_ntp(self.topic, 0)
@@ -243,9 +210,7 @@ class EndToEndShadowIndexingTest(EndToEndShadowIndexingBase):
         producer.wait(timeout_sec=30)
         producer.free()
 
-        wait_until(
-            lambda: self._all_uploads_done() == True, timeout_sec=60, backoff_sec=5
-        )
+        quiesce_uploads(self.redpanda, [self.topic], timeout_sec=60)
 
         # Enable aggresive local retention to test the cloud storage read path.
         self.rpk.alter_topic_config(
@@ -316,7 +281,7 @@ class EndToEndShadowIndexingTest(EndToEndShadowIndexingBase):
         producer.wait(timeout_sec=60)
         producer.free()
 
-        wait_until(lambda: self._all_uploads_done(), timeout_sec=60, backoff_sec=5)
+        quiesce_uploads(self.redpanda, [self.topic], timeout_sec=60)
 
         class Manifests:
             def __init__(self, test_instance):
@@ -420,7 +385,7 @@ class EndToEndShadowIndexingTest(EndToEndShadowIndexingBase):
         producer.free()
 
         # wait for uploads from first
-        wait_until(lambda: self._all_uploads_done(), timeout_sec=60, backoff_sec=5)
+        quiesce_uploads(self.redpanda, [self.topic], timeout_sec=60)
         rpk = RpkTool(self.redpanda)
         partitions = list(rpk.describe_topic(self.topic))
         assert partitions[0].start_offset == expected_new_kafka_start_offset, (
@@ -1351,10 +1316,7 @@ class EndToEndThrottlingTest(RedpandaTest):
         producer.wait()
         producer.free()
 
-        wait_until(self._all_uploads_done, timeout_sec=180, backoff_sec=10)
-
-    def _all_uploads_done(self):
-        return all_uploads_done(self.rpk, self.topic, self.redpanda, self.logger)
+        quiesce_uploads(self.redpanda, [self.topic], timeout_sec=180)
 
     def consume(self):
         topic_name = self.topics[0].name

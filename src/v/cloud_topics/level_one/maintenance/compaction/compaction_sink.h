@@ -13,6 +13,7 @@
 #include "cloud_topics/level_one/common/abstract_io.h"
 #include "cloud_topics/level_one/common/object.h"
 #include "cloud_topics/level_one/maintenance/l1_object_sink.h"
+#include "cloud_topics/level_one/maintenance/worker_probe.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "cloud_topics/level_zero/notifier/level_zero_notifier.h"
 #include "config/property.h"
@@ -35,6 +36,7 @@ public:
       ss::abort_source&,
       config::binding<size_t>,
       size_t,
+      compaction_worker_probe&,
       prefix_logger&,
       object_builder::options = {},
       cloud_topics::level_zero_notifier* = nullptr);
@@ -75,6 +77,8 @@ private:
 
     // The start offset of the log.
     kafka::offset _start_offset;
+
+    compaction_worker_probe& _probe;
 
     // Dirty ranges returned by the `metastore` that were indexed during
     // `map_deduplication_iteration`.

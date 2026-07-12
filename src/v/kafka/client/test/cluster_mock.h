@@ -120,6 +120,14 @@ public:
         _broker_api_versions[id].insert_or_assign(key, range);
     }
 
+    void remove_supported_version(model::node_id id, api_key key) {
+        if (
+          auto it = _broker_api_versions.find(id);
+          it != _broker_api_versions.end()) {
+            it->second.erase(key);
+        }
+    }
+
     void add_topic(
       model::topic topic_name,
       size_t partition_count,

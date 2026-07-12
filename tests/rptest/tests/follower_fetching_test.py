@@ -40,9 +40,7 @@ def make_topic_config(fetch_from):
             TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD,
         }
     elif fetch_from == FetchFrom.TIERED_CLOUD_TOPIC:
-        config = {
-            TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_TIERED_CLOUD,
-        }
+        config = TopicSpec.storage_mode_config(TopicSpec.STORAGE_MODE_IMPL_TIERED_V2)
     elif fetch_from == FetchFrom.TIERED_STORAGE:
         config = {
             TopicSpec.PROPERTY_REMOTE_READ: "true",

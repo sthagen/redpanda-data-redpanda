@@ -48,6 +48,7 @@ class RpkShadowLinkTest(ShadowLinkTestBase):
         expected_acl = self._seed_source_acl()
         source_offsets = self._seed_source_consumer_group(topic)
         subject = self._seed_source_schema()
+        expected_role = self._seed_source_role()
 
         assert not self.topic_exists_in_target(topic.name), (
             f"{topic.name} unexpectedly present on the shadow cluster before linking"
@@ -87,6 +88,13 @@ class RpkShadowLinkTest(ShadowLinkTestBase):
             backoff_sec=2,
             retry_on_exc=True,
             err_msg="schema registry subject was not synced to the shadow cluster",
+        )
+        wait_until(
+            lambda: self._role_synced(rpk, expected_role),
+            timeout_sec=90,
+            backoff_sec=2,
+            retry_on_exc=True,
+            err_msg="role was not synced to the shadow cluster",
         )
 
     def _full_link_config(self) -> dict[str, Any]:
@@ -131,6 +139,16 @@ class RpkShadowLinkTest(ShadowLinkTestBase):
             },
             "schema_registry_sync_options": {
                 "shadow_schema_registry_topic": {},
+            },
+            "role_sync_options": {
+                "interval": "1s",
+                "role_name_filters": [
+                    {
+                        "pattern_type": "PREFIX",
+                        "filter_type": "INCLUDE",
+                        "name": "synced-",
+                    }
+                ],
             },
         }
 
@@ -191,6 +209,16 @@ class RpkShadowLinkTest(ShadowLinkTestBase):
         self.source_cluster_rpk.create_schema_from_str(subject, schema)
         return subject
 
+    def _seed_source_role(self) -> dict[str, str]:
+        """Create a role with a member on the source cluster, and return the
+        role name and member principal expected to appear on the shadow
+        cluster. The name matches the link's PREFIX 'synced-' role filter."""
+        role = "synced-test-role"
+        member = "role-member"
+        self.source_cluster_rpk.create_role(role)
+        self.source_cluster_rpk.assign_role(role, [member])
+        return {"role": role, "member": member}
+
     def _assert_link_listed(self, rpk: RpkTool) -> None:
         links = rpk.shadow_list()
         self.logger.debug(f"rpk shadow list: {links}")
@@ -223,6 +251,17 @@ class RpkShadowLinkTest(ShadowLinkTestBase):
         self.logger.debug(f"target subjects: {subjects}")
         names = [s["subject"] if isinstance(s, dict) else s for s in subjects]
         return subject in names
+
+    def _role_synced(self, rpk: RpkTool, expected: dict[str, str]) -> bool:
+        roles = rpk.list_roles().get("roles", [])
+        self.logger.debug(f"target roles: {roles}")
+        if expected["role"] not in roles:
+            return False
+        members = [
+            m["name"] for m in rpk.describe_role(expected["role"]).get("members", [])
+        ]
+        self.logger.debug(f"target role {expected['role']} members: {members}")
+        return expected["member"] in members
 
     def _wait_link_active(self, rpk: RpkTool) -> None:
         def link_active() -> bool:

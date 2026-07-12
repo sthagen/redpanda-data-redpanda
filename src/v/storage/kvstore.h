@@ -115,6 +115,16 @@ public:
       ss::sharded<features::feature_table>& feature_table);
     ~kvstore() noexcept;
 
+    /// Load the snapshot and replay segments into the in-memory map.
+    /// After this returns, get()/empty()/for_each() are usable.
+    /// Bootstrap code that needs read access before the writer fiber
+    /// runs may call this directly; start() then skips recovery.
+    /// Asserts if called twice.
+    ss::future<> recover();
+
+    /// Wire up the writer fiber and accept put/remove. Recovers first
+    /// unless recover() has already been called (e.g. externally during
+    /// bootstrap).
     ss::future<> start();
     ss::future<> stop();
 
@@ -129,7 +139,7 @@ public:
       ss::noncopyable_function<void(bytes_view, const iobuf&)> visitor);
 
     bool empty() const {
-        vassert(_started, "kvstore has not been started");
+        vassert(_recovered, "kvstore::empty called before recover()");
         return _db.empty();
     }
 
@@ -149,6 +159,7 @@ private:
     ss::gate _gate;
     ss::abort_source _as;
     simple_snapshot_manager _snap;
+    bool _recovered{false};
     bool _started{false};
 
     /**
@@ -188,12 +199,11 @@ private:
     ss::future<> save_snapshot();
 
     /*
-     * Recovery
+     * Recovery (recover() itself is a public entry point declared above)
      *
      * 1. load snapshot if found
      * 2. then recover from segments
      */
-    ss::future<> recover();
     ss::future<> load_snapshot();
     ss::future<> load_snapshot_from_reader(snapshot_reader&);
     ss::future<> replay_segments(segment_set);

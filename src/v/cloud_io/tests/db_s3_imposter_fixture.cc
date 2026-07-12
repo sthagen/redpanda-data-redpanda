@@ -63,6 +63,13 @@ ss::future<> write_iobuf_to_stream(iobuf buf, ss::output_stream<char> out) {
     co_await out.close();
 }
 
+// Bodies up to this size are inlined into the reply's sstring content,
+// which causes seastar's httpd to set Content-Length automatically.
+// cloud_io::remote::download_stream requires Content-Length, so any test
+// that drives it through this imposter must keep payloads under this cap.
+// Larger bodies are streamed via chunked transfer encoding.
+inline constexpr size_t k_small_response_threshold = 100 * 1024;
+
 } // namespace
 
 // Async HTTP handler backed by the LSM database. Holds references to
@@ -164,8 +171,18 @@ struct db_s3_imposter_fixture::handler : ss::httpd::handler_base {
             result->trim_back(result->size_bytes() - (end - start + 1));
         }
 
-        // Stream the body from the iobuf fragments rather than
-        // linearizing to sstring (which has a 128KiB size limit).
+        repl.set_content_type("xml");
+
+        // For bodies that fit in an sstring, inline them so seastar's httpd
+        // sets Content-Length automatically; download_stream consumers (e.g.
+        // range GETs) require Content-Length and don't accept chunked
+        // transfer encoding. Larger bodies fall through to streaming chunked
+        // encoding -- tests using such payloads must use download_object, not
+        // download_stream.
+        if (result->size_bytes() <= k_small_response_threshold) {
+            repl._content = result->linearize_to_string();
+            co_return;
+        }
         repl.write_body(
           "xml",
           ss::http::body_writer_type([result = std::move(*result)](

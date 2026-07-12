@@ -1241,7 +1241,7 @@ class LogCompactionTxRemovalUpgradeTestBase(LogCompactionTxRemovalTestBase):
         wait_until(
             lambda: self.nth_segment_recovered(2, leader_node),
             timeout_sec=60,
-            backoff_sec=1,
+            backoff_sec=0.25,
             err_msg="timed out waiting for partial recovery",
         )
 

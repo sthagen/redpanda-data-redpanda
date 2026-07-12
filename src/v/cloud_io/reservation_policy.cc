@@ -48,7 +48,7 @@ make_group_states(std::index_sequence<Is...>) {
 template<class Clock>
 reservation_policy<Clock>::reservation_policy(
   size_t capacity, reservation_policy_config cfg)
-  : scheduler_policy(capacity)
+  : admission_control_policy(capacity)
   , _current_total_capacity(capacity)
   , _shared(capacity)
   , _groups(make_group_states<Clock>(std::make_index_sequence<num_group_ids>{}))
@@ -321,7 +321,7 @@ void reservation_policy<Clock>::setup_metrics() {
 
     namespace sm = ss::metrics;
     const auto group_name = prometheus_sanitize::metrics_name(
-      "cloud_io_scheduler");
+      "cloud_io_admission_control");
     constexpr auto group_label_key = "group_id";
 
     _metrics.add_group(
@@ -400,7 +400,7 @@ void reservation_policy<Clock>::setup_public_metrics() {
 
     namespace sm = ss::metrics;
     const auto group_name = prometheus_sanitize::metrics_name(
-      "cloud_io_scheduler");
+      "cloud_io_admission_control");
     constexpr auto group_label_key = "group_id";
     const auto aggregate_labels = std::vector<sm::label>{sm::shard_label};
 

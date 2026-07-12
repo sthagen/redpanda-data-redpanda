@@ -114,7 +114,10 @@ ss::future<std::expected<ss::input_stream<char>, io::errc>>
 fake_io::read_object(
   object_extent extent,
   ss::abort_source*,
-  [[maybe_unused]] cloud_io::group_id gid) {
+  [[maybe_unused]] cloud_io::group_id gid,
+  // fake_io keeps everything in memory and never caches, so it is always
+  // effectively a streaming read regardless of this flag.
+  [[maybe_unused]] bool skip_cache) {
     co_return get_object(extent.id)
       .transform(
         [&extent](

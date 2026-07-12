@@ -119,7 +119,7 @@ class TieredCloudLocalRetentionTest(EndToEndCloudTopicsBase):
     ):
         rpk = RpkTool(self.redpanda)
         config = {
-            TopicSpec.PROPERTY_STORAGE_MODE: storage_mode,
+            **TopicSpec.storage_mode_config(storage_mode),
             "cleanup.policy": cleanup_policy,
             "retention.bytes": str(self.retention_bytes),
             "retention.local.target.bytes": str(self.local_target_bytes),
@@ -264,7 +264,7 @@ class TieredCloudLocalRetentionTest(EndToEndCloudTopicsBase):
         Replication factor is 3, so the cluster-wide sum of partition_size is
         roughly 3 * per-replica retention.
         """
-        self._create_topic(storage_mode=TopicSpec.STORAGE_MODE_TIERED_CLOUD)
+        self._create_topic(storage_mode=TopicSpec.STORAGE_MODE_IMPL_TIERED_V2)
         self._wait_for_partition_info()
 
         self._produce(self.bytes_to_produce)
@@ -300,6 +300,138 @@ class TieredCloudLocalRetentionTest(EndToEndCloudTopicsBase):
         )
 
     @cluster(num_nodes=4)
+    def test_capacity_pressure_reclaims_tiered_cloud(self):
+        """
+        Cluster-wide disk pressure (the disk_space_manager capacity path)
+        reclaims a tiered_cloud partition's local log, not just the
+        retention.local.target path.
+
+        The topic sets no local target and effectively infinite retention, so
+        only the capacity path can bound it. On a build that excludes
+        tiered_cloud partitions from disk_space_manager the local log grows
+        unbounded and this fails; with them admitted, the eviction policy pins
+        _cloud_gc_offset and ctp_stm trims to it, so the footprint converges
+        near the capacity target.
+        """
+        assert self.redpanda is not None
+
+        # Node-wide log-data target, small enough that the produced topic must
+        # be trimmed to meet it. disk_reservation_percent=0 and percent=100 so
+        # the bytes target is the effective one.
+        capacity_target = 16 * 1024 * 1024
+        self.redpanda.set_cluster_config(
+            {
+                "retention_local_target_capacity_bytes": capacity_target,
+                "retention_local_target_capacity_percent": 100,
+                "disk_reservation_percent": 0,
+            }
+        )
+
+        # No retention.local.target.bytes: the local-target path stays inert
+        # (only the 1-day default applies, and nothing is that old), so only
+        # the capacity path can bound this topic. retention.bytes is
+        # effectively unlimited, mirroring the field scenario that filled the
+        # disk.
+        rpk = RpkTool(self.redpanda)
+        rpk.create_topic(
+            topic=self.topic_name,
+            partitions=1,
+            replicas=3,
+            config={
+                **TopicSpec.storage_mode_config(TopicSpec.STORAGE_MODE_IMPL_TIERED_V2),
+                "cleanup.policy": TopicSpec.CLEANUP_DELETE,
+                "retention.bytes": str(self.retention_bytes),
+                "segment.bytes": str(self.segment_size),
+            },
+        )
+        self._wait_for_partition_info()
+
+        # Produce well past the capacity target so an untrimmed build grows far
+        # beyond it.
+        produce_bytes = 64 * 1024 * 1024
+        self._produce(produce_bytes)
+        self.wait_until_reconciled(topic=self.topic_name, partition=0)
+
+        # The target is per node; the metric sums this topic's 3 replicas and
+        # excludes internal logs (topic-filtered). Allow 3x the target plus
+        # per-replica headroom for the never-evicted active segment and
+        # trim-cycle latency. Still far below the ~3x produce an untrimmed
+        # build retains.
+        replication = 3
+        ceiling = replication * (capacity_target + 4 * self.segment_size)
+        # The topic has no local retention target and a lenient retention.bytes,
+        # so ctp_stm's own retention never trims at this volume; only a
+        # disk_space_manager capacity pin can drive the reclaim. Staying below
+        # the ceiling therefore proves the capacity path engaged for a
+        # tiered_cloud partition.
+        self._wait_local_below(ceiling_bytes=ceiling, timeout_sec=180)
+
+    @cluster(num_nodes=4)
+    def test_idle_partition_reclaims_on_pin(self):
+        """
+        A tiered_cloud partition that has gone idle still reclaims when disk
+        pressure sets _cloud_gc_offset afterwards.
+
+        With no produce the LRO is quiescent, so nothing signals ctp_stm's
+        truncate loop. It wakes on its bounded poll interval, re-reads the
+        offset disk_space_manager set, and trims to it, so an idle partition
+        reclaims without further produce.
+        """
+        assert self.redpanda is not None
+
+        capacity_target = 16 * 1024 * 1024
+        replication = 3
+        ceiling = replication * (capacity_target + 4 * self.segment_size)
+
+        # Capacity path effectively off: percent=100 with no bytes target lets
+        # the backlog accumulate without pressure, so nothing trims until the
+        # bytes target is set below.
+        self.redpanda.set_cluster_config(
+            {
+                "retention_local_target_capacity_percent": 100,
+                "disk_reservation_percent": 0,
+            }
+        )
+
+        rpk = RpkTool(self.redpanda)
+        rpk.create_topic(
+            topic=self.topic_name,
+            partitions=1,
+            replicas=3,
+            config={
+                **TopicSpec.storage_mode_config(TopicSpec.STORAGE_MODE_IMPL_TIERED_V2),
+                "cleanup.policy": TopicSpec.CLEANUP_DELETE,
+                "retention.bytes": str(self.retention_bytes),
+                "segment.bytes": str(self.segment_size),
+            },
+        )
+        self._wait_for_partition_info()
+
+        # Fill the local log, then let reconciliation catch up so the LRO is
+        # quiescent (nothing to drive the truncate loop). Nothing trims yet
+        # (no pressure, lenient retention.bytes), so the footprint holds near
+        # the produced size.
+        self._produce(64 * 1024 * 1024)
+        self.wait_until_reconciled(topic=self.topic_name, partition=0)
+
+        # Confirm the backlog is present and untrimmed before applying pressure,
+        # so the reclaim assertion below cannot pass trivially.
+        wait_until(
+            lambda: self._local_partition_bytes() > ceiling,
+            timeout_sec=60,
+            backoff_sec=2,
+            err_msg="backlog never reached the expected size before pressure",
+        )
+
+        # Apply pressure: disk_space_manager sets _cloud_gc_offset on its next
+        # cycle. The LRO is quiescent, so the truncate loop only observes it on
+        # its next bounded poll, then trims to it.
+        self.redpanda.set_cluster_config(
+            {"retention_local_target_capacity_bytes": capacity_target}
+        )
+        self._wait_local_below(ceiling_bytes=ceiling, timeout_sec=120)
+
+    @cluster(num_nodes=4)
     def test_compact_topic_evicts_via_l1_floor(self):
         """
         On a tiered_cloud + cleanup.policy=compact topic the local log is a
@@ -321,7 +453,7 @@ class TieredCloudLocalRetentionTest(EndToEndCloudTopicsBase):
         # times, and L1 compaction can reduce the log meaningfully.
         key_set_cardinality = 64
         self._create_topic(
-            storage_mode=TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            storage_mode=TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
             cleanup_policy=TopicSpec.CLEANUP_COMPACT,
         )
         self._wait_for_partition_info()
@@ -379,7 +511,7 @@ class TieredCloudLocalRetentionTest(EndToEndCloudTopicsBase):
         """
         key_set_cardinality = 64
         self._create_topic(
-            storage_mode=TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            storage_mode=TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
             cleanup_policy=TopicSpec.CLEANUP_COMPACT,
         )
         self._wait_for_partition_info()
@@ -483,7 +615,7 @@ class TieredCloudLocalRetentionTest(EndToEndCloudTopicsBase):
         of the trimmed prefix would hit the empty local log and the consumer
         would fail to read the full range.
         """
-        self._create_topic(storage_mode=TopicSpec.STORAGE_MODE_TIERED_CLOUD)
+        self._create_topic(storage_mode=TopicSpec.STORAGE_MODE_IMPL_TIERED_V2)
         self._wait_for_partition_info()
 
         assert self.redpanda is not None

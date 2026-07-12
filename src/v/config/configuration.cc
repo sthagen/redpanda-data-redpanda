@@ -578,14 +578,14 @@ configuration::configuration()
       "disable_metrics",
       "Disable registering the metrics exposed on the internal `/metrics` "
       "endpoint.",
-      base_property::metadata{},
+      base_property::metadata{.usable_before_ready = usable_before_ready::yes},
       false)
   , disable_public_metrics(
       *this,
       "disable_public_metrics",
       "Disable registering the metrics exposed on the `/public_metrics` "
       "endpoint.",
-      base_property::metadata{},
+      base_property::metadata{.usable_before_ready = usable_before_ready::yes},
       false)
   , enable_development_metrics(
       *this,
@@ -603,7 +603,8 @@ configuration::configuration()
       "instead of raw, per-instance metrics. Metric aggregation is performed "
       "by summing the values of samples by labels and is done when it makes "
       "sense by the shard and/or partition labels.",
-      {.needs_restart = needs_restart::no},
+      {.needs_restart = needs_restart::no,
+       .usable_before_ready = usable_before_ready::yes},
       false)
   , enable_consumer_group_metrics(
       *this,
@@ -1395,13 +1396,16 @@ configuration::configuration()
       *this,
       "kvstore_flush_interval",
       "Key-value store flush interval (in milliseconds).",
-      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      {.needs_restart = needs_restart::no,
+       .visibility = visibility::tunable,
+       .usable_before_ready = usable_before_ready::yes},
       std::chrono::milliseconds(10))
   , kvstore_max_segment_size(
       *this,
       "kvstore_max_segment_size",
       "Key-value maximum segment size (in bytes).",
-      {.visibility = visibility::tunable},
+      {.visibility = visibility::tunable,
+       .usable_before_ready = usable_before_ready::yes},
       16_MiB)
   , max_kafka_throttle_delay_ms(
       *this,
@@ -1435,7 +1439,8 @@ configuration::configuration()
       *this,
       "join_retry_timeout_ms",
       "Time between cluster join retries in milliseconds.",
-      {.visibility = visibility::tunable},
+      {.visibility = visibility::tunable,
+       .usable_before_ready = usable_before_ready::yes},
       5s)
   , raft_timeout_now_timeout_ms(
       *this,
@@ -1480,7 +1485,9 @@ configuration::configuration()
       "for these writes as more data is collected before each write operation. "
       "A smaller chunk size can decrease write latency, but potentially "
       "increase the number of disk I/O operations.",
-      {.example = "32768", .visibility = visibility::tunable},
+      {.example = "32768",
+       .visibility = visibility::tunable,
+       .usable_before_ready = usable_before_ready::yes},
       16_KiB,
       {.min = 4096, .max = 32_MiB, .align = 4096})
   , storage_read_buffer_size(
@@ -1489,7 +1496,8 @@ configuration::configuration()
       "Size of each read buffer (one per in-flight read, per log segment).",
       {.needs_restart = needs_restart::no,
        .example = "31768",
-       .visibility = visibility::tunable},
+       .visibility = visibility::tunable,
+       .usable_before_ready = usable_before_ready::yes},
       128_KiB)
   , storage_read_readahead_count(
       *this,
@@ -1497,7 +1505,8 @@ configuration::configuration()
       "How many additional reads to issue ahead of current read location.",
       {.needs_restart = needs_restart::no,
        .example = "1",
-       .visibility = visibility::tunable},
+       .visibility = visibility::tunable,
+       .usable_before_ready = usable_before_ready::yes},
       1)
   , segment_fallocation_step(
       *this,
@@ -1515,7 +1524,8 @@ configuration::configuration()
       "controls frequency of snapshots and checkpoints.",
       {.needs_restart = needs_restart::no,
        .example = "2147483648",
-       .visibility = visibility::tunable},
+       .visibility = visibility::tunable,
+       .usable_before_ready = usable_before_ready::yes},
       10_GiB,
       {.min = 128_MiB, .max = 1_TiB})
   , storage_max_concurrent_replay(
@@ -1525,7 +1535,8 @@ configuration::configuration()
       "at startup, or flushed concurrently on shutdown.",
       {.needs_restart = needs_restart::no,
        .example = "2048",
-       .visibility = visibility::tunable},
+       .visibility = visibility::tunable,
+       .usable_before_ready = usable_before_ready::yes},
       1024,
       {.min = 128})
   , storage_compaction_index_memory(
@@ -1535,7 +1546,8 @@ configuration::configuration()
       "index writers.",
       {.needs_restart = needs_restart::no,
        .example = "1073741824",
-       .visibility = visibility::tunable},
+       .visibility = visibility::tunable,
+       .usable_before_ready = usable_before_ready::yes},
       128_MiB,
       {.min = 16_MiB, .max = 100_GiB})
   , storage_compaction_key_map_memory(
@@ -2057,10 +2069,7 @@ configuration::configuration()
       "cloud_storage_enabled",
       "Enable object storage. Must be set to `true` to use Tiered Storage or "
       "Remote Read Replicas.",
-      meta{
-        .needs_restart = needs_restart::yes,
-        .visibility = visibility::user,
-      },
+      meta{.needs_restart = needs_restart::yes, .visibility = visibility::user},
       false)
   , cloud_storage_enable_remote_read(
       *this,
@@ -2090,6 +2099,22 @@ configuration::configuration()
        model::redpanda_storage_mode::tiered,
        model::redpanda_storage_mode::cloud,
        model::redpanda_storage_mode::unset})
+  , default_redpanda_storage_mode_tiered_impl(
+      *this,
+      "default_redpanda_storage_mode_tiered_impl",
+      "Default implementation of the `tiered` storage mode for "
+      "newly-created topics. When `redpanda.storage.mode` is set to "
+      "`tiered`, this property determines whether the topic uses the "
+      "classic tiered-storage architecture (`tiered_v1`) or the new "
+      "tiered-storage architecture (`tiered_v2`). The implementation of "
+      "each topic is reported by the read-only `redpanda.storage.mode.impl` "
+      "topic property.",
+      {.needs_restart = needs_restart::no,
+       .example = "tiered_v2",
+       .visibility = visibility::user},
+      model::redpanda_storage_mode_tiered_impl::tiered_v1,
+      {model::redpanda_storage_mode_tiered_impl::tiered_v1,
+       model::redpanda_storage_mode_tiered_impl::tiered_v2})
   , cloud_storage_disable_archiver_manager(
       *this,
       "cloud_storage_disable_archiver_manager",
@@ -2218,10 +2243,10 @@ configuration::configuration()
       "to upload and download activities.",
       {.visibility = visibility::user},
       20)
-  , cloud_io_scheduler_policy(
+  , cloud_io_admission_control_policy(
       *this,
-      "cloud_io_scheduler_policy",
-      "Selects the admission policy used by cloud_io::scheduler. "
+      "cloud_io_admission_control_policy",
+      "Selects the admission policy used by cloud_io::admission_control. "
       "'passthrough' disables admission control (client pool is the only "
       "constraint). 'reservation' introduces reserved-slot admission control, "
       "configurable across a fixed set of groups: producer_upload, "
@@ -2231,17 +2256,17 @@ configuration::configuration()
        .visibility = visibility::tunable},
       cloud_io::policy_type::reservation,
       {cloud_io::policy_type::passthrough, cloud_io::policy_type::reservation})
-  , cloud_io_scheduler_reservation(
+  , cloud_io_admission_control_reservation(
       *this,
-      "cloud_io_scheduler_reservation",
+      "cloud_io_admission_control_reservation",
       "Per-group target_reserved values for the reservation_policy "
-      "admission scheduler. Each entry has the form 'group_name:slots' "
+      "admission control. Each entry has the form 'group_name:slots' "
       "(e.g. 'producer_upload:2'). The policy keeps each group's "
       "reservation lane sized to this target while the group is active; "
       "idle reservations past the dwell window are reclaimed back to "
       "the common pool. Entries with an unrecognized group name are "
       "rejected when the property is set. Only consulted when "
-      "cloud_io_scheduler_policy=reservation.",
+      "cloud_io_admission_control_policy=reservation.",
       {.needs_restart = needs_restart::yes,
        .example
        = R"(['producer_upload:2', 'consumer_fetch:2', 'default_group:2'])",
@@ -3953,6 +3978,22 @@ configuration::configuration()
       "context.",
       {.needs_restart = needs_restart::yes, .visibility = visibility::user},
       true)
+  , schema_registry_sync_memory_bytes(
+      *this,
+      "schema_registry_sync_memory_bytes",
+      "Maximum bytes of schema bodies held in memory at once while a schema "
+      "registry cluster link reconciles from the source.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      16_MiB,
+      {.min = 1_MiB})
+  , schema_registry_sync_parallelism(
+      *this,
+      "schema_registry_sync_parallelism",
+      "Maximum number of schemas imported concurrently while a schema registry "
+      "cluster link reconciles from the source.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      4,
+      {.min = 1, .max = 1024})
   , pp_sr_smp_max_non_local_requests(
       *this,
       "pp_sr_smp_max_non_local_requests",
@@ -4180,7 +4221,9 @@ configuration::configuration()
       "The minimum TLS version that Redpanda clusters support. This property "
       "prevents client applications from negotiating a downgrade to the TLS "
       "version when they make a connection to a Redpanda cluster.",
-      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      {.needs_restart = needs_restart::yes,
+       .visibility = visibility::user,
+       .usable_before_ready = usable_before_ready::yes},
       tls_version::v1_2,
       {tls_version::v1_0,
        tls_version::v1_1,
@@ -4193,7 +4236,9 @@ configuration::configuration()
       "default disabled.  Only re-enable it if you are experiencing issues "
       "with your TLS-enabled client.  This option has no effect on TLSv1.3 "
       "connections as client-initiated renegotiation was removed.",
-      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      {.needs_restart = needs_restart::yes,
+       .visibility = visibility::tunable,
+       .usable_before_ready = usable_before_ready::yes},
       false)
   , tls_v1_2_cipher_suites(
       *this,
@@ -4201,7 +4246,9 @@ configuration::configuration()
       "Specifies the TLS 1.2 cipher suites available for external client "
       "connections as a colon-separated OpenSSL-compatible list. Configure "
       "this property to support legacy clients.",
-      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      {.needs_restart = needs_restart::yes,
+       .visibility = visibility::user,
+       .usable_before_ready = usable_before_ready::yes},
       ss::sstring{net::tls_v1_2_cipher_suites},
       [](ss::sstring s) -> std::optional<ss::sstring> {
           if (!validate_tls_v1_2_cipher_suites(s)) {
@@ -4216,7 +4263,9 @@ configuration::configuration()
       "connections as a colon-separated OpenSSL-compatible list. Most "
       "deployments don't need to modify this setting. Configure this property "
       "only for specific organizational security policies.",
-      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      {.needs_restart = needs_restart::yes,
+       .visibility = visibility::user,
+       .usable_before_ready = usable_before_ready::yes},
       ss::sstring{net::tls_v1_3_cipher_suites},
       [](ss::sstring s) -> std::optional<ss::sstring> {
           if (!validate_tls_v1_3_cipher_suites(s)) {
@@ -4233,10 +4282,7 @@ configuration::configuration()
       "Iceberg open table format. Setting iceberg_enabled to true activates "
       "the feature at the cluster level, but each topic must also configure "
       "the redpanda.iceberg.mode topic-level property to use it.",
-      meta{
-        .needs_restart = needs_restart::yes,
-        .visibility = visibility::user,
-      },
+      meta{.needs_restart = needs_restart::yes, .visibility = visibility::user},
       false)
   , iceberg_catalog_commit_interval_ms(
       *this,
@@ -4610,6 +4656,26 @@ configuration::configuration()
       "but may be useful if the Iceberg catalog does not support tags.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       false)
+  , datalake_coordinator_max_files_per_commit(
+      *this,
+      "datalake_coordinator_max_files_per_commit",
+      "Target maximum number of pending data files committed to an Iceberg "
+      "table in a single commit. A larger backlog is committed across multiple "
+      "passes to bound the memory used per commit. May be exceeded slightly to "
+      "avoid splitting files sharing a commit offset.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      10000,
+      {.min = 1})
+  , datalake_coordinator_max_pending_files(
+      *this,
+      "datalake_coordinator_max_pending_files",
+      "Maximum number of pending data files a coordinator accumulates across "
+      "all of its topics before it sheds load, rejecting new files and offset "
+      "requests until it commits enough of the backlog. Bounds the "
+      "coordinator's pending-file memory.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      100000,
+      {.min = 1})
   , iceberg_disable_automatic_snapshot_expiry(
       *this,
       "iceberg_disable_automatic_snapshot_expiry",
@@ -4955,6 +5021,19 @@ configuration::configuration()
        .visibility = visibility::tunable},
       128_MiB,
       {.min = 16_MiB, .max = 100_GiB})
+  , cloud_topics_l1_streaming_read_chunk_size(
+      *this,
+      "cloud_topics_l1_streaming_read_chunk_size",
+      "Maximum number of object-storage bytes that a cache-bypassing L1 "
+      "streaming read (used by leveling and compaction) buffers in memory at "
+      "once before serving them to the reader. Bounds both peak per-read "
+      "memory and how much of an object is downloaded under a single held "
+      "cloud storage client connection.",
+      {.needs_restart = needs_restart::no,
+       .example = "16777216",
+       .visibility = visibility::tunable},
+      32_MiB,
+      {.min = 1_MiB, .max = 128_MiB})
   , cloud_topics_long_term_garbage_collection_interval(
       *this,
       "cloud_topics_long_term_garbage_collection_interval",
@@ -5030,6 +5109,22 @@ configuration::configuration()
       "behind and writes are being throttled.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       5min)
+  , cloud_topics_metastore_rpc_timeout_ms(
+      *this,
+      "cloud_topics_metastore_rpc_timeout_ms",
+      "Timeout for a single L1 metastore RPC to the metastore partition "
+      "leader. Bounds one attempt; the overall operation may retry until "
+      "cloud_topics_metastore_retry_timeout_ms elapses.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      30s)
+  , cloud_topics_metastore_retry_timeout_ms(
+      *this,
+      "cloud_topics_metastore_retry_timeout_ms",
+      "Overall deadline for retrying an L1 metastore operation on transport "
+      "errors. To allow more than one attempt, keep this larger than "
+      "cloud_topics_metastore_rpc_timeout_ms.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      90s)
   , cloud_topics_metastore_block_cache_size(
       *this,
       "cloud_topics_metastore_block_cache_size",
@@ -5100,6 +5195,18 @@ configuration::configuration()
       {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
       3,
       {.min = 1})
+  , cloud_topics_metastore_sst_chunk_size(
+      *this,
+      "cloud_topics_metastore_sst_chunk_size",
+      "Size of the byte ranges used to read metastore LSM SST files from "
+      "object storage into the local cache. Reads hydrate only the chunks they "
+      "cover, and a read spanning several uncached chunks fetches them in "
+      "parallel. Smaller chunks reduce read and cache amplification for point "
+      "reads; larger chunks reduce request count for scans. Changing the value "
+      "invalidates previously cached chunks.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      24_MiB,
+      {.min = 1_MiB})
   , cloud_topics_produce_write_inflight_limit(
       *this,
       "cloud_topics_produce_write_inflight_limit",

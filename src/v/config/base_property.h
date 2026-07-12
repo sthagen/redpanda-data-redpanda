@@ -36,6 +36,11 @@ using needs_restart = ss::bool_class<struct needs_restart_tag>;
 using is_secret = ss::bool_class<struct is_secret_tag>;
 using gets_restored = ss::bool_class<struct gets_restored_tag>;
 
+// Whether this property's value may be read before the owning config_store has
+// been marked ready by the startup process. See base_property::assert_readable
+// and config_store::is_ready for details.
+using usable_before_ready = ss::bool_class<struct usable_before_ready_tag>;
+
 // Whether to redact secrets. If true, `secret_placeholder` should be used
 // instead of the config value.
 using redact_secrets = ss::bool_class<struct redact_secrets_tag>;
@@ -140,6 +145,16 @@ public:
         // Aliases are used exclusively for input: all output (e.g. listing
         // configuration) uses the primary name of the property.
         std::vector<std::string_view> aliases;
+
+        // Whether this property may have its active value read before the
+        // owning config_store has been marked ready. Defaults to no: reading a
+        // property's value before the cluster configuration has established a
+        // consistent view with the rest of the cluster can potentially lead to
+        // bugs, since the value may be stale. Properties consumed during the
+        // bootstrap process (before that view exists) must opt in by setting
+        // this to yes, having audited that using a potentially stale value
+        // during bootstrap has no lasting impact on the behavior of the system.
+        usable_before_ready usable_before_ready{usable_before_ready::no};
     };
 
     base_property(
@@ -159,6 +174,10 @@ public:
         return _meta->aliases;
     }
     bool gets_restored() const { return bool(_meta->gets_restored); }
+
+    bool usable_before_ready() const {
+        return bool(_meta->usable_before_ready);
+    }
 
     /// Serialize the property value to JSON. A full configuration
     /// serialization is performed in config_store::to_json where the JSON
@@ -282,8 +301,14 @@ public:
      */
     virtual void notify_original_version(legacy_version) = 0;
 
+    /// Assert (debug only) that this property's active value may be read right
+    /// now. Note: bindings may still be *constructed* before the store is
+    /// ready; only reading their value is gated.
+    void debug_assert_readable() const;
+
 protected:
     const metadata* _meta;
+    config_store* _conf{nullptr};
     void assert_live_settable() const;
 };
 }; // namespace config

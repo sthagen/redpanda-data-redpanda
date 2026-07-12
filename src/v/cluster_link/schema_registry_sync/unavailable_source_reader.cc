@@ -15,13 +15,18 @@
 
 namespace cluster_link::schema_registry_sync {
 
-namespace {
-source_error unavailable() {
+unavailable_source_reader::unavailable_source_reader(ss::sstring message)
+  : _message(std::move(message)) {}
+
+source_error unavailable_source_reader::unavailable() const {
     return source_error{
-      .kind = source_error_kind::source_unavailable,
-      .message = "Source Schema Registry reader is not implemented yet"};
+      .kind = source_error_kind::source_unavailable, .message = _message};
 }
-} // namespace
+
+ss::future<source_result<chunked_vector<ppsr::context>>>
+unavailable_source_reader::list_contexts(ss::abort_source&) {
+    co_return std::unexpected(unavailable());
+}
 
 ss::future<source_result<chunked_vector<ppsr::context_subject>>>
 unavailable_source_reader::list_subjects(ppsr::context, ss::abort_source&) {
@@ -30,17 +35,29 @@ unavailable_source_reader::list_subjects(ppsr::context, ss::abort_source&) {
 
 ss::future<source_result<chunked_vector<ppsr::schema_version>>>
 unavailable_source_reader::list_subject_versions(
-  ppsr::context_subject, ss::abort_source&) {
+  ppsr::context_subject, ppsr::include_deleted, ss::abort_source&) {
     co_return std::unexpected(unavailable());
 }
 
-ss::future<source_result<ppsr::stored_schema>>
+ss::future<source_result<ppsr::source_schema_read>>
 unavailable_source_reader::read_subject_version(
   ppsr::context_subject, ppsr::schema_version, ss::abort_source&) {
     co_return std::unexpected(unavailable());
 }
 
-std::unique_ptr<source_reader> unavailable_source_reader_factory::create() {
+ss::future<source_result<std::optional<ppsr::mode>>>
+unavailable_source_reader::read_mode(ppsr::context_subject, ss::abort_source&) {
+    co_return std::unexpected(unavailable());
+}
+
+ss::future<source_result<std::optional<ppsr::compatibility_level>>>
+unavailable_source_reader::read_config(
+  ppsr::context_subject, ss::abort_source&) {
+    co_return std::unexpected(unavailable());
+}
+
+std::unique_ptr<source_reader> unavailable_source_reader_factory::create(
+  const model::schema_registry_sync_config::shadow_schema_registry_api*) {
     return std::make_unique<unavailable_source_reader>();
 }
 

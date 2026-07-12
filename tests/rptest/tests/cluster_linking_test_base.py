@@ -86,6 +86,7 @@ DEFAULT_SYNCED_TOPIC_PROPERTIES = [
     "max.compaction.lag.ms",
     "min.compaction.lag.ms",
     "redpanda.storage.mode",
+    "redpanda.storage.mode.impl",
 ]
 
 DISALLOWED_SYNCED_TOPIC_PROPERTIES = [
@@ -99,13 +100,14 @@ DISALLOWED_SYNCED_TOPIC_PROPERTIES = [
 CONTROLLER_LOCKED_TASKS = [
     "Source Topic Sync",
     "Security Migrator Task",
+    "Roles Migrator Task",
 ]
 
 ALL_STORAGE_MODES = [
     TopicSpec.STORAGE_MODE_LOCAL,
-    TopicSpec.STORAGE_MODE_TIERED,
+    TopicSpec.STORAGE_MODE_IMPL_TIERED_V1,
     TopicSpec.STORAGE_MODE_CLOUD,
-    TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+    TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
 ]
 
 # Log messages that are expected when running shadow link tests with
@@ -231,6 +233,13 @@ class ClusterLinkingProgressVerifier:
         self.consumer_properties: dict[str, Any] = (
             consumer_properties if consumer_properties else {}
         )
+        # When using compaction, the completion criteria examines per-partition
+        # offsets, which may be at odds with having a max_msgs set.
+        assert not (self.use_compaction and "max_msgs" in self.consumer_properties), (
+            "max_msgs is incompatible with use_compaction: completion requires "
+            "per-partition offset parity, which a bounded read may never reach. "
+            "Let the consumer tail (continuous) instead."
+        )
         self.timeout_sec = timeout_sec
         self.validate_number_of_messages_on_target = (
             validate_number_of_messages_on_target
@@ -274,12 +283,14 @@ class ClusterLinkingProgressVerifier:
         )
         self.source_consumer.start(clean=False)
 
+        # NOTE: when using compaction, the completion criteria examines
+        # per-partition offsets, which is at odds with having a max_msgs.
         self.target_consumer = KgoVerifierConsumerGroupConsumer(
             context=self.test_context,
             redpanda=self.target_cluster.service,
             topic=self.topic,
             msg_size=self.msg_size,
-            max_msgs=self.msg_count,
+            max_msgs=None if self.use_compaction else self.msg_count,
             readers=readers,
             use_transactions=self.use_transactions,
             group_name=f"target-cg-{self._instance_id}",
@@ -591,12 +602,13 @@ class ShadowLinkTestBase(PreallocNodesTest):
         storage_mode = (test_context.injected_args or {}).get("storage_mode")
         needs_si = storage_mode in (
             TopicSpec.STORAGE_MODE_TIERED,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V1,
             TopicSpec.STORAGE_MODE_CLOUD,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
         )
         needs_cloud_topics = storage_mode in (
             TopicSpec.STORAGE_MODE_CLOUD,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
         )
 
         if needs_si and "si_settings" not in kwargs:
@@ -657,7 +669,9 @@ class ShadowLinkTestBase(PreallocNodesTest):
                 )
                 sec_kwargs["extra_rp_conf"] = sec_extra
             secondary_cluster_args = SecondaryClusterArgs(
-                *secondary_cluster_args.args, **sec_kwargs
+                secondary_cluster_args.num_brokers,
+                *secondary_cluster_args.args,
+                **sec_kwargs,
             )
 
         kwargs.setdefault(
@@ -731,7 +745,6 @@ class ShadowLinkTestBase(PreallocNodesTest):
             self.logger,
             self.redpanda,
             secondary_spec=self.source_cluster_spec,
-            num_brokers=3,
             secondary_args=self.secondary_cluster_args,
         )
         self.services.setUp()
@@ -1017,7 +1030,7 @@ class ShadowLinkTestBase(PreallocNodesTest):
             self.source_default_client().create_topic(topic)
             return
 
-        if storage_mode == TopicSpec.STORAGE_MODE_TIERED_CLOUD:
+        if storage_mode == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2:
             self.source_cluster_service.set_feature_active(
                 "tiered_cloud_topics", True, timeout_sec=30
             )
@@ -1026,7 +1039,7 @@ class ShadowLinkTestBase(PreallocNodesTest):
             )
 
         config = self._topic_config_from_spec(topic)
-        config[TopicSpec.PROPERTY_STORAGE_MODE] = storage_mode
+        config.update(TopicSpec.storage_mode_config(storage_mode))
 
         source_rpk = RpkTool(self.source_cluster.service)
 

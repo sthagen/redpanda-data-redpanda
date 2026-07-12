@@ -19,7 +19,7 @@
 #include "features/feature_table.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
-#include "storage/api.h"
+#include "storage/ntp_config.h"
 #include "utils/directory_walker.h"
 
 #include <seastar/core/seastar.hh>
@@ -33,12 +33,12 @@ namespace cluster {
 
 cluster_discovery::cluster_discovery(
   const model::node_uuid& node_uuid,
-  storage::api& storage,
+  std::optional<model::cluster_uuid> cluster_uuid,
   ss::abort_source& as)
   : _node_uuid(node_uuid)
+  , _cluster_uuid(std::move(cluster_uuid))
   , _join_retry_jitter(config::shard_local_cfg().join_retry_timeout_ms())
   , _join_timeout(std::chrono::seconds(2))
-  , _storage(storage)
   , _as(as) {}
 
 ss::future<cluster_discovery::registration_result>
@@ -115,7 +115,7 @@ ss::future<bool> cluster_discovery::is_cluster_founder() {
         }
         _founding_brokers = brokers{make_self_broker(config::node())};
         _node_ids_by_uuid = node_ids_by_uuid{
-          {_storage.node_uuid(), _founding_brokers.front().id()}};
+          {_node_uuid, _founding_brokers.front().id()}};
         _is_cluster_founder = true;
         co_return *_is_cluster_founder;
     }
@@ -205,6 +205,67 @@ cluster_discovery::dispatch_node_uuid_registration_to_seeds() {
           .newly_registered = true,
           .assigned_node_id = reply.id,
           .controller_snapshot = std::move(reply.controller_snapshot)};
+    }
+    co_return std::nullopt;
+}
+
+ss::future<std::optional<iobuf>>
+cluster_discovery::fetch_controller_snapshot_from_leader(
+  const std::vector<model::broker>& peers) {
+    constexpr auto fetch_timeout = std::chrono::seconds(2);
+    for (const auto& broker : peers) {
+        const auto& addr = broker.rpc_address();
+        vlog(
+          clusterlog.info,
+          "Fetching controller snapshot from {} ({})",
+          broker.id(),
+          addr);
+        result<fetch_controller_snapshot_reply> r(
+          fetch_controller_snapshot_reply{});
+        try {
+            r = co_await do_with_client_one_shot<controller_client_protocol>(
+              addr,
+              config::node().rpc_server_tls(),
+              fetch_timeout,
+              rpc::transport_version::v2,
+              [fetch_timeout](controller_client_protocol c) {
+                  return c
+                    .fetch_controller_snapshot(
+                      fetch_controller_snapshot_request{
+                        features::feature_table::get_earliest_logical_version(),
+                        features::feature_table::get_latest_logical_version()},
+                      rpc::client_opts(rpc::clock_type::now() + fetch_timeout))
+                    .then(&rpc::get_ctx_data<fetch_controller_snapshot_reply>);
+              });
+        } catch (...) {
+            vlog(
+              clusterlog.warn,
+              "Error fetching controller snapshot from {} ({}), retrying: {}",
+              broker.id(),
+              addr,
+              std::current_exception());
+            continue;
+        }
+        if (r.has_error()) {
+            vlog(
+              clusterlog.warn,
+              "Error fetching controller snapshot from {} ({}): {}, retrying",
+              broker.id(),
+              addr,
+              r.error().message());
+            continue;
+        }
+        auto& reply = r.value();
+        if (!reply.controller_snapshot.has_value()) {
+            vlog(
+              clusterlog.debug,
+              "Peer {} ({}) not ready to produce controller snapshot, trying "
+              "next peer",
+              broker.id(),
+              addr);
+            continue;
+        }
+        co_return std::move(reply.controller_snapshot);
     }
     co_return std::nullopt;
 }
@@ -350,7 +411,7 @@ ss::future<> cluster_discovery::discover_founding_brokers() {
         _is_cluster_founder = false;
         co_return;
     }
-    if (_storage.get_cluster_uuid().has_value()) {
+    if (_cluster_uuid.has_value()) {
         _is_cluster_founder = false;
         co_return;
     }
@@ -449,7 +510,7 @@ ss::future<> cluster_discovery::discover_founding_brokers() {
             vassert(
               broker.id() != model::unassigned_node_id,
               "Should have been assigned before");
-            node_uuid = _storage.node_uuid();
+            node_uuid = _node_uuid;
         } else {
             cluster::cluster_bootstrap_info_reply& reply = replies[seed.addr];
 

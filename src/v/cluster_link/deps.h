@@ -20,8 +20,16 @@
 #include "kafka/data/rpc/fwd.h"
 #include "kafka/data/rpc/serde.h"
 #include "model/fundamental.h"
+#include "security/fwd.h"
+#include "security/role.h"
+#include "security/types.h"
 
 #include <expected>
+#include <functional>
+
+namespace features {
+class feature_table;
+} // namespace features
 
 namespace cluster_link {
 
@@ -189,12 +197,38 @@ public:
     security_service& operator=(security_service&&) = delete;
     virtual ~security_service() = default;
 
-    static std::unique_ptr<security_service>
-    make_default(ss::sharded<cluster::security_frontend>*);
+    static std::unique_ptr<security_service> make_default(
+      ss::sharded<cluster::security_frontend>*,
+      ss::sharded<security::role_store>*,
+      ss::sharded<features::feature_table>*);
 
     virtual ss::future<chunked_vector<cluster::errc>> create_acls(
       chunked_vector<security::acl_binding>,
       ::model::timeout_clock::duration) = 0;
+
+    /// Create a role on the shadow cluster. errc::role_exists if it already
+    /// exists; errc::feature_disabled if RBAC is not active.
+    virtual ss::future<std::error_code> create_role(
+      security::role_name,
+      security::role,
+      ::model::timeout_clock::duration) = 0;
+    /// Overwrite a role's membership on the shadow cluster.
+    /// errc::role_does_not_exist if it is gone; errc::feature_disabled if RBAC
+    /// is not active.
+    virtual ss::future<std::error_code> update_role(
+      security::role_name,
+      security::role,
+      ::model::timeout_clock::duration) = 0;
+    /// Delete a role on the shadow cluster. errc::role_does_not_exist if
+    /// already gone; errc::feature_disabled if RBAC is not active.
+    virtual ss::future<std::error_code>
+      delete_role(security::role_name, ::model::timeout_clock::duration) = 0;
+    /// Whether the role_based_access_control feature is active locally.
+    virtual bool rbac_active() const = 0;
+    /// Enumerate shadow-cluster roles (with members) matching the predicate,
+    /// from the local controller role_store.
+    virtual chunked_vector<security::role_with_members> read_shadow_roles(
+      const std::function<bool(const security::role_name&)>&) const = 0;
 };
 
 class kafka_rpc_client_service {

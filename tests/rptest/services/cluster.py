@@ -281,23 +281,45 @@ def cluster(
                 if isinstance(entry, AllowLogsOnPredicate):
                     entry.initialize(self)
 
+            def _run_pre_test_checks():
+                hook = getattr(self, "pre_test_checks", None)
+                if hook is None:
+                    return
+                try:
+                    hook()
+                except Exception:
+                    if self.redpanda is not None:
+                        self.redpanda.logger.exception("pre_test_checks raised")
+
+            test_passed = False
             try:
                 try:
                     r = f(self, *args, **kwargs)
                     test_results: dict[str, Any] = {"result": r}
+                    test_passed = True
                 except:
+                    _run_pre_test_checks()
                     _do_post_test_checks(self, True, test_state_initial)
                     raise
 
+                _run_pre_test_checks()
                 test_results |= _do_post_test_checks(self, False, test_state_initial)
                 test_results["usage_stats"] = {
                     r.who_am_i(): r.usage_stats_dict for r in all_redpandas(self)
                 }
             except:
-                # for any failure, we decode backtraces
+                test_passed = False
                 if isinstance(self.redpanda, RedpandaService):
                     self.redpanda.decode_backtraces()
                 raise
+            finally:
+                hook = getattr(self, "post_test_checks", None)
+                if hook is not None:
+                    try:
+                        hook(self.test_context.test_name, test_passed)
+                    except Exception:
+                        if self.redpanda is not None:
+                            self.redpanda.logger.exception("post_test_checks raised")
 
             return test_results
 

@@ -4,55 +4,15 @@
 #include "base/compiler_utils.h"
 #include "base/vassert.h"
 #include "base/vlog.h"
+#include "net/dial.h"
 #include "net/dns.h"
 
 #include <seastar/core/coroutine.hh>
-#include <seastar/core/reactor.hh>
-#include <seastar/core/with_timeout.hh>
 
 #include <algorithm>
 #include <string_view>
-#include <system_error>
 
 namespace {
-
-class timed_out_error : public ss::timed_out_error {
-public:
-    explicit timed_out_error(ss::sstring msg)
-      : _msg{std::move(msg)} {}
-    const char* what() const noexcept override { return _msg.c_str(); }
-
-private:
-    ss::sstring _msg;
-};
-
-ss::future<ss::connected_socket> connect_with_timeout(
-  const seastar::socket_address& address,
-  net::clock_type::time_point timeout,
-  seastar::logger* log) {
-    auto socket = ss::make_lw_shared<ss::socket>(ss::engine().net().socket());
-    auto f = socket->connect(address).finally([socket] {});
-    return ss::with_timeout(timeout, std::move(f))
-      .handle_exception([socket, address, log](const std::exception_ptr& e) {
-          try {
-              std::rethrow_exception(e);
-          } catch (const ss::timed_out_error& ex) {
-              socket->shutdown();
-              return ss::make_exception_future<ss::connected_socket>(
-                timed_out_error(
-                  ssx::sformat("connection to {} - {}", address, e)));
-          } catch (const std::system_error& ex) {
-              socket->shutdown();
-              return ss::make_exception_future<ss::connected_socket>(
-                std::system_error(
-                  ex.code(), fmt::format("connection to {}", address)));
-          } catch (...) {
-              vlog(log->trace, "error connecting to {} - {}", address, e);
-              socket->shutdown();
-              return ss::make_exception_future<ss::connected_socket>(e);
-          }
-      });
-}
 
 /// Sends an HTTP CONNECT request over `out`/`in` and reads the
 /// response. Throws net::proxy_connect_error on non-200 status,
@@ -204,6 +164,13 @@ base_transport::base_transport(configuration c, seastar::logger* log)
     }
 }
 
+ss::future<ss::connected_socket> base_transport::dial(
+  const unresolved_address& target, clock_type::time_point deadline) {
+    auto resolved_address = co_await net::resolve_dns(target);
+    vlog(_log->trace, "Resolved address {}", resolved_address);
+    co_return co_await detail::dial_single(resolved_address, deadline, _log);
+}
+
 ss::future<> base_transport::do_connect(clock_type::time_point timeout) {
     // hold invariant of having an always valid dispatch gate
     // and make sure we don't have a live connection already
@@ -218,10 +185,7 @@ ss::future<> base_transport::do_connect(clock_type::time_point timeout) {
         reset_state();
         const auto& tcp_target = _proxy.has_value() ? _proxy->address
                                                     : server_address();
-        auto resolved_address = co_await net::resolve_dns(tcp_target);
-        vlog(_log->trace, "Resolved address {}", resolved_address);
-        ss::connected_socket fd = co_await connect_with_timeout(
-          resolved_address, timeout, _log);
+        ss::connected_socket fd = co_await dial(tcp_target, timeout);
 
         if (_proxy.has_value() && _proxy->credentials) {
             // https:// proxy: TLS-wrap to the proxy before CONNECT.

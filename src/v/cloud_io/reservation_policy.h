@@ -10,9 +10,9 @@
 #pragma once
 
 #include "base/seastarx.h"
+#include "cloud_io/admission_control_policy.h"
+#include "cloud_io/admission_control_types.h"
 #include "cloud_io/reservation_policy_types.h"
-#include "cloud_io/scheduler_policy.h"
-#include "cloud_io/scheduler_types.h"
 #include "metrics/metrics.h"
 
 #include <seastar/core/abort_source.hh>
@@ -39,7 +39,7 @@ namespace cloud_io {
 /// idle reservations to the common pool after the dwell window. See
 /// `reservation_group_state` for the mechanism details.
 template<class Clock = ss::lowres_clock>
-class reservation_policy final : public scheduler_policy {
+class reservation_policy final : public admission_control_policy {
 public:
     using time_point = typename Clock::time_point;
 

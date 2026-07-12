@@ -104,7 +104,9 @@ void leader_router_probe::setup_metrics() {
           "preregister_objects_duration_microseconds",
           [this] { return _preregister_objects.internal_histogram_logform(); },
           sm::description("Latency of local preregister_objects requests")),
-      });
+      },
+      {},
+      {sm::shard_label});
 }
 
 } // namespace cloud_topics::l1

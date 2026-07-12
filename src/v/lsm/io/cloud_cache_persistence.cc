@@ -15,6 +15,7 @@
 #include "config/configuration.h"
 #include "lsm/core/exceptions.h"
 #include "lsm/core/internal/files.h"
+#include "lsm/io/chunked_remote_file_reader.h"
 #include "lsm/io/file_io.h"
 #include "ssx/future-util.h"
 #include "utils/retry_chain_node.h"
@@ -33,11 +34,14 @@ namespace {
 
 static constexpr auto reservation_timeout = std::chrono::seconds(30);
 
+static constexpr auto cloud_op_timeout = std::chrono::seconds(10);
+
+std::chrono::milliseconds cloud_op_backoff() {
+    return config::shard_local_cfg().cloud_storage_initial_backoff_ms.value();
+}
+
 retry_chain_node make_cloud_rtc(ss::abort_source& as) {
-    constexpr auto timeout = std::chrono::seconds(10);
-    auto backoff
-      = config::shard_local_cfg().cloud_storage_initial_backoff_ms.value();
-    return retry_chain_node{as, timeout, backoff};
+    return retry_chain_node{as, cloud_op_timeout, cloud_op_backoff()};
 }
 
 bool check_cloud_result(cloud_io::download_result result) {
@@ -239,52 +243,50 @@ public:
       cloud_io::remote* remote,
       cloud_storage_clients::bucket_name bucket,
       cloud_storage_clients::object_key prefix,
+      config::binding<size_t> chunk_size,
       cloud_io::group_id gid)
       : _cache(cache)
       , _remote(remote)
       , _bucket(std::move(bucket))
       , _prefix(std::move(prefix))
+      , _chunk_size(std::move(chunk_size))
       , _gid(gid) {}
 
     ss::future<optional_pointer<random_access_file_reader>>
-    open_random_access_reader(internal::file_handle h) override {
+    open_random_access_reader(
+      internal::file_handle h, uint64_t file_size) override {
         _as.check();
         auto _ = _gate.hold();
         auto filename = internal::sst_file_name(h);
-        auto key = cache_key(filename);
 
-        auto root = make_cloud_rtc(_as);
-        while (true) {
-            auto reader = co_await open_cached_reader(key);
-            if (reader) {
-                co_return reader;
-            }
-
-            auto dl_fut = co_await ss::coroutine::as_future(
-              _remote->download_stream(
-                {
-                  .bucket = _bucket,
-                  .key = cloud_key(filename),
-                  .parent_rtc = root,
-                },
-                [this,
-                 &key](uint64_t content_length, ss::input_stream<char> stream) {
-                    return save_to_cache(
-                      content_length, std::move(stream), key);
-                },
-                "SST file download",
-                /*acquire_hydration_units=*/true,
-                /*byte_range=*/std::nullopt,
-                /*throttle_metric_ms_cb=*/{},
-                _gid));
-            if (dl_fut.failed()) {
-                throw_as_lsm_ex(
-                  dl_fut.get_exception(), "error downloading file");
-            }
-            if (!check_cloud_result(dl_fut.get())) {
-                co_return std::nullopt;
-            }
+        auto cached = co_await open_cached_reader(cache_key(filename));
+        if (cached) {
+            // The whole object is already local -- e.g. just written through
+            // by the cache-staged writer. Serve it directly rather than
+            // re-fetching it from the cloud in chunks.
+            co_return cached;
         }
+
+        // Hydrate chunks on demand. Chunk entries live in a sibling
+        // subdirectory so they can never collide with the whole-file key
+        // probed above.
+        auto reader = co_await chunked_remote_file_reader::open(
+          _cache,
+          _remote,
+          _bucket,
+          cloud_key(filename),
+          chunk_cache_prefix(filename),
+          file_size,
+          _chunk_size(),
+          config::shard_local_cfg().cloud_storage_hydration_timeout_ms(),
+          cloud_op_backoff(),
+          _as,
+          _gid);
+        if (!reader) {
+            co_return std::nullopt;
+        }
+        std::unique_ptr<random_access_file_reader> ptr = std::move(*reader);
+        co_return ptr;
     }
 
     ss::future<std::unique_ptr<sequential_file_writer>>
@@ -402,9 +404,9 @@ private:
                 co_return std::nullopt;
             }
             auto local_path = _cache->get_local_path(key);
-            std::unique_ptr<random_access_file_reader> ptr;
-            ptr = std::make_unique<disk_file_reader>(
-              std::move(local_path), std::move(item->body));
+            std::unique_ptr<random_access_file_reader> ptr
+              = std::make_unique<disk_file_reader>(
+                std::move(local_path), std::move(item->body));
             co_return ptr;
         } catch (const std::system_error& e) {
             if (e.code() == std::errc::no_such_file_or_directory) {
@@ -422,27 +424,14 @@ private:
         }
     }
 
-    ss::future<uint64_t> save_to_cache(
-      uint64_t content_length,
-      ss::input_stream<char> input_stream,
-      const std::filesystem::path& key) {
-        std::exception_ptr ex;
-        try {
-            auto reservation = co_await _cache->reserve_space(
-              content_length, 1);
-            co_await _cache->put(key, input_stream, reservation);
-        } catch (...) {
-            ex = std::current_exception();
-        }
-        co_await input_stream.close();
-        if (ex) {
-            std::rethrow_exception(ex);
-        }
-        co_return content_length;
-    }
-
     std::filesystem::path cache_key(std::string_view name) {
         return std::filesystem::path("lsm") / _prefix() / name;
+    }
+
+    // Where the chunked reader caches its chunks for `name`: a sibling of the
+    // whole-file key so the two never share a path.
+    std::filesystem::path chunk_cache_prefix(std::string_view name) {
+        return cache_key(fmt::format("{}.chunks", name));
     }
 
     cloud_storage_clients::object_key cloud_key(std::string_view name) {
@@ -453,6 +442,7 @@ private:
     cloud_io::remote* _remote;
     cloud_storage_clients::bucket_name _bucket;
     cloud_storage_clients::object_key _prefix;
+    config::binding<size_t> _chunk_size;
     cloud_io::group_id _gid;
     ss::abort_source _as;
     ss::gate _gate;
@@ -599,9 +589,15 @@ ss::future<std::unique_ptr<data_persistence>> open_cloud_cache_data_persistence(
   cloud_io::remote* remote,
   cloud_storage_clients::bucket_name bucket,
   cloud_storage_clients::object_key prefix,
+  config::binding<size_t> sst_chunk_size,
   cloud_io::group_id gid) {
     co_return std::make_unique<cloud_cache_data_persistence>(
-      cache, remote, std::move(bucket), std::move(prefix), gid);
+      cache,
+      remote,
+      std::move(bucket),
+      std::move(prefix),
+      std::move(sst_chunk_size),
+      gid);
 }
 
 ss::future<std::unique_ptr<metadata_persistence>>

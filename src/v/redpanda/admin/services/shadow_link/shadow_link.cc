@@ -35,6 +35,19 @@ void check_sr_api_sync_supported(
           "cluster is fully upgraded");
     }
 }
+
+void check_role_sync_supported(
+  const cluster_link::model::role_sync_config& cfg,
+  const features::feature_table& feature_table) {
+    if (cfg.role_name_filters.empty()) {
+        return;
+    }
+    if (!feature_table.is_active(features::feature::shadow_link_role_sync)) {
+        throw serde::pb::rpc::failed_precondition_exception(
+          "Role sync cannot be configured until the cluster is fully "
+          "upgraded");
+    }
+}
 } // namespace
 
 shadow_link_service_impl::shadow_link_service_impl(
@@ -67,6 +80,8 @@ shadow_link_service_impl::create_shadow_link(
     auto md = convert_create_to_metadata(std::move(req));
     check_sr_api_sync_supported(
       md.configuration.schema_registry_sync_cfg, _feature_table->local());
+    check_role_sync_supported(
+      md.configuration.role_sync_cfg, _feature_table->local());
     auto get_resp = _service->local().get_cluster_link(md.name);
     if (get_resp.has_value()) {
         throw serde::pb::rpc::already_exists_exception(
@@ -74,8 +89,7 @@ shadow_link_service_impl::create_shadow_link(
     }
 
     if (validate_only) {
-        handle_error(
-          co_await _service->local().test_connection(md.name, md.connection));
+        handle_error(co_await _service->local().test_connection(std::move(md)));
         co_return proto::admin::create_shadow_link_response{};
     }
 
@@ -196,6 +210,8 @@ shadow_link_service_impl::update_shadow_link(
       std::move(req), std::move(current_link));
     check_sr_api_sync_supported(
       update_cmd.link_config.schema_registry_sync_cfg, _feature_table->local());
+    check_role_sync_supported(
+      update_cmd.link_config.role_sync_cfg, _feature_table->local());
 
     auto updated_md = handle_error(
       co_await _service->local().update_cluster_link(

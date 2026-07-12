@@ -332,7 +332,7 @@ class OMBValidationTest(RedpandaCloudTest):
         msg_rate_per_node = messages_per_sec_per_producer * producer_per_swarm_node
 
         # single producer runtime
-        # Each swarm will throttle the client creation rate to about 30 connections/second
+        # Each swarm will throttle the client creation rate to about 30 producers/second
         warm_up_time_s = (
             producer_per_swarm_node * ProducerSwarm.CLIENT_SPAWN_WAIT_MS // 1000
         ) + 60
@@ -430,7 +430,8 @@ class OMBValidationTest(RedpandaCloudTest):
 
         for s in swarm:
             # wait for the swarm to report that all producers have started (sent at least 1 message)
-            s.wait_for_all_started()
+            broker_scale_factor = max(1, self.num_brokers / 6)
+            s.wait_for_all_started(timeout_scale=broker_scale_factor)
 
         # Now wait for up to five minutes to hit our target connection count: even though all producers
         # have started, it's possible that the connections haven't hit their target yet because some

@@ -152,6 +152,16 @@ public:
     ss::future<result<join_node_reply>>
     handle_join_request(const join_node_request r);
 
+    // Produce a controller_join_snapshot for a peer's
+    // fetch_controller_snapshot RPC, dispatching to the leader if this
+    // node is not the leader. The leader's view is authoritative; serving
+    // a follower's potentially-stale state is the bug this avoids. The
+    // reply's snapshot is std::nullopt on dispatch failure (no leader
+    // known, RPC error, etc.) so the client can fall through to the next
+    // seed.
+    ss::future<fetch_controller_snapshot_reply>
+    handle_fetch_controller_snapshot(fetch_controller_snapshot_request r);
+
     // Applies a committed record batch, specializing handling based on the
     // batch type.
     ss::future<std::error_code> apply_update(model::record_batch);
@@ -252,6 +262,7 @@ private:
 
     ss::future<join_node_reply> make_join_node_success_reply(model::node_id id);
 
+public:
     struct members_snapshot
       : serde::envelope<
           members_snapshot,
@@ -261,6 +272,16 @@ private:
         model::offset update_offset;
         auto serde_fields() { return std::tie(members, update_offset); }
     };
+
+    // Reads the cluster-members snapshot persisted by
+    // persist_members_in_kvstore. Returns an empty snapshot if the key
+    // has never been written (e.g. on a brand-new node before its first
+    // membership-changing apply). Available pre-controller-start so that
+    // bootstrap can use the last-known peer set without depending on
+    // members_manager itself being constructed.
+    static members_snapshot read_members_from_kvstore(storage::kvstore&);
+
+private:
     /**
      * In order to be able to determine the current cluster configuration before
      * raft-0 log is replied or controller snapshot is applied we store
@@ -268,7 +289,6 @@ private:
      * configuration changes.
      */
     ss::future<> persist_members_in_kvstore(model::offset);
-    members_snapshot read_members_from_kvstore();
 
     const std::vector<config::seed_server> _seed_servers;
     const model::broker _self;

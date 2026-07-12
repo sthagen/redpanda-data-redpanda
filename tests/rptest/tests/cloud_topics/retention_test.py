@@ -128,7 +128,7 @@ class CloudTopicsRetentionTest(EndToEndCloudTopicsBase):
         cloud_storage_type=get_cloud_storage_type(),
         storage_mode=[
             TopicSpec.STORAGE_MODE_CLOUD,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
         ],
     )
     def test_size_based_retention(
@@ -152,7 +152,7 @@ class CloudTopicsRetentionTest(EndToEndCloudTopicsBase):
             partitions=1,
             replicas=3,
             config={
-                TopicSpec.PROPERTY_STORAGE_MODE: storage_mode,
+                **TopicSpec.storage_mode_config(storage_mode),
                 "cleanup.policy": TopicSpec.CLEANUP_DELETE,
                 "retention.bytes": str(initial_retention),
             },
@@ -223,7 +223,7 @@ class CloudTopicsRetentionTest(EndToEndCloudTopicsBase):
         cloud_storage_type=get_cloud_storage_type(),
         storage_mode=[
             TopicSpec.STORAGE_MODE_CLOUD,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
         ],
     )
     def test_time_based_retention(
@@ -244,7 +244,7 @@ class CloudTopicsRetentionTest(EndToEndCloudTopicsBase):
             partitions=1,
             replicas=3,
             config={
-                TopicSpec.PROPERTY_STORAGE_MODE: storage_mode,
+                **TopicSpec.storage_mode_config(storage_mode),
                 "cleanup.policy": TopicSpec.CLEANUP_DELETE,
                 "retention.ms": str(3600000),  # 1 hour - data won't be deleted yet
             },

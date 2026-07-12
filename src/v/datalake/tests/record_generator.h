@@ -69,6 +69,12 @@ public:
       std::optional<iobuf> key,
       iceberg::conversion::json_schema::testing::generator_config config = {});
 
+    // Returns a schema-id-prefixed Avro-encoded buffer for a random datum of
+    // the named Avro schema. Useful for producing records with Avro-encoded
+    // keys — pass the result as the `key` arg to add_random_avro_record.
+    ss::future<checked<iobuf, error>> encode_avro_buf(
+      std::string_view schema_name, testing::avro_generator_config config = {});
+
 private:
     chunked_hash_map<
       ss::sstring,

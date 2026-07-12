@@ -12,7 +12,7 @@
 #pragma once
 #include "base/oncore.h"
 #include "base/type_traits.h"
-#include "cloud_io/scheduler_types.h"
+#include "cloud_io/admission_control_types.h"
 #include "config/base_property.h"
 #include "config/logger.h"
 #include "config/rjson_serialization.h"
@@ -120,9 +120,15 @@ public:
         }
     }
 
-    const value_type& value() { return _value; }
+    const value_type& value() {
+        debug_assert_readable();
+        return _value;
+    }
 
-    const value_type& value() const { return _value; }
+    const value_type& value() const {
+        debug_assert_readable();
+        return _value;
+    }
 
     /// Return the pending value if one exists, otherwise the active value.
     /// Use this to check the user's configured intent (e.g. for enterprise
@@ -462,6 +468,19 @@ protected:
         _hook.swap_nodes(rhs._hook);
     }
 
+    // The active value of the parent property, read without the readiness
+    // check. A binding may legitimately be constructed before the owning
+    // config_store is ready (e.g. during bootstrap); the readiness check is
+    // deferred to the point the bound value is actually read (within
+    // operator()).
+    const T& parent_value_unchecked() const { return _parent->_value; }
+
+    void debug_assert_readable() const {
+        if (_parent != nullptr) {
+            _parent->debug_assert_readable();
+        }
+    }
+
 public:
     virtual ~binding_base() = default;
     binding_base& operator=(binding_base&&) = delete;
@@ -536,7 +555,7 @@ protected:
 public:
     binding(property<T>& parent)
       : binding_base<T>(parent)
-      , _value(parent()) {}
+      , _value(this->parent_value_unchecked()) {}
 
     binding(const binding<T>& rhs)
       : binding_base<T>(rhs)
@@ -557,6 +576,7 @@ public:
 
     const T& operator()() const {
         oncore_debug_verify(binding_base<T>::_verify_shard);
+        binding_base<T>::debug_assert_readable();
         return _value;
     }
 
@@ -624,7 +644,7 @@ protected:
 public:
     conversion_binding(property<T>& parent, conversion_func convert)
       : binding_base<T>(parent)
-      , _value(convert(parent()))
+      , _value(convert(this->parent_value_unchecked()))
       , _convert(std::move(convert)) {}
 
     conversion_binding(const conversion_binding<U, T>& rhs)
@@ -652,6 +672,7 @@ public:
 
     const U& operator()() const {
         oncore_debug_verify(binding_base<T>::_verify_shard);
+        binding_base<T>::debug_assert_readable();
         return _value;
     }
 };
@@ -784,6 +805,9 @@ consteval std::string_view property_type_name() {
       std::is_same_v<type, security::oidc::nested_group_behavior>) {
         return "string";
     } else if constexpr (std::is_same_v<type, model::redpanda_storage_mode>) {
+        return "string";
+    } else if constexpr (
+      std::is_same_v<type, model::redpanda_storage_mode_tiered_impl>) {
         return "string";
     } else if constexpr (std::is_same_v<type, cloud_io::policy_type>) {
         return "string";

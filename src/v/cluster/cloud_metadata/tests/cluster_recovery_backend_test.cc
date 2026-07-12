@@ -126,6 +126,7 @@ TEST_P(ClusterRecoveryBackendLeadershipParamTest, TestRecoveryControllerState) {
     // Update the cluster config (via the controller, rather than shard local).
     cluster::config_update_request req;
     req.upsert.emplace_back("log_segment_size_jitter_percent", "1");
+    req.upsert.emplace_back("log_segment_size", "2147483649");
     app.controller->get_config_frontend()
       .local()
       .patch(std::move(req), model::timeout_clock::now() + 30s)
@@ -228,6 +229,7 @@ TEST_P(ClusterRecoveryBackendLeadershipParamTest, TestRecoveryControllerState) {
     raft0 = nullptr;
     restart(should_wipe::yes);
     task_local_cfg.get("log_segment_size_jitter_percent").reset();
+    task_local_cfg.get("log_segment_size").reset();
     RPTEST_REQUIRE_EVENTUALLY(5s, [this] {
         return app.storage.local().get_cluster_uuid().has_value();
     });
@@ -239,6 +241,7 @@ TEST_P(ClusterRecoveryBackendLeadershipParamTest, TestRecoveryControllerState) {
                    .has_value());
     ASSERT_NE(
       1, config::shard_local_cfg().log_segment_size_jitter_percent.value());
+    ASSERT_NE(2147483649, config::shard_local_cfg().log_segment_size.value());
     ASSERT_TRUE(!app.controller->get_credential_store().local().contains(
       security::credential_user{"userguy"}));
     ASSERT_EQ(
@@ -274,14 +277,26 @@ TEST_P(ClusterRecoveryBackendLeadershipParamTest, TestRecoveryControllerState) {
                   .is_recovery_active();
     });
 
+    bool has_restarted = false;
     // Validate the controller state is restored.
     auto validate_post_recovery = [&] {
         ASSERT_TRUE(app.controller->get_feature_table()
                       .local()
                       .get_configured_license()
                       .has_value());
+        // log_segment_size_jitter_percent is marked as needs_restart::yes. We
+        // won't see its recovered value reflected until the node is restarted.
+        auto log_segment_size_jitter_expected
+          = has_restarted ? 1
+                          : config::shard_local_cfg()
+                              .log_segment_size_jitter_percent.default_value();
         ASSERT_EQ(
-          1, config::shard_local_cfg().log_segment_size_jitter_percent.value());
+          log_segment_size_jitter_expected,
+          config::shard_local_cfg().log_segment_size_jitter_percent.value());
+        // On the other hand, log_segment_size is marked as needs_restart::no,
+        // so we will see its value reflected immediately.
+        ASSERT_EQ(
+          2147483649, config::shard_local_cfg().log_segment_size.value());
 
         // Validate User restoration.
         ASSERT_TRUE(app.controller->get_credential_store().local().contains(
@@ -339,6 +354,7 @@ TEST_P(ClusterRecoveryBackendLeadershipParamTest, TestRecoveryControllerState) {
 
     // Sanity check that the above invariants still hold after restarting.
     restart(should_wipe::no);
+    has_restarted = true;
     RPTEST_REQUIRE_EVENTUALLY(5s, [this] {
         auto latest_recovery = app.controller->get_cluster_recovery_table()
                                  .local()

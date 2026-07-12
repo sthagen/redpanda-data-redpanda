@@ -20,6 +20,7 @@ redpanda_cc_library(
         "//src/v/cluster:partition_leaders_table",
         "//src/v/cluster:shard_table",
         "//src/v/cluster:state_machine_registry",
+        "//src/v/features",
         "//src/v/model",
         "//src/v/rpc",
         "//src/v/ssx:future_util",

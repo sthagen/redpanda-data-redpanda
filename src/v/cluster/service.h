@@ -52,6 +52,9 @@ public:
     virtual ss::future<join_node_reply>
     join_node(join_node_request, rpc::streaming_context&) override;
 
+    ss::future<fetch_controller_snapshot_reply> fetch_controller_snapshot(
+      fetch_controller_snapshot_request, rpc::streaming_context&) final;
+
     virtual ss::future<create_topics_reply>
     create_topics(create_topics_request, rpc::streaming_context&) override;
 

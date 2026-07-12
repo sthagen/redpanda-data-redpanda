@@ -12,9 +12,11 @@
 #pragma once
 
 #include "cluster_link/deps.h"
+#include "features/fwd.h"
 #include "kafka/data/rpc/deps.h"
 
 #include <seastar/core/gate.hh>
+#include <seastar/core/sharded.hh>
 
 namespace cluster_link {
 
@@ -27,6 +29,7 @@ public:
       kafka::data::rpc::topic_creator* topic_creator,
       kafka::data::rpc::topic_metadata_cache* topic_metadata_cache,
       link_registry* link_registry,
+      ss::sharded<features::feature_table>* feature_table,
       ss::lowres_clock::duration run_interval,
       config::binding<int16_t> default_topic_replication,
       ss::scheduling_group sg);
@@ -75,6 +78,7 @@ private:
     kafka::data::rpc::topic_creator* _topic_creator;
     kafka::data::rpc::topic_metadata_cache* _topic_metadata_cache;
     link_registry* _link_registry;
+    ss::sharded<features::feature_table>* _feature_table;
 
     ssx::mutex _reconciler_mutex{"cluster_link::task_reconciler"};
     ss::timer<ss::lowres_clock> _reconciler_timer;

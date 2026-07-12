@@ -30,7 +30,7 @@ redpanda_cc_library(
     include_prefix = "cloud_topics/level_one/maintenance/leveling",
     visibility = ["//visibility:public"],
     deps = [
-        "//src/v/cloud_io:scheduler_types",
+        "//src/v/cloud_io:admission_control_types",
         "//src/v/cloud_topics:log_reader_config",
         "//src/v/cloud_topics/level_one/common:abstract_io",
         "//src/v/cloud_topics/level_one/frontend_reader:reader",

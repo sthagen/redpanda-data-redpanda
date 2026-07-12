@@ -104,7 +104,7 @@ redpanda_cc_library(
         ":pipeline_stage",
         ":serializer",
         "//src/v/base",
-        "//src/v/cloud_io:scheduler_types",
+        "//src/v/cloud_io:admission_control_types",
         "//src/v/cloud_topics:types",
         "//src/v/cloud_topics/level_zero/common:extent_meta",
         "//src/v/cloud_topics/level_zero/common:micro_probe",

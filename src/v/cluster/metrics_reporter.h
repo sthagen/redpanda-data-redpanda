@@ -34,6 +34,7 @@
 #include <seastar/util/noncopyable_function.hh>
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace cluster {
@@ -59,7 +60,7 @@ public:
     static ss::future<> send_metrics(configs conf, iobuf);
 
 private:
-    ss::future<http::client> make_http_client();
+    ss::future<std::unique_ptr<http::client>> make_http_client();
     ss::future<> do_send_metrics(http::client&);
 
     metrics_http_client(configs conf, iobuf out)

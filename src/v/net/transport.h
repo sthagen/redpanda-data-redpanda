@@ -143,6 +143,15 @@ public:
 protected:
     virtual void fail_outstanding_futures() {}
 
+    /// Establishes the TCP connection to \p target, which is either the
+    /// configured server address or the forward proxy. The default
+    /// implementation resolves the host name and dials the first
+    /// resolved address, giving it all the time until \p deadline.
+    /// Subclasses may override to customize dialing, e.g. to try
+    /// multiple resolved addresses.
+    virtual ss::future<ss::connected_socket>
+    dial(const unresolved_address& target, clock_type::time_point deadline);
+
     // Return the input stream associated with the transport.
     // The transport must not be in initial/stopped state.
     const ss::input_stream<char>& in() const {

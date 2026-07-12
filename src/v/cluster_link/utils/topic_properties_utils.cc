@@ -12,6 +12,7 @@
 #include "cluster_link/utils/topic_properties_utils.h"
 
 #include "base/type_traits.h"
+#include "features/feature_table.h"
 #include "kafka/server/handlers/configs/config_utils.h"
 #include "pandaproxy/schema_registry/types.h"
 #include "reflection/type_traits.h"
@@ -333,14 +334,56 @@ bool maybe_append_update(
           kafka::max_compaction_lag_ms_validator);
     }
 
-    if (config_name == kafka::topic_property_redpanda_storage_mode) {
-        return parse_and_set(
-          topic_config.tp_ns,
-          update.properties.storage_mode,
-          config_value,
-          std::make_optional(topic_config.properties.storage_mode));
-    }
-
     return false;
+}
+
+bool maybe_append_storage_mode_update(
+  cluster::topic_properties_update& update,
+  const std::optional<ss::sstring>& mode_value,
+  const std::optional<ss::sstring>& impl_value,
+  const cluster::topic_configuration& topic_config,
+  const features::feature_table& feature_table) {
+    std::optional<::model::redpanda_storage_mode> mode;
+    if (impl_value.has_value()) {
+        // The impl property is exact and always present on sources that
+        // emit it, so it takes precedence over the ambiguous mode value.
+        mode = ::model::redpanda_storage_mode_from_impl_string(*impl_value);
+        if (!mode.has_value()) {
+            throw kafka::validation_error(
+              fmt::format("Unrecognized storage mode impl '{}'", *impl_value));
+        }
+    } else if (mode_value.has_value()) {
+        // Sources that predate the impl property sync only the mode, where
+        // 'tiered' meant the classic tiered storage.
+        mode = ::model::redpanda_storage_mode_from_string(*mode_value);
+        if (!mode.has_value()) {
+            throw kafka::validation_error(
+              fmt::format("Unrecognized storage mode '{}'", *mode_value));
+        }
+    } else {
+        return false;
+    }
+    auto current = topic_config.properties.storage_mode;
+    if (*mode == current) {
+        return false;
+    }
+    if (
+      *mode == ::model::redpanda_storage_mode::tiered_cloud
+      && !feature_table.is_active(features::feature::tiered_cloud_topics)) {
+        throw kafka::validation_error(
+          "Cannot use the tiered_v2 storage mode until the cluster is fully "
+          "upgraded to at least v26.2.1");
+    }
+    if (!kafka::is_storage_mode_transition_permitted(current, *mode)) {
+        throw kafka::validation_error(
+          fmt::format(
+            "Storage mode transition from {} to {} is not permitted",
+            current,
+            *mode));
+    }
+    update.properties.storage_mode.op
+      = cluster::incremental_update_operation::set;
+    update.properties.storage_mode.value = *mode;
+    return true;
 }
 } // namespace cluster_link::utils

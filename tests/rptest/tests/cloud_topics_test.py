@@ -33,7 +33,7 @@ class CloudTopicsTest(RedpandaTest):
         Create initial test topics. Cloud topics are gated by cloud storage,
         which is already configured via SISettings.
         """
-        if storage_mode == TopicSpec.STORAGE_MODE_TIERED_CLOUD:
+        if storage_mode == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2:
             self.redpanda.set_feature_active(
                 "tiered_cloud_topics", True, timeout_sec=30
             )
@@ -43,7 +43,7 @@ class CloudTopicsTest(RedpandaTest):
                 spec.name,
                 spec.partition_count,
                 spec.replication_factor,
-                config={TopicSpec.PROPERTY_STORAGE_MODE: storage_mode},
+                config=TopicSpec.storage_mode_config(storage_mode),
             )
 
     # Ignored because it's flaky but the test is still useful locally.
@@ -53,7 +53,7 @@ class CloudTopicsTest(RedpandaTest):
         cloud_storage_type=get_cloud_storage_type(),
         storage_mode=[
             TopicSpec.STORAGE_MODE_CLOUD,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
         ],
     )
     def test_reconciler_uploads(self, cloud_storage_type, storage_mode):
@@ -76,7 +76,7 @@ class CloudTopicsTest(RedpandaTest):
             err_msg=lambda: f"failed to find at least 1 l1 object(s), instead got {count_objects('l1_')}",
         )
 
-        if storage_mode == TopicSpec.STORAGE_MODE_TIERED_CLOUD:
+        if storage_mode == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2:
             # In tiered_cloud mode, data is replicated through raft (no L0
             # uploads). Verify no L0 objects were created.
             l0_count = count_objects("l0_")

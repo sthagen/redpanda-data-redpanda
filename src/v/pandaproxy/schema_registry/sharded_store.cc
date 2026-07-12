@@ -440,22 +440,25 @@ ss::future<chunked_vector<context_subject>> sharded_store::get_subjects(
     co_return co_await _store.map_reduce0(map, subjects{}, reduce);
 }
 
-ss::future<chunked_vector<subject_version>>
+ss::future<chunked_vector<subject_version_deleted>>
 sharded_store::list_subject_versions(
-  std::function<bool(const context_subject&)> filter, include_deleted inc_del) {
-    using result_t = chunked_vector<subject_version>;
-    auto map = [filter = std::move(filter), inc_del](store& s) {
+  ss::noncopyable_function<bool(const context_subject&)> filter,
+  include_deleted inc_del) {
+    using result_t = chunked_vector<subject_version_deleted>;
+    // Captured by reference because it is move-only; the coroutine frame keeps
+    // `filter` alive for the scan.
+    auto map = [&filter, inc_del](store& s) {
         result_t out;
         for (const auto& sub : s.get_subjects(inc_del)) {
             if (!filter(sub)) {
                 continue;
             }
-            auto versions = s.get_versions(sub, inc_del);
+            auto versions = s.get_version_ids(sub, inc_del);
             if (versions.has_error()) {
                 continue;
             }
-            for (auto v : versions.assume_value()) {
-                out.emplace_back(sub, v);
+            for (const auto& v : versions.assume_value()) {
+                out.push_back({sub, v.version, v.deleted});
             }
         }
         return out;

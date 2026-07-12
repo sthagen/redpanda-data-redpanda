@@ -15,9 +15,12 @@
 
 #include <seastar/core/coroutine.hh>
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <string_view>
 #include <utility>
 
 namespace pandaproxy::schema_registry::rest_client {
@@ -41,6 +44,59 @@ std::optional<int32_t> checked_nonnegative_i32(int64_t v) {
         return std::nullopt;
     }
     return static_cast<int32_t>(v);
+}
+
+// Server-assigned response fields Redpanda does not model but which carry no
+// user content. The client opts into them via the
+// `Confluent-Accept-Unknown-Properties` header (see client.cc), so they arrive
+// on schema responses; this list drops them rather than surfacing them to the
+// unsupported-feature policy, so a source that returns them does not spuriously
+// trip it.
+//
+// A constexpr array scanned with ranges::contains is a deliberate choice at
+// this size: it keeps the list trivially extensible (just add a literal) rather
+// than a switch/case, and for N=2 a linear scan beats a hash set (no static
+// init, stays constexpr). Promote to a flat_hash_set only if this list grows
+// large or gains a bulk-lookup site (cf. cluster_link's
+// disallowed_topic_properties, materialized into a set in its validator).
+constexpr auto ignorable_fields = std::to_array<std::string_view>(
+  {"guid", "ts"});
+
+bool is_ignorable_field(std::string_view key) {
+    return std::ranges::contains(ignorable_fields, key);
+}
+
+// The field's JSON type name, for unsupported-feature diagnostics; takes the
+// parser's current value token.
+const char* json_type_name(serde::json::token t) {
+    using token = serde::json::token;
+    switch (t) {
+    case token::start_object:
+        return "object";
+    case token::start_array:
+        return "array";
+    case token::value_string:
+        return "string";
+    case token::value_int:
+    case token::value_double:
+        return "number";
+    case token::value_true:
+    case token::value_false:
+        return "boolean";
+    case token::value_null:
+        return "null";
+    // Non-value tokens never reach here (this is called only on the parser's
+    // current value token). They are enumerated rather than folded into a
+    // default so the switch stays exhaustive: -Wswitch (via -Werror) then flags
+    // a newly-added token at compile time instead of silently returning
+    // "unknown".
+    case token::error:
+    case token::key:
+    case token::end_object:
+    case token::end_array:
+    case token::eof:
+        return "unknown";
+    }
 }
 
 } // namespace
@@ -90,6 +146,198 @@ parse_subjects(iobuf body, qualified_subjects_enabled qualified) {
         co_return std::unexpected(
           parse_error{
             .reason = ssx::sformat("failed to parse subjects: {}", e.what())});
+    }
+}
+
+ss::future<std::expected<chunked_vector<context>, parse_error>>
+parse_contexts(iobuf body) {
+    using token = serde::json::token;
+    // Firewall exceptions from the parser: malformed input is reported via the
+    // returned std::expected, not thrown.
+    try {
+        serde::json::parser p(std::move(body));
+
+        if (!co_await p.next() || p.token() != token::start_array) {
+            co_return std::unexpected(
+              parse_error{.reason = "expected a JSON array of contexts"});
+        }
+
+        chunked_vector<context> contexts;
+        while (co_await p.next()) {
+            switch (p.token()) {
+            case token::end_array:
+                // The body is exactly a JSON array of strings: reject any
+                // trailing content rather than ignoring it.
+                co_await p.next();
+                if (p.token() != token::eof) {
+                    co_return std::unexpected(
+                      parse_error{
+                        .reason = "trailing content after contexts array"});
+                }
+                co_return std::move(contexts);
+            case token::value_string:
+                // Each element is a bare, dot-prefixed context name (".",
+                // ".dev") and is wrapped verbatim. Unlike a subject, a context
+                // has no ":.ctx:" qualified form to decode here.
+                contexts.push_back(
+                  context{p.value_string().linearize_to_string()});
+                break;
+            default:
+                co_return std::unexpected(
+                  parse_error{
+                    .reason = "expected a string element in contexts array"});
+            }
+        }
+
+        // next() returned false before the closing ']' was seen.
+        co_return std::unexpected(
+          parse_error{.reason = "truncated or malformed JSON"});
+    } catch (const std::exception& e) {
+        co_return std::unexpected(
+          parse_error{
+            .reason = ssx::sformat("failed to parse contexts: {}", e.what())});
+    }
+}
+
+ss::future<std::expected<mode_info, parse_error>> parse_mode(iobuf body) {
+    using token = serde::json::token;
+    // Firewall exceptions from the parser: malformed input is reported via the
+    // returned std::expected, not thrown.
+    try {
+        serde::json::parser p(std::move(body));
+
+        if (!co_await p.next() || p.token() != token::start_object) {
+            co_return std::unexpected(
+              parse_error{.reason = "expected a JSON object"});
+        }
+
+        std::optional<mode_info> result;
+        while (co_await p.next()) {
+            if (p.token() == token::end_object) {
+                // The body is exactly one JSON object: reject any trailing
+                // content rather than ignoring it.
+                co_await p.next();
+                if (p.token() != token::eof) {
+                    co_return std::unexpected(
+                      parse_error{
+                        .reason = "trailing content after mode object"});
+                }
+                if (!result.has_value()) {
+                    // `mode` is the one field a successful response must carry.
+                    co_return std::unexpected(
+                      parse_error{.reason = "missing mode field"});
+                }
+                co_return std::move(*result);
+            }
+            if (p.token() != token::key) {
+                co_return std::unexpected(
+                  parse_error{.reason = "expected an object key"});
+            }
+            auto key = p.value_string().linearize_to_string();
+            if (!co_await p.next()) {
+                co_return std::unexpected(
+                  parse_error{.reason = "truncated JSON after key"});
+            }
+            if (key == "mode") {
+                if (p.token() != token::value_string) {
+                    co_return std::unexpected(
+                      parse_error{.reason = "mode must be a string"});
+                }
+                // Shape is strict but the value is open: map the recognized
+                // wire strings and keep the verbatim value, so an unrecognized
+                // (open-enum) mode is preserved rather than rejected.
+                auto raw = p.value_string().linearize_to_string();
+                result = mode_info{
+                  .mode = registry_mode_from_wire(raw), .raw = std::move(raw)};
+            } else {
+                // Ignore any other field: the server omits null/empty fields
+                // and a client must not assume any field beyond `mode`.
+                co_await p.skip_value();
+            }
+        }
+
+        // next() returned false before the closing '}'.
+        co_return std::unexpected(
+          parse_error{.reason = "truncated or malformed JSON"});
+    } catch (const std::exception& e) {
+        co_return std::unexpected(
+          parse_error{
+            .reason = ssx::sformat("failed to parse mode: {}", e.what())});
+    }
+}
+
+ss::future<std::expected<config_info, parse_error>> parse_config(iobuf body) {
+    using token = serde::json::token;
+    // Firewall exceptions from the parser: malformed input is reported via the
+    // returned std::expected, not thrown.
+    try {
+        serde::json::parser p(std::move(body));
+
+        if (!co_await p.next() || p.token() != token::start_object) {
+            co_return std::unexpected(
+              parse_error{.reason = "expected a JSON object"});
+        }
+
+        std::optional<registry_compatibility_level> level;
+        ss::sstring raw;
+        chunked_vector<ss::sstring> unknown_fields;
+        while (co_await p.next()) {
+            if (p.token() == token::end_object) {
+                // The body is exactly one JSON object: reject any trailing
+                // content rather than ignoring it.
+                co_await p.next();
+                if (p.token() != token::eof) {
+                    co_return std::unexpected(
+                      parse_error{
+                        .reason = "trailing content after config object"});
+                }
+                if (!level.has_value()) {
+                    // compatibilityLevel is the one field a config response is
+                    // documented to always carry.
+                    co_return std::unexpected(
+                      parse_error{
+                        .reason = "missing compatibilityLevel field"});
+                }
+                co_return config_info{
+                  .level = *level,
+                  .raw = std::move(raw),
+                  .unknown_fields = std::move(unknown_fields)};
+            }
+            if (p.token() != token::key) {
+                co_return std::unexpected(
+                  parse_error{.reason = "expected an object key"});
+            }
+            auto key = p.value_string().linearize_to_string();
+            if (!co_await p.next()) {
+                co_return std::unexpected(
+                  parse_error{.reason = "truncated JSON after key"});
+            }
+            if (key == "compatibilityLevel") {
+                if (p.token() != token::value_string) {
+                    co_return std::unexpected(
+                      parse_error{
+                        .reason = "compatibilityLevel must be a string"});
+                }
+                // Shape is strict but the value is open: map the recognized
+                // wire strings and keep the verbatim value, so an unrecognized
+                // (open-enum) level is preserved rather than rejected.
+                raw = p.value_string().linearize_to_string();
+                level = registry_compatibility_level_from_wire(raw);
+            } else {
+                // Any other top-level field is unmodeled: record its name so a
+                // caller can tell config was dropped, then skip its value.
+                unknown_fields.push_back(std::move(key));
+                co_await p.skip_value();
+            }
+        }
+
+        // next() returned false before the closing '}'.
+        co_return std::unexpected(
+          parse_error{.reason = "truncated or malformed JSON"});
+    } catch (const std::exception& e) {
+        co_return std::unexpected(
+          parse_error{
+            .reason = ssx::sformat("failed to parse config: {}", e.what())});
     }
 }
 
@@ -155,6 +403,99 @@ parse_subject_versions(iobuf body) {
     }
 }
 
+ss::future<std::expected<chunked_vector<subject_version>, parse_error>>
+parse_schema_id_subject_versions(
+  iobuf body, qualified_subjects_enabled qualified) {
+    using token = serde::json::token;
+    // Firewall exceptions from the parser: malformed input is reported via the
+    // returned std::expected, not thrown.
+    try {
+        serde::json::parser p(std::move(body));
+
+        if (!co_await p.next() || p.token() != token::start_array) {
+            co_return std::unexpected(
+              parse_error{
+                .reason = "expected a JSON array of subject-version objects"});
+        }
+
+        chunked_vector<subject_version> result;
+        while (co_await p.next()) {
+            if (p.token() == token::end_array) {
+                // The body is exactly a JSON array: reject any trailing content
+                // rather than ignoring it.
+                co_await p.next();
+                if (p.token() != token::eof) {
+                    co_return std::unexpected(
+                      parse_error{
+                        .reason
+                        = "trailing content after subject-versions array"});
+                }
+                co_return std::move(result);
+            }
+            if (p.token() != token::start_object) {
+                co_return std::unexpected(
+                  parse_error{.reason = "expected a subject-version object"});
+            }
+            // Each element is a {subject, version} object. Unknown keys are
+            // tolerated and skipped, but both modeled fields must be present.
+            std::optional<context_subject> sub;
+            std::optional<schema_version> version;
+            while (co_await p.next() && p.token() != token::end_object) {
+                // Shape is strict: reject a non-key token explicitly rather
+                // than letting value_string() throw and rely on the catch
+                // below.
+                if (p.token() != token::key) {
+                    co_return std::unexpected(
+                      parse_error{.reason = "expected an object key"});
+                }
+                auto key = p.value_string().linearize_to_string();
+                if (!co_await p.next()) {
+                    co_return std::unexpected(
+                      parse_error{
+                        .reason = "truncated JSON in subject-version object"});
+                }
+                if (key == "subject") {
+                    if (p.token() != token::value_string) {
+                        co_return std::unexpected(
+                          parse_error{.reason = "subject must be a string"});
+                    }
+                    sub = context_subject::from_string(
+                      p.value_string().linearize_to_string(), qualified);
+                } else if (key == "version") {
+                    if (p.token() != token::value_int) {
+                        co_return std::unexpected(
+                          parse_error{.reason = "version must be an integer"});
+                    }
+                    auto v = checked_positive_i32(p.value_int());
+                    if (!v) {
+                        co_return std::unexpected(
+                          parse_error{.reason = "version number out of range"});
+                    }
+                    version = schema_version{*v};
+                } else {
+                    co_await p.skip_value();
+                }
+            }
+            if (!sub.has_value() || !version.has_value()) {
+                co_return std::unexpected(
+                  parse_error{
+                    .reason
+                    = "subject-version object missing subject or version"});
+            }
+            result.emplace_back(std::move(*sub), *version);
+        }
+
+        // next() returned false before the closing ']' was seen.
+        co_return std::unexpected(
+          parse_error{.reason = "truncated or malformed JSON"});
+    } catch (const std::exception& e) {
+        co_return std::unexpected(
+          parse_error{
+            .reason = ssx::sformat(
+              "failed to parse schema-id subject-versions: {}", e.what())});
+    }
+}
+
 namespace {
 
 // Parse a JSON array of {name, subject, version} reference objects. Entered
@@ -177,6 +518,12 @@ parse_references(serde::json::parser& p, qualified_subjects_enabled qualified) {
         std::optional<context_subject_reference> sub;
         std::optional<schema_version> version;
         while (co_await p.next() && p.token() != token::end_object) {
+            // Shape is strict: reject a non-key token explicitly rather than
+            // letting value_string() throw and rely on the catch in the caller.
+            if (p.token() != token::key) {
+                co_return std::unexpected(
+                  parse_error{.reason = "expected an object key"});
+            }
             auto key = p.value_string().linearize_to_string();
             if (!co_await p.next()) {
                 co_return std::unexpected(
@@ -226,21 +573,19 @@ parse_references(serde::json::parser& p, qualified_subjects_enabled qualified) {
       parse_error{.reason = "truncated or malformed references array"});
 }
 
-// The result of parsing a metadata object: the modeled portion plus the names
-// of any sub-keys we don't model.
+// The result of parsing a metadata object: the modeled portion plus any
+// unsupported sub-fields, each already reported as a `/metadata/<key>` pointer.
 struct parsed_metadata {
     schema_metadata metadata;
-    // Unmodeled keys found directly inside `metadata` (e.g. `tags`,
-    // `sensitive`), unqualified; the caller qualifies and propagates them.
-    chunked_vector<ss::sstring> unknown_fields;
+    chunked_vector<unsupported_feature> unsupported;
 };
 
 // Parse a metadata object of the form {"properties": {<str>: <str>}, ...}.
 // Entered with the current token at the object start; leaves the parser at the
 // end_object token. Only `properties` is modeled; its values are stored as
 // strings, with numbers and booleans coerced to strings to match the write
-// path. Any other key (e.g. `tags`, `sensitive`) is returned, unqualified, in
-// parsed_metadata::unknown_fields for the caller to record.
+// path. Any other non-null key (e.g. `tags`, `sensitive`) is reported in
+// parsed_metadata::unsupported as a `/metadata/<key>` pointer.
 ss::future<std::expected<parsed_metadata, parse_error>>
 parse_metadata(serde::json::parser& p) {
     using token = serde::json::token;
@@ -255,7 +600,14 @@ parse_metadata(serde::json::parser& p) {
               parse_error{.reason = "truncated JSON in schema metadata"});
         }
         if (key != "properties") {
-            result.unknown_fields.push_back(std::move(key));
+            // A null value means the sub-field is absent; anything else is an
+            // unsupported feature, surfaced as a `/metadata/<key>` pointer.
+            if (p.token() != token::value_null) {
+                result.unsupported.push_back(
+                  unsupported_feature{
+                    .json_pointer = ssx::sformat("/metadata/{}", key),
+                    .json_type = json_type_name(p.token())});
+            }
             co_await p.skip_value();
             continue;
         }
@@ -311,7 +663,7 @@ parse_metadata(serde::json::parser& p) {
 
 } // namespace
 
-ss::future<std::expected<parsed_schema, parse_error>>
+ss::future<std::expected<source_schema_read, parse_error>>
 parse_subject_version(iobuf body, qualified_subjects_enabled qualified) {
     using token = serde::json::token;
     // Firewall exceptions from the parser: malformed input is reported via the
@@ -332,7 +684,7 @@ parse_subject_version(iobuf body, qualified_subjects_enabled qualified) {
         schema_definition::references refs;
         is_deleted deleted{false};
         std::optional<schema_metadata> metadata;
-        chunked_vector<ss::sstring> unknown_fields;
+        chunked_vector<unsupported_feature> unsupported;
 
         while (co_await p.next()) {
             if (p.token() == token::end_object) {
@@ -346,8 +698,8 @@ parse_subject_version(iobuf body, qualified_subjects_enabled qualified) {
                 }
                 // Absent fields fall back to defaults/sentinels; completeness
                 // is a higher-layer concern. Unmodeled fields were recorded in
-                // unknown_fields above for the caller to act on.
-                co_return parsed_schema{
+                // `unsupported` above for the caller to act on.
+                co_return source_schema_read{
                   .schema = stored_schema{
                     .schema = subject_schema{
                       subject.value_or(invalid_subject),
@@ -360,7 +712,7 @@ parse_subject_version(iobuf body, qualified_subjects_enabled qualified) {
                     .version = version.value_or(invalid_schema_version),
                     .id = id.value_or(invalid_schema_id),
                     .deleted = deleted},
-                  .unknown_fields = std::move(unknown_fields)};
+                  .unsupported = std::move(unsupported)};
             }
             if (p.token() != token::key) {
                 co_return std::unexpected(
@@ -439,30 +791,35 @@ parse_subject_version(iobuf body, qualified_subjects_enabled qualified) {
                 refs = std::move(*r);
             } else if (key == "metadata") {
                 // Partially modeled: parse_metadata captures `properties` and
-                // returns any other sub-key (e.g. `tags`), which we qualify
-                // with a `metadata.` prefix into unknown_fields. A null
-                // metadata is treated as absent; any other non-object is
-                // unrepresentable.
+                // returns any other sub-key (e.g. `tags`) as a
+                // `/metadata/<key>` unsupported feature. A null metadata is
+                // treated as absent; any other non-object is unrepresentable.
                 if (p.token() == token::start_object) {
                     auto m = co_await parse_metadata(p);
                     if (!m) {
                         co_return std::unexpected(std::move(m.error()));
                     }
                     metadata = std::move(m->metadata);
-                    for (const auto& sub : m->unknown_fields) {
-                        unknown_fields.push_back(
-                          ssx::sformat("metadata.{}", sub));
+                    for (auto& f : m->unsupported) {
+                        unsupported.push_back(std::move(f));
                     }
                 } else if (p.token() != token::value_null) {
                     co_return std::unexpected(
                       parse_error{.reason = "metadata must be an object"});
                 }
             } else {
-                // Unknown / not-yet-modeled field (guid, ts, ruleSet,
-                // schemaTags, ...): skip its value, but record the top-level
-                // key so the caller can decide whether dropping it is
-                // acceptable.
-                unknown_fields.push_back(std::move(key));
+                // Unmodeled field. Server-assigned fields that carry no user
+                // content (`guid`, `ts`) are dropped silently; a null value
+                // means the field is absent; anything else is an unsupported
+                // feature, surfaced as a `/<key>` pointer for the migration
+                // policy to act on.
+                if (
+                  !is_ignorable_field(key) && p.token() != token::value_null) {
+                    unsupported.push_back(
+                      unsupported_feature{
+                        .json_pointer = ssx::sformat("/{}", key),
+                        .json_type = json_type_name(p.token())});
+                }
                 co_await p.skip_value();
             }
         }

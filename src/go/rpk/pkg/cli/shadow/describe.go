@@ -35,6 +35,7 @@ const (
 	secConsumerOffset = "Consumer Offset Sync"
 	secSecurity       = "Security Sync"
 	secSchemaRegistry = "Schema Registry Sync"
+	secRole           = "Role Sync"
 )
 
 // shadowLinkDescription is the unified output for both cloud and self-hosted.
@@ -54,6 +55,7 @@ type shadowLinkDescription struct {
 	ConsumerOffsetSyncOptions *describeConsumerOffsetSyncOptions `json:"consumer_offset_sync_options,omitempty" yaml:"consumer_offset_sync_options,omitempty"`
 	SecuritySyncOptions       *describeSecuritySyncOptions       `json:"security_sync_options,omitempty" yaml:"security_sync_options,omitempty"`
 	SchemaRegistrySyncOptions *describeSchemaRegistrySyncOptions `json:"schema_registry_sync_options,omitempty" yaml:"schema_registry_sync_options,omitempty"`
+	RoleSyncOptions           *describeRoleSyncOptions           `json:"role_sync_options,omitempty" yaml:"role_sync_options,omitempty"`
 }
 
 // describeClientOptions uses effective values and auth metadata (not password).
@@ -99,6 +101,12 @@ type describeSecuritySyncOptions struct {
 	Interval   string       `json:"interval" yaml:"interval"`
 	Paused     bool         `json:"paused" yaml:"paused"`
 	ACLFilters []*ACLFilter `json:"acl_filters,omitempty" yaml:"acl_filters,omitempty"`
+}
+
+type describeRoleSyncOptions struct {
+	Interval        string        `json:"interval" yaml:"interval"`
+	Paused          bool          `json:"paused" yaml:"paused"`
+	RoleNameFilters []*NameFilter `json:"role_name_filters,omitempty" yaml:"role_name_filters,omitempty"`
 }
 
 type describeSchemaRegistrySyncOptions struct {
@@ -205,6 +213,7 @@ Display output as JSON:
 	cmd.Flags().BoolVarP(&opts.co, "print-consumer", "r", false, "Print the detailed consumer offset configuration section")
 	cmd.Flags().BoolVarP(&opts.sec, "print-security", "s", false, "Print the detailed security configuration section")
 	cmd.Flags().BoolVarP(&opts.sr, "print-registry", "y", false, "Print the detailed schema registry configuration section")
+	cmd.Flags().BoolVar(&opts.role, "print-role", false, "Print the detailed role sync configuration section")
 	cmd.Flags().BoolVarP(&opts.all, "print-all", "a", false, "Print all sections")
 	p.InstallFormatFlag(cmd)
 	return cmd
@@ -218,16 +227,17 @@ type slDescribeOptions struct {
 	co       bool // consumer offset
 	sec      bool // security
 	sr       bool // schema registry
+	role     bool
 }
 
 // If no flags are set, default to overview and client sections.
 func (o *slDescribeOptions) defaultOrAll() {
-	if !o.all && !o.overview && !o.client && !o.topic && !o.co && !o.sec && !o.sr {
+	if !o.all && !o.overview && !o.client && !o.topic && !o.co && !o.sec && !o.sr && !o.role {
 		o.overview, o.client = true, true
 	}
 
 	if o.all {
-		o.overview, o.client, o.topic, o.co, o.sec, o.sr = true, true, true, true, true, true
+		o.overview, o.client, o.topic, o.co, o.sec, o.sr, o.role = true, true, true, true, true, true, true
 	}
 }
 
@@ -246,6 +256,7 @@ func printShadowLinkDescription(f config.OutFormatter, link *adminv2.ShadowLink,
 			secConsumerOffset: opts.co,
 			secSecurity:       opts.sec,
 			secSchemaRegistry: opts.sr,
+			secRole:           opts.role,
 		})...,
 	)
 
@@ -273,6 +284,10 @@ func printShadowLinkDescription(f config.OutFormatter, link *adminv2.ShadowLink,
 
 	sections.Add(secSchemaRegistry, func() {
 		printSchemaRegistrySync(cfg.GetSchemaRegistrySyncOptions())
+	})
+
+	sections.Add(secRole, func() {
+		printRoleSync(cfg.GetRoleSyncOptions())
 	})
 }
 
@@ -515,6 +530,25 @@ func printConsumerOffsetSync(opts *adminv2.ConsumerOffsetSyncOptions) {
 	}
 }
 
+func printRoleSync(opts *adminv2.RoleSyncOptions) {
+	tw := out.NewTabWriter()
+	defer tw.Flush()
+	if opts == nil {
+		tw.Print("No role sync configuration")
+		return
+	}
+
+	tw.Print("PAUSED", opts.GetPaused())
+	tw.Print("INTERVAL", opts.GetEffectiveInterval().AsDuration().String())
+
+	if len(opts.GetRoleNameFilters()) > 0 {
+		tw.Print("ROLE NAME FILTERS:", "")
+		for _, filter := range opts.GetRoleNameFilters() {
+			tw.Print("", fmt.Sprintf("- %s %s %q", formatFilterType(filter.GetFilterType()), formatPatternType(filter.GetPatternType()), filter.GetName()))
+		}
+	}
+}
+
 func printSecuritySync(opts *adminv2.SecuritySettingsSyncOptions) {
 	tw := out.NewTabWriter()
 	defer tw.Flush()
@@ -703,6 +737,7 @@ func fromAdminV2ShadowLinkDescription(link *adminv2.ShadowLink) shadowLinkDescri
 		ConsumerOffsetSyncOptions: buildDescribeConsumerOffsetOptions(cfg.GetConsumerOffsetSyncOptions()),
 		SecuritySyncOptions:       buildDescribeSecurityOptions(cfg.GetSecuritySyncOptions()),
 		SchemaRegistrySyncOptions: buildDescribeSchemaRegistryOptions(cfg.GetSchemaRegistrySyncOptions()),
+		RoleSyncOptions:           buildDescribeRoleOptions(cfg.GetRoleSyncOptions()),
 	}
 }
 
@@ -841,6 +876,21 @@ func buildDescribeConsumerOffsetOptions(opts *adminv2.ConsumerOffsetSyncOptions)
 		Interval:     opts.GetEffectiveInterval().AsDuration().String(),
 		Paused:       opts.GetPaused(),
 		GroupFilters: filters,
+	}
+}
+
+func buildDescribeRoleOptions(opts *adminv2.RoleSyncOptions) *describeRoleSyncOptions {
+	if opts == nil {
+		return nil
+	}
+	var filters []*NameFilter
+	for _, f := range opts.GetRoleNameFilters() {
+		filters = append(filters, adminMapFilterToCfg(f))
+	}
+	return &describeRoleSyncOptions{
+		Interval:        opts.GetEffectiveInterval().AsDuration().String(),
+		Paused:          opts.GetPaused(),
+		RoleNameFilters: filters,
 	}
 }
 

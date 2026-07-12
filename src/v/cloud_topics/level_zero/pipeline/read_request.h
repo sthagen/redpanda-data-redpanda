@@ -11,7 +11,7 @@
 #pragma once
 
 #include "base/seastarx.h"
-#include "cloud_io/scheduler_types.h"
+#include "cloud_io/admission_control_types.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
 #include "cloud_topics/level_zero/pipeline/pipeline_stage.h"

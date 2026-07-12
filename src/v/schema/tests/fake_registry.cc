@@ -11,6 +11,7 @@
 
 #include "schema/tests/fake_registry.h"
 
+#include "container/chunked_hash_map.h"
 #include "pandaproxy/schema_registry/errors.h"
 #include "pandaproxy/schema_registry/types.h"
 
@@ -21,6 +22,7 @@
 #include <fmt/format.h>
 
 #include <algorithm>
+#include <ranges>
 #include <utility>
 
 namespace {
@@ -101,12 +103,12 @@ ss::future<ppsr::schema_getter*> schema::fake_registry::getter() const {
     maybe_throw_injected_failure();
     co_return &_store;
 }
-ss::future<chunked_vector<ppsr::subject_version>>
+ss::future<chunked_vector<ppsr::subject_version_deleted>>
 schema::fake_registry::list_subject_versions(
-  std::function<bool(const ppsr::context_subject&)> filter,
+  ss::noncopyable_function<bool(const ppsr::context_subject&)> filter,
   ppsr::include_deleted inc_del) const {
     maybe_throw_injected_failure();
-    chunked_vector<ppsr::subject_version> out;
+    chunked_vector<ppsr::subject_version_deleted> out;
     for (const auto& s : _store.schemas) {
         if (!filter(s.schema.sub())) {
             continue;
@@ -114,9 +116,27 @@ schema::fake_registry::list_subject_versions(
         if (!inc_del && s.deleted) {
             continue;
         }
-        out.emplace_back(s.schema.sub(), s.version);
+        out.push_back({s.schema.sub(), s.version, s.deleted});
     }
     co_return out;
+}
+
+ss::future<bool> schema::fake_registry::has_subjects(
+  ppsr::context ctx, ppsr::include_deleted inc_del) const {
+    maybe_throw_injected_failure();
+    co_return std::ranges::any_of(_store.schemas, [&](const auto& s) {
+        return s.schema.sub().ctx == ctx && (inc_del || !s.deleted);
+    });
+}
+
+ss::future<chunked_vector<ppsr::context_subject>>
+schema::fake_registry::get_subjects(ppsr::include_deleted inc_del) const {
+    maybe_throw_injected_failure();
+    co_return _store.schemas | std::views::filter([inc_del](const auto& s) {
+        return inc_del || !s.deleted;
+    }) | std::views::transform([](const auto& s) { return s.schema.sub(); })
+      | std::ranges::to<chunked_hash_set<ppsr::context_subject>>()
+      | std::ranges::to<chunked_vector<ppsr::context_subject>>();
 }
 
 ss::future<ppsr::context_schema_id>

@@ -312,6 +312,49 @@ TEST_F_CORO(ctp_stm_fixture, test_last_reconciled_offset) {
     ASSERT_FALSE_CORO(gc_epoch_after->has_value());
 }
 
+TEST_F_CORO(ctp_stm_fixture, advance_reconciled_offset_with_local_threshold) {
+    // The reconciler can piggyback a min_allowed_local_threshold advance on
+    // the LRO advance; both commands travel in one record batch and apply
+    // atomically.
+    co_await start();
+    co_await wait_for_leader(raft::default_timeout());
+    ss::abort_source as;
+
+    auto leader_api = api(node(*get_leader()));
+    ASSERT_EQ_CORO(
+      leader_api.get_min_allowed_local_threshold(), kafka::offset::min());
+
+    // LRO + floor advance in one shot.
+    auto res = co_await leader_api.advance_reconciled_offset(
+      kafka::offset{10}, model::no_timeout, as, kafka::offset{5});
+    ASSERT_TRUE_CORO(res.has_value());
+    ASSERT_EQ_CORO(leader_api.get_last_reconciled_offset(), kafka::offset{10});
+    ASSERT_EQ_CORO(
+      leader_api.get_min_allowed_local_threshold(), kafka::offset{5});
+
+    // A floor target the state already covers is dropped; the LRO still
+    // advances.
+    res = co_await leader_api.advance_reconciled_offset(
+      kafka::offset{20}, model::no_timeout, as, kafka::offset{5});
+    ASSERT_TRUE_CORO(res.has_value());
+    ASSERT_EQ_CORO(leader_api.get_last_reconciled_offset(), kafka::offset{20});
+    ASSERT_EQ_CORO(
+      leader_api.get_min_allowed_local_threshold(), kafka::offset{5});
+
+    // A floor advance without an LRO advance still replicates.
+    res = co_await leader_api.advance_reconciled_offset(
+      kafka::offset{20}, model::no_timeout, as, kafka::offset{15});
+    ASSERT_TRUE_CORO(res.has_value());
+    ASSERT_EQ_CORO(leader_api.get_last_reconciled_offset(), kafka::offset{20});
+    ASSERT_EQ_CORO(
+      leader_api.get_min_allowed_local_threshold(), kafka::offset{15});
+
+    // Neither advances: no-op.
+    res = co_await leader_api.advance_reconciled_offset(
+      kafka::offset{20}, model::no_timeout, as, kafka::offset{15});
+    ASSERT_TRUE_CORO(res.has_value());
+}
+
 TEST_F_CORO(ctp_stm_fixture, test_truncate_all_epochs) {
     // This test gradually adds epochs and removes them by advancing the
     // reconciled offset. It checks that the epochs are removed correctly and

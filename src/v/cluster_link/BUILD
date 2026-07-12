@@ -51,6 +51,7 @@ redpanda_cc_library(
         "//src/v/kafka/client:cluster",
         "//src/v/kafka/client:configuration",
         "//src/v/kafka/protocol",
+        "//src/v/net:tls",
         "//src/v/ssx:sformat",
         "@seastar",
     ],
@@ -64,6 +65,7 @@ redpanda_cc_library(
         "link_probe.cc",
         "link_status_reconciler.cc",
         "manager.cc",
+        "sr_preflight_checker.cc",
         "task.cc",
         "topic_reconciler.cc",
     ],
@@ -73,6 +75,7 @@ redpanda_cc_library(
         "link_probe.h",
         "link_status_reconciler.h",
         "manager.h",
+        "sr_preflight_checker.h",
         "task.h",
         "topic_reconciler.h",
         "types.h",
@@ -82,7 +85,17 @@ redpanda_cc_library(
         "//src/v/cluster:feature_backend",
         "//src/v/cluster:plugin_backend",
         "//src/v/cluster:types",
+        "//src/v/cluster_link/model:sr_context_mapping",
+        "//src/v/cluster_link/schema_registry_sync:http_source_reader",
+        "//src/v/cluster_link/schema_registry_sync:source_reader",
         "//src/v/cluster_link/utils:topic_properties_utils",
+        "//src/v/container:chunked_hash_map",
+        "//src/v/features",
+        "//src/v/pandaproxy/schema_registry/rest_client:client",
+        "//src/v/pandaproxy/schema_registry/rest_client:error",
+        "//src/v/schema:registry",
+        "//src/v/utils:retry_chain_node",
+        "@abseil-cpp//absl/container:flat_hash_set",
     ],
     visibility = ["//src/v/cluster_link:__subpackages__"],
     deps = [
@@ -109,6 +122,9 @@ redpanda_cc_library(
         "//src/v/kafka/data/rpc",
         "//src/v/metrics",
         "//src/v/model",
+        "//src/v/pandaproxy/schema_registry:types",
+        "//src/v/schema:fwd",
+        "//src/v/security",
         "//src/v/ssx:future_util",
         "//src/v/ssx:mutex",
         "//src/v/ssx:work_queue",
@@ -208,6 +224,35 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "roles_migrator",
+    srcs = [
+        "roles_migrator.cc",
+    ],
+    hdrs = [
+        "roles_migrator.h",
+    ],
+    implementation_deps = [
+        ":impl",
+        ":role_reconcile",
+        "//src/v/kafka/server:security",
+        "//src/v/security",
+    ],
+    visibility = ["//src/v/cluster_link:__subpackages__"],
+    deps = [
+        ":logger",
+        ":role_reconcile",
+        ":utils",
+        "//src/v/cluster:fwd",
+        "//src/v/cluster_link/model",
+        "//src/v/kafka/client:cluster",
+        "//src/v/kafka/protocol",
+        "//src/v/kafka/protocol:describe_redpanda_roles",
+        "//src/v/kafka/server:roles",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "cluster_link",
     srcs = [
         "service.cc",
@@ -219,6 +264,7 @@ redpanda_cc_library(
         ":group_mirroring_task",
         ":impl",
         ":logger",
+        ":roles_migrator",
         ":security_migrator",
         ":source_topic_syncer",
         "//src/v/cluster:fwd",
@@ -227,6 +273,7 @@ redpanda_cc_library(
         "//src/v/cluster:plugin_backend",
         "//src/v/cluster:topic_metrics_watcher",
         "//src/v/cluster_link/model",
+        "//src/v/cluster_link/schema_registry_sync:http_source_reader",
         "//src/v/cluster_link/schema_registry_sync:mirroring_task",
         "//src/v/cluster_link/schema_registry_sync:source_reader",
         "//src/v/config",
@@ -262,6 +309,22 @@ redpanda_cc_library(
         "//src/v/ssx:mutex",
         "//src/v/ssx:work_queue",
         "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "role_reconcile",
+    srcs = [
+        "role_reconcile.cc",
+    ],
+    hdrs = [
+        "role_reconcile.h",
+    ],
+    visibility = ["//src/v/cluster_link:__subpackages__"],
+    deps = [
+        "//src/v/container:chunked_hash_map",
+        "//src/v/container:chunked_vector",
+        "//src/v/security",
     ],
 )
 

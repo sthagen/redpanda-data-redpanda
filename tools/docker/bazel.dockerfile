@@ -1,6 +1,9 @@
 ARG BASE_IMAGE_OS_NAME=ubuntu
 ARG BASE_IMAGE_OS_VERSION=noble
-FROM ${BASE_IMAGE_OS_NAME}:${BASE_IMAGE_OS_VERSION}
+# Pinned to a specific digest so Snyk's static Dockerfile scanner can verify
+# the base image is patched. Update this digest when upgrading the base image.
+ARG BASE_IMAGE_DIGEST=sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
+FROM ${BASE_IMAGE_OS_NAME}:${BASE_IMAGE_OS_VERSION}@${BASE_IMAGE_DIGEST}
 ARG TARGETARCH
 
 COPY --chown=0:0 bazel/install-deps.sh /

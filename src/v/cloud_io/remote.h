@@ -10,11 +10,11 @@
 
 #pragma once
 
+#include "cloud_io/admission_control_types.h"
 #include "cloud_io/io_resources.h"
 #include "cloud_io/io_result.h"
 #include "cloud_io/provider.h"
 #include "cloud_io/remote_api.h"
-#include "cloud_io/scheduler_types.h"
 #include "cloud_storage_clients/client.h"
 #include "cloud_storage_clients/client_pool.h"
 #include "cloud_storage_clients/multipart_upload.h"

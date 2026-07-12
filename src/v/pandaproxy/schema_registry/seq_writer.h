@@ -33,7 +33,11 @@ public:
     sequence_state_checker& operator=(sequence_state_checker&&) = delete;
 
     using writes_disabled_t = ss::bool_class<struct writes_disabled_tag>;
-    virtual writes_disabled_t writes_disabled(write_source) const = 0;
+    /// True if a write from the given source to the given context must be
+    /// rejected. The context lets shadow linking block only the contexts owned
+    /// by an active mirroring, rather than the whole Schema Registry.
+    virtual writes_disabled_t
+    writes_disabled(write_source, const context&) const = 0;
 };
 
 using namespace std::chrono_literals;
@@ -171,8 +175,9 @@ private:
     /// Helper for write paths that use sequence+retry logic to synchronize
     /// multiple writing nodes.
     template<typename F>
-    auto sequenced_write(F f, write_source src = write_source::client) {
-        if (_state_checker->writes_disabled(src)) [[unlikely]] {
+    auto
+    sequenced_write(F f, context ctx, write_source src = write_source::client) {
+        if (_state_checker->writes_disabled(src, ctx)) [[unlikely]] {
             throw as_exception(writes_disabled());
         }
         auto base_backoff = _jitter.next_duration();

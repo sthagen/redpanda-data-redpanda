@@ -194,16 +194,12 @@ func (grw *GroupReadWorker) Wait(ctx context.Context) error {
 						"fiber %v: restarting consumer group reader for error %v",
 						fiberId, err)
 
-					// Since we are consuming with a consumer group it is legal
-					// to read older offsets on next try.
-					//
-					// Note for maintainers: Consider implementing checkpointing
-					// on consumer group commits and reverting monotonicity test
-					// state up to last commit. This will further validate
-					// linearizability of offset commits.
-					grw.Status.Validator.ResetMonotonicityTestState()
-
-					// Loop around and retry
+					// Loop around and retry. Transient group/coordinator errors
+					// no longer reach here (the poll loop keeps the client alive
+					// and lets franz-go recover); this only fires on genuine
+					// unrecoverable errors. Monotonicity state is reset on
+					// (re)assignment via the OnPartitionsAssigned callback, so no
+					// reset is needed here.
 				} else {
 					log.Infof("fiber %v: consumer group reader finished", fiberId)
 					break
@@ -228,6 +224,14 @@ func (grw *GroupReadWorker) consumerGroupReadInner(
 	opts = append(opts, []kgo.Opt{
 		kgo.ConsumeTopics(grw.config.workerCfg.Topic),
 		kgo.ConsumerGroup(groupName),
+		// A consumer group legally re-reads from the last commit when partitions
+		// are (re)assigned after a rebalance, which can move offsets/leader
+		// epochs backwards. Reset the monotonicity baseline on assignment so
+		// those re-reads don't trip the out-of-order check -- without tearing
+		// down the client (see the poll loop below).
+		kgo.OnPartitionsAssigned(func(_ context.Context, _ *kgo.Client, _ map[string][]int32) {
+			grw.Status.Validator.ResetMonotonicityTestState()
+		}),
 	}...)
 	if grw.config.rateLimitBytes > 0 {
 		// reduce batch size for smoother rate limiting
@@ -260,7 +264,6 @@ func (grw *GroupReadWorker) consumerGroupReadInner(
 			return ctx.Err()
 		}
 
-		var r_err error
 		fetches.EachError(func(t string, p int32, err error) {
 			log.Warnf(
 				"fiber %v: Consumer group fetch %s/%d e=%v...",
@@ -273,14 +276,16 @@ func (grw *GroupReadWorker) consumerGroupReadInner(
 				} else {
 					log.Fatalf("Unexpected data loss detected: %v", lossErr)
 				}
-			} else {
-				r_err = err
 			}
+			// Other fetch errors (coordinator moves, rebalances, connection
+			// drops) are transient: franz-go manages the group membership and
+			// recovers on continued polling, keeping this member's id stable.
+			// We deliberately do NOT tear down and recreate the client here --
+			// doing so rejoins as a brand-new member, and under coordinator
+			// churn that piles up phantom members and wedges the group in a
+			// never-completing rebalance. Log and keep polling; a genuine lack
+			// of progress is caught by the caller's progress timeout.
 		})
-
-		if r_err != nil {
-			return r_err
-		}
 
 		fetches.EachRecord(func(r *kgo.Record) {
 			log.Debugf(

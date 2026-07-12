@@ -259,6 +259,20 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
+    name = "storage_mode_alias_test",
+    timeout = "short",
+    srcs = [
+        "storage_mode_alias_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/model",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "record_batch_reader_gtest",
     timeout = "short",
     srcs = ["record_batch_reader_gtest.cc"],

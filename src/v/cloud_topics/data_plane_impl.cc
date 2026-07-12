@@ -11,8 +11,8 @@
 #include "cloud_topics/data_plane_impl.h"
 
 #include "base/outcome.h"
+#include "cloud_io/admission_control_types.h"
 #include "cloud_io/cache_service.h"
-#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/batch_cache/batch_cache.h"
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/level_zero/batcher/batcher.h"

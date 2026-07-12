@@ -11,11 +11,14 @@
 #pragma once
 
 #include "base/format_to.h"
-#include "cloud_io/scheduler_types.h"
+#include "cloud_io/admission_control_types.h"
 #include "cloud_topics/types.h"
 #include "model/fundamental.h"
 #include "model/record_batch_types.h"
 #include "model/timestamp.h"
+
+#include <seastar/core/future.hh>
+#include <seastar/core/shared_ptr.hh>
 
 #include <optional>
 #include <ostream>
@@ -108,6 +111,15 @@ struct cloud_topic_log_reader_config {
 
     // cloud_io admission lane for this reader's cloud storage requests.
     cloud_io::group_id group{cloud_io::group_id::default_group};
+
+    // Out-channel for placeholder tracking: when set, the L0 reader resolves
+    // the promise on destruction with the largest last-offset of the
+    // placeholder batches it observed while scanning the local log, or
+    // kafka::offset::min() if it observed none. The observation may extend
+    // past the range actually delivered to the consumer (the metadata pass
+    // reads ahead of materialization), so consumers must clamp it to the
+    // range they act on.
+    ss::lw_shared_ptr<ss::promise<kafka::offset>> max_placeholder_offset{};
 
     fmt::iterator format_to(fmt::iterator it) const;
 };

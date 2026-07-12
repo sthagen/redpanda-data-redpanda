@@ -45,3 +45,35 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "file_io_stream_test",
+    timeout = "short",
+    srcs = [
+        "file_io_stream_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/base",
+        "//src/v/bytes:iobuf",
+        "//src/v/bytes:iobuf_parser",
+        "//src/v/cloud_io:basic_cache_service_api",
+        "//src/v/cloud_io:cache",
+        "//src/v/cloud_io:remote",
+        "//src/v/cloud_io:remote_api",
+        "//src/v/cloud_io/tests:s3_imposter",
+        "//src/v/cloud_io/tests:scoped_remote",
+        "//src/v/cloud_storage_clients",
+        "//src/v/cloud_topics/level_one/common:file_io",
+        "//src/v/cloud_topics/level_one/common:object_id",
+        "//src/v/cloud_topics/level_one/common:object_utils",
+        "//src/v/config",
+        "//src/v/storage:disk",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:scoped_config",
+        "//src/v/test_utils:tmp_dir",
+        "//src/v/utils:retry_chain_node",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)

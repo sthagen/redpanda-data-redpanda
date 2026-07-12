@@ -19,13 +19,9 @@
 
 namespace lsm::io {
 
-disk_file_reader::disk_file_reader(std::filesystem::path path, ss::file file)
-  : _path(std::move(path))
-  , _file(std::move(file)) {}
-
-ss::future<ioarray> disk_file_reader::read(size_t offset, size_t n) {
-    size_t memory_alignment = _file.memory_dma_alignment();
-    size_t disk_alignment = _file.disk_read_dma_alignment();
+ss::future<ioarray> aligned_dma_read(ss::file& file, size_t offset, size_t n) {
+    size_t memory_alignment = file.memory_dma_alignment();
+    size_t disk_alignment = file.disk_read_dma_alignment();
     // ioarray requires its size to be a multiple of its alignment, so use the
     // max of the two seastar alignments.
     size_t max_alignment = std::max(memory_alignment, disk_alignment);
@@ -33,20 +29,24 @@ ss::future<ioarray> disk_file_reader::read(size_t offset, size_t n) {
     size_t offset_delta = offset - adjusted_offset;
     auto array = ioarray::aligned(
       memory_alignment, ss::align_up(n + offset_delta, max_alignment));
+    size_t amt = co_await file.dma_read(adjusted_offset, array.as_iovec());
+    if (amt < offset_delta + n) {
+        throw io_error_exception(
+          "short read: requested {} bytes at offset {}, got {} bytes",
+          n,
+          offset,
+          amt > offset_delta ? amt - offset_delta : 0);
+    }
+    co_return array.share(offset_delta, n);
+}
+
+disk_file_reader::disk_file_reader(std::filesystem::path path, ss::file file)
+  : _path(std::move(path))
+  , _file(std::move(file)) {}
+
+ss::future<ioarray> disk_file_reader::read(size_t offset, size_t n) {
     try {
-        size_t amt = co_await _file.dma_read(adjusted_offset, array.as_iovec());
-        if (amt < offset_delta + n) {
-            throw io_error_exception(
-              "short read {}: failed to read {} bytes from block at offset "
-              "{}, "
-              "got: "
-              "{}",
-              *this,
-              array.size(),
-              adjusted_offset,
-              amt);
-        }
-        co_return array.share(offset_delta, n);
+        co_return co_await aligned_dma_read(_file, offset, n);
     } catch (const std::system_error& err) {
         throw io_error_exception(
           err.code(), "io error reading {}: {}", *this, err);

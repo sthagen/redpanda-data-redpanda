@@ -211,11 +211,10 @@ security_manager::fill_snapshot(controller_snapshot& controller_snap) const {
 
     snapshot.acls = co_await _authorizer.local().all_bindings();
 
-    auto roles = _roles.local().range([](const auto&) { return true; });
+    auto roles = co_await _roles.local().all_roles_with_members();
     snapshot.roles.reserve(roles.size());
-    for (const auto& role : roles) {
-        security::role_name name{role};
-        snapshot.roles.emplace_back(name, *_roles.local().get(name));
+    for (auto& rwm : roles) {
+        snapshot.roles.emplace_back(std::move(rwm.name), std::move(rwm.role));
     }
 
     co_return;

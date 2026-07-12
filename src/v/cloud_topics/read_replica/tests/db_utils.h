@@ -17,6 +17,7 @@
 #include "cloud_topics/level_one/metastore/lsm/state_reader.h"
 #include "cloud_topics/level_one/metastore/lsm/state_update.h"
 #include "cloud_topics/level_one/metastore/lsm/write_batch_row.h"
+#include "config/configuration.h"
 #include "container/chunked_hash_map.h"
 #include "lsm/io/cloud_cache_persistence.h"
 #include "lsm/lsm.h"
@@ -49,7 +50,11 @@ inline ss::future<lsm::database*> get_or_create_writer_db(
     cloud_storage_clients::object_key domain_prefix{cloud_prefix};
 
     auto data_persist = co_await lsm::io::open_cloud_cache_data_persistence(
-      cache, remote, bucket, domain_prefix);
+      cache,
+      remote,
+      bucket,
+      domain_prefix,
+      config::shard_local_cfg().cloud_topics_metastore_sst_chunk_size.bind());
     auto meta_persist = co_await lsm::io::open_cloud_metadata_persistence(
       remote, bucket, domain_prefix);
 

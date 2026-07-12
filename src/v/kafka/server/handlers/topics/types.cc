@@ -353,9 +353,25 @@ cluster::topic_configuration to_topic_config(
         topic_property_message_timestamp_after_max_ms,
         /*clamp_to_duration_max=*/true);
 
+    // The exact implementation (redpanda.storage.mode.impl) wins over the
+    // alias-resolved mode. Malformed combinations are rejected by
+    // storage_mode_config_validator before conversion.
     cfg.properties.storage_mode
-      = get_enum_value<model::redpanda_storage_mode>(
-          config_entries, topic_property_redpanda_storage_mode)
+      = get_string_value(
+          config_entries, topic_property_redpanda_storage_mode_impl)
+          .and_then([](const ss::sstring& raw) {
+              return model::redpanda_storage_mode_from_impl_string(raw);
+          })
+          .or_else([&config_entries]() {
+              return get_string_value(
+                       config_entries, topic_property_redpanda_storage_mode)
+                .and_then([](const ss::sstring& raw) {
+                    return model::redpanda_storage_mode_from_user_string(
+                      raw,
+                      config::shard_local_cfg()
+                        .default_redpanda_storage_mode_tiered_impl());
+                });
+          })
           .value_or(config::shard_local_cfg().default_redpanda_storage_mode());
 
     schema_id_validation_config_parser schema_id_validation_config_parser{

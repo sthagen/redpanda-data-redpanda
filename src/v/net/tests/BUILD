@@ -77,6 +77,19 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
+    name = "dial_test",
+    timeout = "short",
+    srcs = [
+        "dial_test.cc",
+    ],
+    deps = [
+        "//src/v/net",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "connect_response_parser_test",
     timeout = "short",
     srcs = [

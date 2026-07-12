@@ -97,7 +97,7 @@ ss::future<> members_manager::start(std::vector<model::broker> brokers) {
             _last_connection_update_offset
               = _raft0->get_latest_configuration_offset();
         } else {
-            auto snapshot = read_members_from_kvstore();
+            auto snapshot = read_members_from_kvstore(_storage.local().kvs());
             brokers = std::move(snapshot.members);
             _last_connection_update_offset = snapshot.update_offset;
         }
@@ -962,8 +962,12 @@ members_manager::make_join_node_success_reply(model::node_id id) {
     // Provide the joining node with a controller snapshot, so
     // that it may load correct configuration + feature table
     // before applying the controller log.
-    return _controller_stm.local().maybe_make_join_snapshot().then(
-      [id](std::optional<iobuf> snapshot) {
+    return _controller_stm.local()
+      .maybe_make_join_snapshot<
+        bootstrap_backend,
+        feature_backend,
+        config_manager>()
+      .then([id](std::optional<iobuf> snapshot) {
           vlog(
             clusterlog.debug,
             "Responding to node {} join with {} byte snapshot",
@@ -1179,6 +1183,56 @@ auto members_manager::dispatch_rpc_to_leader(
       _rpc_tls_config,
       connection_timeout,
       std::forward<Func>(f));
+}
+
+ss::future<fetch_controller_snapshot_reply>
+members_manager::handle_fetch_controller_snapshot(
+  fetch_controller_snapshot_request req) {
+    vlog(
+      clusterlog.info, "Processing fetch_controller_snapshot request: {}", req);
+
+    if (!_raft0->is_elected_leader()) {
+        vlog(
+          clusterlog.debug,
+          "Not the leader; dispatching fetch_controller_snapshot to leader "
+          "node");
+        co_return co_await dispatch_rpc_to_leader(
+          _join_timeout,
+          [req, tout = rpc::clock_type::now() + _join_timeout](
+            controller_client_protocol c) mutable {
+              return c
+                .fetch_controller_snapshot(
+                  fetch_controller_snapshot_request(req),
+                  rpc::client_opts(tout))
+                .then(&rpc::get_ctx_data<fetch_controller_snapshot_reply>);
+          })
+          .then([](result<fetch_controller_snapshot_reply> r) {
+              if (r.has_error()) {
+                  vlog(
+                    clusterlog.warn,
+                    "Error dispatching fetch_controller_snapshot to leader: {}",
+                    r.error().message());
+                  return fetch_controller_snapshot_reply{};
+              }
+              return std::move(r.value());
+          })
+          .handle_exception([](const std::exception_ptr& e) {
+              vlog(
+                clusterlog.warn,
+                "Exception dispatching fetch_controller_snapshot to leader: "
+                "{}",
+                e);
+              return fetch_controller_snapshot_reply{};
+          });
+    }
+
+    // This controller snapshot only carries the up-to-date feature table and
+    // cluster config state for restarting or joining nodes to establish a
+    // consistent view of the cluster-wide state early on in the bootstrap
+    // process.
+    auto snap = co_await _controller_stm.local()
+                  .maybe_make_join_snapshot<feature_backend, config_manager>();
+    co_return fetch_controller_snapshot_reply{std::move(snap)};
 }
 
 ss::future<result<join_node_reply>> members_manager::replicate_new_node_uuid(
@@ -1668,7 +1722,8 @@ ss::future<>
 members_manager::persist_members_in_kvstore(model::offset update_offset) {
     static const auto cluster_members_key = bytes::from_string(
       "cluster_members");
-    auto current_members_snapshot = read_members_from_kvstore();
+    auto current_members_snapshot = read_members_from_kvstore(
+      _storage.local().kvs());
     if (current_members_snapshot.update_offset >= update_offset) {
         vlog(
           clusterlog.trace,
@@ -1699,10 +1754,11 @@ members_manager::persist_members_in_kvstore(model::offset update_offset) {
           .members = std::move(brokers), .update_offset = update_offset}));
 }
 
-members_manager::members_snapshot members_manager::read_members_from_kvstore() {
+members_manager::members_snapshot
+members_manager::read_members_from_kvstore(storage::kvstore& kvs) {
     static const auto cluster_members_key = bytes::from_string(
       "cluster_members");
-    auto buffer = _storage.local().kvs().get(
+    auto buffer = kvs.get(
       storage::kvstore::key_space::controller, cluster_members_key);
     if (buffer) {
         return serde::from_iobuf<members_snapshot>(std::move(*buffer));

@@ -194,7 +194,8 @@ ss::future<> app::construct(
       metadata_cache,
       &controller->get_shard_table(),
       &controller->get_partition_manager(),
-      connection_cache);
+      connection_cache,
+      &controller->get_feature_table());
 
     co_await construct_service(
       topic_manifest_upload_mgr, std::ref(*remote), bucket);

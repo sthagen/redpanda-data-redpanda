@@ -29,6 +29,16 @@ namespace cluster_link {
 kafka::client::connection_configuration
 metadata_to_kafka_config(const model::metadata&);
 
+/// Converts a CA certificate given as either a file path or an inline value.
+net::certificate to_certificate(const model::tls_file_or_value&);
+
+/// Converts a client key/cert pair given as either file paths or inline
+/// values. Both must be given in the same form (asserts otherwise -- the
+/// admin converter that produces `model::tls_file_or_value` writes key and
+/// cert from the same source, so a mismatch is unreachable in practice).
+net::key_store to_key_store(
+  const model::tls_file_or_value& key, const model::tls_file_or_value& cert);
+
 /// Returns true if `have` includes every bit set in `required`.
 template<typename T>
 bool has_required_permissions(T have, T required) {

@@ -13,6 +13,8 @@
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
 #include "container/chunked_vector.h"
+#include "pandaproxy/schema_registry/rest_client/config.h"
+#include "pandaproxy/schema_registry/rest_client/mode.h"
 #include "pandaproxy/schema_registry/types.h"
 
 #include <seastar/core/future.hh>
@@ -48,6 +50,52 @@ struct parse_error {
 ss::future<std::expected<chunked_vector<context_subject>, parse_error>>
 parse_subjects(iobuf body, qualified_subjects_enabled qualified);
 
+/// Parse the body of a `GET /contexts` response into a list of contexts.
+///
+/// The response is a JSON array of context-name strings (see the Schema
+/// Registry REST API). Each element is a bare, dot-prefixed context name: the
+/// default context is exactly ".", and a named context is "." + name (e.g.
+/// ".dev"). These are NOT the ":.name:" colon-qualified forms used by
+/// context-qualified subjects, so — unlike parse_subjects — there is no
+/// qualified/unqualified policy: each string is wrapped verbatim into a
+/// `context`.
+///
+/// The body must be exactly a JSON array of strings: a non-array, a non-string
+/// element, or any trailing content after the array yields a parse_error (same
+/// strict, fixed shape as parse_subjects). The function does not throw:
+/// malformed input is reported via the returned std::expected.
+ss::future<std::expected<chunked_vector<context>, parse_error>>
+parse_contexts(iobuf body);
+
+/// Parse the body of a `GET /mode` response into a mode_info.
+///
+/// The body is a JSON object with a single modeled field, `mode`, a string
+/// (e.g. `{"mode": "READWRITE"}`). Parsing splits shape from value: the shape
+/// is strict — a non-object body, a missing `mode`, a non-string `mode`, or any
+/// trailing content after the object yields a parse_error — whereas the `mode`
+/// value is an open enum, so an unrecognized (or empty) string is not rejected
+/// but mapped to registry_mode::unknown with the original preserved in
+/// mode_info::raw (see mode.h). Any other top-level field is ignored: the
+/// server omits null/empty fields, and a client must not assume any field
+/// beyond `mode`. The function does not throw: malformed input is reported via
+/// the returned std::expected.
+ss::future<std::expected<mode_info, parse_error>> parse_mode(iobuf body);
+
+/// Parse the body of a `GET /config` response into a config_info.
+///
+/// The body is a JSON object. Only `compatibilityLevel` (a string) is modeled,
+/// as an open enum (see config.h) with the verbatim wire string kept in
+/// config_info::raw. Every other top-level field is unmodeled: its name is
+/// recorded in config_info::unknown_fields and its value skipped, so a caller
+/// can tell config content was dropped without this client modeling the rich
+/// object. As with parse_mode the shape is strict — a non-object body, a
+/// missing or non-string `compatibilityLevel`, or trailing content after the
+/// object yields a parse_error — while the compatibilityLevel value is open: an
+/// unrecognized string maps to registry_compatibility_level::unknown rather
+/// than being rejected. The function does not throw: malformed input is
+/// reported via the returned std::expected.
+ss::future<std::expected<config_info, parse_error>> parse_config(iobuf body);
+
 /// Parse the body of a `GET /subjects/{subject}/versions` response into a list
 /// of versions.
 ///
@@ -64,49 +112,54 @@ parse_subjects(iobuf body, qualified_subjects_enabled qualified);
 ss::future<std::expected<chunked_vector<schema_version>, parse_error>>
 parse_subject_versions(iobuf body);
 
-/// The outcome of parsing a get-schema-by-version response: the schema, plus
-/// the names of any top-level response fields the parser did not model.
+/// Parse the body of a `GET /schemas/ids/{id}/versions` response into a list of
+/// (subject, version) pairs.
 ///
-/// parse_subject_version is deliberately lenient — it never rejects a response
-/// merely for carrying fields it doesn't model; it skips them and records their
-/// names here. This lets a caller that needs fidelity (e.g. schema migration)
-/// apply its own policy — reject, warn, or ignore — while a caller that doesn't
-/// care simply disregards the list. Recorded names are top-level keys, with one
-/// exception: `metadata` is only partially modeled (just `metadata.properties`
-/// is captured), so an unmodeled key directly under it is reported with a
-/// `metadata.` prefix (e.g. `metadata.tags`). An unmodeled key nested inside
-/// any other modeled field (e.g. within a reference) is skipped without being
-/// reported. It is therefore a best-effort signal that content was dropped, not
-/// a proof of a lossless round-trip.
-struct parsed_schema {
-    stored_schema schema;
-    chunked_vector<ss::sstring> unknown_fields;
-};
+/// The body must be a JSON array of objects, each with a `subject` string and a
+/// `version` integer in [1, INT32_MAX] (e.g. `[{"subject":"s","version":1}]`).
+/// Each subject is decoded with context_subject::from_string under \p qualified
+/// (a non-default context comes back context-qualified, e.g. ":.ctx:s"), just
+/// like parse_subjects. Unknown keys within an object are tolerated and
+/// skipped, but both `subject` and `version` must be present; a non-array, a
+/// non-object element, a wrong-typed or out-of-range field, a missing field, or
+/// trailing content after the array yields a parse_error. The result order
+/// follows the wire order, which the Schema Registry does not guarantee for
+/// this endpoint. The function does not throw: malformed input is reported via
+/// the returned std::expected.
+ss::future<std::expected<chunked_vector<subject_version>, parse_error>>
+parse_schema_id_subject_versions(
+  iobuf body, qualified_subjects_enabled qualified);
 
 /// Parse the body of a `GET /subjects/{subject}/versions/{version}` response
-/// into a parsed_schema (the schema plus the names of any unmodeled top-level
-/// fields).
+/// into a source_schema_read: the schema projected into Redpanda's supported
+/// model, plus a sidecar list of unsupported fields it could not store.
 ///
-/// This is a faithful, lenient deserialization (the lowest layer): unknown or
-/// not-yet-modeled fields (`guid`, `ts`, `ruleSet`, `schemaTags`, ...) are
-/// skipped — their names are collected in parsed_schema::unknown_fields for the
-/// caller to act on. `metadata` is partially modeled: `metadata.properties` is
-/// captured into the schema's metadata (values are stringified, matching the
-/// write path), while any other key under `metadata` (e.g. `metadata.tags`) is
-/// reported in unknown_fields under a `metadata.` prefix. Absent fields take
-/// their default/sentinel (absent `schemaType` -> AVRO, `deleted` -> false,
-/// `references` -> empty, `metadata` -> absent, and absent
-/// `subject`/`version`/`id`/`schema` -> the invalid sentinels). It does NOT
-/// enforce completeness or reject for unmodeled fields — whether an incomplete
-/// or lossy response is acceptable (a strict mode) is a higher-layer concern.
-/// It rejects only inputs it cannot represent: a non-object body, malformed
-/// JSON, a present modeled field with a wrong-typed or out-of-range value, or
-/// an unknown `schemaType`.
+/// This is a faithful, lenient deserialization (the lowest layer): it never
+/// rejects a response merely for carrying fields it doesn't model. Server-
+/// assigned fields that carry no user content (`guid`, `ts`) are dropped
+/// silently. Any other unmodeled field is surfaced in
+/// source_schema_read::unsupported as a JSON pointer (e.g. `/ruleSet`), for a
+/// caller that needs fidelity (e.g. schema migration) to apply its policy —
+/// fail, remove, or ignore. `metadata` is partially modeled:
+/// `metadata.properties` is captured into the schema's metadata (values are
+/// stringified, matching the write path), while any other key under `metadata`
+/// (e.g. `metadata.tags`) is reported as `/metadata/<key>`. A field whose value
+/// is null is treated as absent (not reported). An unmodeled key nested inside
+/// another modeled field (e.g. within a reference) is skipped without being
+/// reported — so `unsupported` is a best-effort signal that content was
+/// dropped, not a proof of a lossless round-trip.
+///
+/// Absent fields take their default/sentinel (absent `schemaType` -> AVRO,
+/// `deleted` -> false, `references` -> empty, `metadata` -> absent, and absent
+/// `subject`/`version`/`id`/`schema` -> the invalid sentinels). It rejects only
+/// inputs it cannot represent: a non-object body, malformed JSON, a present
+/// modeled field with a wrong-typed or out-of-range value, or an unknown
+/// `schemaType`.
 ///
 /// \p qualified is the caller-supplied policy for interpreting
 /// context-qualified subject strings (the response `subject` and each
 /// reference's `subject`). The function does not throw.
-ss::future<std::expected<parsed_schema, parse_error>>
+ss::future<std::expected<source_schema_read, parse_error>>
 parse_subject_version(iobuf body, qualified_subjects_enabled qualified);
 
 /// The structured error body Schema Registry returns on failures:

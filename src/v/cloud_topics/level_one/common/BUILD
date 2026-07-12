@@ -77,7 +77,7 @@ redpanda_cc_library(
     deps = [
         ":object_id",
         "//src/v/bytes:iobuf",
-        "//src/v/cloud_io:scheduler_types",
+        "//src/v/cloud_io:admission_control_types",
         "//src/v/cloud_storage_clients",
         "//src/v/container:chunked_vector",
         "//src/v/utils:named_type",
@@ -120,7 +120,6 @@ redpanda_cc_library(
         ":object_id",
         ":object_utils",
         ":single_flight",
-        "//src/v/base",
         "//src/v/cloud_io:cache",
         "//src/v/cloud_io:io_result",
         "//src/v/cloud_io:remote",

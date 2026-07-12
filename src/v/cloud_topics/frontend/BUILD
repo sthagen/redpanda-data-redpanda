@@ -23,7 +23,7 @@ redpanda_cc_library(
         "frontend.h",
     ],
     implementation_deps = [
-        "//src/v/cloud_io:scheduler_types",
+        "//src/v/cloud_io:admission_control_types",
         "//src/v/cloud_storage:types",
         "//src/v/cloud_topics:logger",
         "//src/v/cloud_topics:topic_id_partition",

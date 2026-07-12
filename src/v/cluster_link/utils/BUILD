@@ -12,6 +12,7 @@ redpanda_cc_library(
     deps = [
         "//src/v/base",
         "//src/v/cluster:types",
+        "//src/v/features",
         "//src/v/kafka/server:topic_config_utils",
         "//src/v/pandaproxy/schema_registry:types",
         "//src/v/reflection:type_traits",

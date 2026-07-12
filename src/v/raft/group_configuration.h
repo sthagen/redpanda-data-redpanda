@@ -291,6 +291,7 @@ public:
     void for_each_learner(Func&& f) const;
 
     const std::vector<vnode>& all_nodes() const;
+    const std::vector<vnode>& replicas() const { return _all_replicas; }
 
     std::optional<vnode> find_by_node_id(model::node_id) const;
 
@@ -493,7 +494,7 @@ void group_configuration::for_each_broker(Func&& f) const {
 
 template<typename Func>
 void group_configuration::for_each_replica(Func&& f) const {
-    std::ranges::for_each(_all_replicas, std::forward<Func>(f));
+    std::ranges::for_each(replicas(), std::forward<Func>(f));
 }
 
 template<typename Func, typename Ret>

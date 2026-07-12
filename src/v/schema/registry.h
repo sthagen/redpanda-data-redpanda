@@ -15,7 +15,7 @@
 #include "pandaproxy/schema_registry/schema_getter.h"
 #include "pandaproxy/schema_registry/types.h"
 
-#include <functional>
+#include <seastar/util/noncopyable_function.hh>
 
 namespace schema {
 /**
@@ -41,6 +41,14 @@ public:
     virtual ~registry() = default;
 
     virtual bool is_enabled() const = 0;
+
+    /// Ensures the Schema Registry's internal `_schemas` topic exists,
+    /// creating it if needed. Idempotent, and unlike a full start-up it does
+    /// not load the schema store. Shadow-link SR-API sync calls this so the
+    /// destination `_schemas` topic — and its partition-0 leader, the shard
+    /// the sync task runs on — comes into existence without first requiring
+    /// external Schema Registry traffic.
+    virtual ss::future<> ensure_internal_topic() = 0;
 
     virtual ss::future<pandaproxy::schema_registry::schema_getter*>
     getter() const = 0;
@@ -71,14 +79,29 @@ public:
         pandaproxy::schema_registry::context_subject,
         std::optional<pandaproxy::schema_registry::schema_version>) const = 0;
 
-    /// Lists every (subject, version) whose subject matches `filter`. The
-    /// predicate must be pure and copyable (it runs on each registry shard).
+    /// Lists every (subject, version) whose subject matches `filter`, each
+    /// carrying its version's soft-delete state. The predicate must be pure; it
+    /// is invoked on each registry shard.
     virtual ss::future<
-      chunked_vector<pandaproxy::schema_registry::subject_version>>
+      chunked_vector<pandaproxy::schema_registry::subject_version_deleted>>
     list_subject_versions(
-      std::function<bool(const pandaproxy::schema_registry::context_subject&)>
-        filter,
+      ss::noncopyable_function<
+        bool(const pandaproxy::schema_registry::context_subject&)> filter,
       pandaproxy::schema_registry::include_deleted) const = 0;
+
+    /// Returns true if \p ctx contains any subject. With include_deleted::yes,
+    /// soft-deleted subjects count. Short-circuits at the first match rather
+    /// than materializing the context's versions.
+    virtual ss::future<bool> has_subjects(
+      pandaproxy::schema_registry::context,
+      pandaproxy::schema_registry::include_deleted) const = 0;
+
+    /// Lists all subjects across all contexts, one entry per subject (no
+    /// version fan-out). With include_deleted::yes, soft-deleted subjects are
+    /// included.
+    virtual ss::future<
+      chunked_vector<pandaproxy::schema_registry::context_subject>>
+      get_subjects(pandaproxy::schema_registry::include_deleted) const = 0;
 
     virtual ss::future<pandaproxy::schema_registry::context_schema_id>
       create_schema(pandaproxy::schema_registry::subject_schema) = 0;

@@ -13,6 +13,7 @@
 #include "base/format_to.h"
 #include "config/property.h"
 #include "container/chunked_hash_map.h"
+#include "container/chunked_vector.h"
 #include "container/intrusive_list_helpers.h"
 #include "model/fundamental.h"
 #include "ssx/semaphore.h"

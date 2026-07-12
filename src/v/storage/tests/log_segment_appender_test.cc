@@ -10,6 +10,7 @@
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
 #include "bytes/iostream.h"
+#include "config/configuration.h"
 #include "random/generators.h"
 #include "storage/chunk_cache.h"
 #include "storage/segment_appender.h"
@@ -117,7 +118,9 @@ iobuf make_iobuf_with_char(size_t len, unsigned char c) {
     return ret;
 }
 
-size_t default_chunk_size() { return storage::internal::chunks().chunk_size(); }
+size_t default_chunk_size() {
+    return config::shard_local_cfg().append_chunk_size();
+}
 
 } // namespace
 
@@ -126,8 +129,12 @@ static void run_test_can_append_multiple_flushes(size_t fallocate_size) {
     auto f = open_file("test.segment_appender_random.log");
     storage::storage_resources resources(
       config::mock_binding<size_t>(std::move(fallocate_size)));
+    resources.start().get();
     auto appender = make_segment_appender(f, resources);
-    auto close = ss::defer([&appender] { appender.close().get(); });
+    auto close = ss::defer([&appender, &resources] {
+        appender.close().get();
+        resources.stop().get();
+    });
 
     iobuf expected;
     ss::sstring data = "123456789\n";
@@ -163,9 +170,13 @@ static void run_test_can_append_mixed(size_t fallocate_size) {
     auto f = open_file("test_log_segment_mixed.log");
     storage::storage_resources resources(
       config::mock_binding<size_t>(std::move(fallocate_size)));
+    resources.start().get();
     auto stats = ss::make_lw_shared<segment_appender::stats>();
     auto appender = make_segment_appender(f, resources, stats);
-    auto close = ss::defer([&appender] { appender.close().get(); });
+    auto close = ss::defer([&appender, &resources] {
+        appender.close().get();
+        resources.stop().get();
+    });
     auto alignment = f.disk_write_dma_alignment();
     constexpr size_t iterations = 100;
     for (size_t i = 0, acc = 0; i < iterations; ++i) {
@@ -244,9 +255,13 @@ static void run_test_can_append_10MB(size_t fallocate_size) {
     auto f = open_file("test_segment_appender.log");
     storage::storage_resources resources(
       config::mock_binding<size_t>(std::move(fallocate_size)));
+    resources.start().get();
     auto stats = ss::make_lw_shared<segment_appender::stats>();
     auto appender = make_segment_appender(f, resources, stats);
-    auto close = ss::defer([&appender] { appender.close().get(); });
+    auto close = ss::defer([&appender, &resources] {
+        appender.close().get();
+        resources.stop().get();
+    });
 
     constexpr size_t iterations = 10;
     constexpr size_t one_meg = 1024 * 1024;
@@ -289,8 +304,12 @@ static void run_test_can_append_10MB_sequential_write_sequential_read(
     auto f = open_file("test_segment_appender_sequential.log");
     storage::storage_resources resources(
       config::mock_binding<size_t>(std::move(fallocate_size)));
+    resources.start().get();
     auto appender = make_segment_appender(f, resources);
-    auto close = ss::defer([&appender] { appender.close().get(); });
+    auto close = ss::defer([&appender, &resources] {
+        appender.close().get();
+        resources.stop().get();
+    });
 
     // write sequential. then read all
     constexpr size_t one_meg = 1024 * 1024;
@@ -334,9 +353,13 @@ static void run_concurrent_append_flush(
       "run_concurrent_append_flush_{}_{}.log", fallocate_size, max_buf_size);
     auto seg_file = open_file(filename);
     storage::storage_resources resources(config::mock_binding(+fallocate_size));
+    resources.start().get();
     auto stats = ss::make_lw_shared<segment_appender::stats>();
     auto appender = make_segment_appender(seg_file, resources, stats);
-    auto close = ss::defer([&appender] { appender.close().get(); });
+    auto close = ss::defer([&appender, &resources] {
+        appender.close().get();
+        resources.stop().get();
+    });
 
     auto seed = random_generators::get_int<size_t>();
     std::default_random_engine rng(seed);
@@ -533,8 +556,12 @@ static void run_test_can_append_little_data(size_t fallocate_size) {
     auto f = open_file("test_segment_appender_little.log");
     storage::storage_resources resources(
       config::mock_binding<size_t>(std::move(fallocate_size)));
+    resources.start().get();
     auto appender = make_segment_appender(f, resources);
-    auto close = ss::defer([&appender] { appender.close().get(); });
+    auto close = ss::defer([&appender, &resources] {
+        appender.close().get();
+        resources.stop().get();
+    });
     auto alignment = f.disk_write_dma_alignment();
     // at least 1 page and some 20 bytes to test boundary conditions
     const auto data = random_generators::gen_alphanum_string(alignment + 20);
@@ -575,8 +602,12 @@ static void run_test_fallocate_size(size_t fallocate_size) {
     auto f = open_file(filename);
     storage::storage_resources resources(
       config::mock_binding<size_t>(fallocate_size));
+    resources.start().get();
     auto appender = make_segment_appender(f, resources);
-    auto close = ss::defer([&appender] { appender.close().get(); });
+    auto close = ss::defer([&appender, &resources] {
+        appender.close().get();
+        resources.stop().get();
+    });
 
     for (size_t i = 0; i < 10; ++i) {
         iobuf original;

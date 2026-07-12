@@ -46,6 +46,9 @@ void handle_error(cluster_link::errc err, ss::sstring info) {
     case cluster_link::errc::link_broker_unreachable:
     case cluster_link::errc::link_broker_verification_failed:
     case cluster_link::errc::link_verification_unknown_error:
+    case cluster_link::errc::link_sr_unreachable:
+    case cluster_link::errc::link_sr_target_not_empty:
+    case cluster_link::errc::link_sr_verification_failed:
         throw serde::pb::rpc::failed_precondition_exception(std::move(info));
     case cluster_link::errc::link_id_not_found:
     case cluster_link::errc::topic_not_being_mirrored:

@@ -7,7 +7,7 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
-#include "cloud_io/scheduler_types.h"
+#include "cloud_io/admission_control_types.h"
 
 #include "strings/string_switch.h"
 

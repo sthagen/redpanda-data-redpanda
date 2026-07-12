@@ -223,6 +223,53 @@ TEST_F(internal_writes_fixture, deletes_bypass_readonly) {
       pps::exception);
 }
 
+TEST_F(internal_writes_fixture, import_validates_reference_order) {
+    // The destination validates a schema's references against the store on
+    // import, so a referrer can only be imported after its referent. This
+    // anchors the reference-ordering requirement the shadowing reconciler
+    // relies on (the fake registry does not validate references).
+    auto referent_sub = pps::context_subject::unqualified("internal-referent");
+    auto referrer_sub = pps::context_subject::unqualified("internal-referrer");
+
+    auto referent_def = pps::schema_definition(
+      R"({"type":"record","name":"Address","namespace":"com.example",)"
+      R"("fields":[{"name":"city","type":"string"}]})",
+      pps::schema_type::avro);
+
+    auto referrer_def = pps::schema_definition(
+      R"({"type":"record","name":"Person","namespace":"com.example",)"
+      R"("fields":[{"name":"addr","type":"com.example.Address"}]})",
+      pps::schema_type::avro,
+      {pps::schema_reference{
+        .name = "com.example.Address",
+        .sub = {referent_sub, pps::is_qualified::no},
+        .version = pps::schema_version{1}}},
+      {});
+
+    auto referrer = [&] {
+        return pps::stored_schema{
+          .schema = {referrer_sub, referrer_def.share()},
+          .version = pps::schema_version{1},
+          .id = pps::schema_id{2},
+          .deleted = pps::is_deleted::no};
+    };
+
+    // Referrer-first: the referent is absent, so validation fails.
+    ASSERT_EQ(
+      import_error_code(referrer()), pps::error_code::schema_missing_reference);
+
+    // Referent-first, then referrer: validation resolves the reference and the
+    // import succeeds.
+    import(
+      pps::stored_schema{
+        .schema = {referent_sub, referent_def.share()},
+        .version = pps::schema_version{1},
+        .id = pps::schema_id{1},
+        .deleted = pps::is_deleted::no});
+    auto ctx_id = import(referrer());
+    ASSERT_EQ(ctx_id.id, pps::schema_id{2});
+}
+
 TEST_F(internal_writes_fixture, imports_preserve_deleted_state) {
     auto subject = pps::context_subject::unqualified("internal-deleted-state");
     auto schema_def = pps::schema_definition(

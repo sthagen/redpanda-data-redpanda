@@ -52,9 +52,9 @@ redpanda_cc_library(
     srcs = ["cloud_cache_persistence.cc"],
     hdrs = ["cloud_cache_persistence.h"],
     implementation_deps = [
+        ":chunked_remote_file_reader",
         ":file_io",
         "//src/v/cloud_io:io_result",
-        "//src/v/config",
         "//src/v/lsm/core:exceptions",
         "//src/v/lsm/core/internal:files",
         "//src/v/ssx:future_util",
@@ -66,6 +66,33 @@ redpanda_cc_library(
         "//src/v/cloud_io:cache",
         "//src/v/cloud_io:remote",
         "//src/v/cloud_storage_clients",
+        "//src/v/config",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "chunked_remote_file_reader",
+    srcs = ["chunked_remote_file_reader.cc"],
+    hdrs = ["chunked_remote_file_reader.h"],
+    implementation_deps = [
+        ":file_io",
+        "//src/v/cloud_io:io_result",
+        "//src/v/container:chunked_vector",
+        "//src/v/lsm/core:exceptions",
+        "//src/v/ssx:future_util",
+        "@fmt",
+    ],
+    deps = [
+        ":persistence",
+        "//src/v/base",
+        "//src/v/bytes:ioarray",
+        "//src/v/cloud_io:admission_control_types",
+        "//src/v/cloud_io:cache",
+        "//src/v/cloud_io:remote",
+        "//src/v/cloud_storage_clients",
+        "//src/v/container:chunked_hash_map",
+        "//src/v/utils:retry_chain_node",
         "@seastar",
     ],
 )

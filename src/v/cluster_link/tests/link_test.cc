@@ -16,10 +16,16 @@
 #include "cluster_link/manager.h"
 #include "cluster_link/replication/tests/deps_test_impl.h"
 #include "cluster_link/tests/deps.h"
+#include "kafka/protocol/find_coordinator.h"
+#include "kafka/protocol/list_groups.h"
+#include "kafka/protocol/list_offset.h"
+#include "kafka/protocol/offset_fetch.h"
+#include "schema/tests/fake_registry.h"
 #include "test_utils/test.h"
 
 #include <seastar/util/defer.hh>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 using namespace std::chrono_literals;
@@ -146,6 +152,7 @@ protected:
     ss::sharded<table> _table;
 
     std::unique_ptr<manager> _manager;
+    schema::fake_registry _fake_schema_registry;
     config::mock_property<int16_t> _default_topic_replication{3};
 
     absl::flat_hash_map<notification_id, ss::noncopyable_function<void(uuid_t)>>
@@ -153,6 +160,12 @@ protected:
     notification_id _latest_id{0};
 
 private:
+    template<typename Api>
+    void advertise_api() {
+        _cluster_mock.default_supported_versions[Api::key] = {
+          .min = Api::min_valid, .max = Api::max_valid};
+    }
+
     void setup_cluster_mock() {
         _cluster_mock.register_default_handlers();
         _cluster_mock.add_broker(
@@ -161,6 +174,14 @@ private:
           ::model::node_id(1), net::unresolved_address{"localhost", 9093});
         _cluster_mock.add_broker(
           ::model::node_id(2), net::unresolved_address{"localhost", 9094});
+        // Advertise (via the mock's default fallback) the APIs the link broker
+        // preflight requires that are not in the mock's built-in defaults, so
+        // the kafka-path check passes and the Schema Registry checks are
+        // reached.
+        advertise_api<kafka::find_coordinator_api>();
+        advertise_api<kafka::list_groups_api>();
+        advertise_api<kafka::list_offsets_api>();
+        advertise_api<kafka::offset_fetch_api>();
     }
 };
 
@@ -171,6 +192,8 @@ public:
         co_await link_test_base::SetUpAsync();
         auto tmc = std::make_unique<fake_topic_metadata_cache>();
         _tmc = tmc.get();
+        auto sr_prober = std::make_unique<fake_source_sr_prober>();
+        _fake_sr_prober = sr_prober.get();
         _manager = std::make_unique<manager>(
           ::model::node_id(0),
           std::make_unique<fake_partition_leader_cache>(
@@ -194,6 +217,9 @@ public:
           std::make_unique<test_partition_metadata_provider>(),
           std::make_unique<test_kafka_rpc_client_service>(_tmc),
           std::make_unique<fake_members_table_provider>(),
+          sr_preflight_checker::make_default(
+            _fake_schema_registry, std::move(sr_prober)),
+          nullptr,
           task_reconciler_interval,
           _default_topic_replication.bind(),
           ss::default_scheduling_group());
@@ -218,6 +244,7 @@ public:
 protected:
     absl::flat_hash_map<uuid_t, test_link*> _links;
     fake_topic_metadata_cache* _tmc{nullptr};
+    fake_source_sr_prober* _fake_sr_prober{nullptr};
 };
 
 class link_test_manager_started : public link_test {
@@ -440,6 +467,9 @@ public:
           std::make_unique<test_partition_metadata_provider>(),
           std::make_unique<test_kafka_rpc_client_service>(_tmc),
           std::make_unique<fake_members_table_provider>(),
+          sr_preflight_checker::make_default(
+            _fake_schema_registry, std::make_unique<fake_source_sr_prober>()),
+          nullptr,
           task_reconciler_interval,
           _default_topic_replication.bind(),
           ss::default_scheduling_group());
@@ -593,6 +623,234 @@ TEST_F_CORO(
     // Stopping the link must complete even with the task fiber wedged in
     // the source cluster's reconnect backoff.
     co_await wedged_link->stop();
+}
+
+// --- Schema Registry API-sync preflight checks ---
+
+namespace {
+namespace ppsr = pandaproxy::schema_registry;
+using sr_cfg = model::schema_registry_sync_config;
+
+// Matches a cl_result<void> that is an error carrying the given errc. Reports
+// the actual state (value, or the mismatching code) on failure. Usable inside
+// coroutine tests because EXPECT_THAT is non-fatal and never returns.
+MATCHER_P(IsLinkError, expected_code, "") {
+    if (arg.has_value()) {
+        *result_listener << "is a success, expected error";
+        return false;
+    }
+    *result_listener << "error code "
+                     << static_cast<int>(arg.assume_error().code()) << " ("
+                     << arg.assume_error().message() << ")";
+    return arg.assume_error().code() == expected_code;
+}
+
+// Builds link metadata whose kafka connection targets the fixture's broker
+// mock (so the kafka preflight passes) and whose Schema Registry sync config is
+// in API mode with the given destination mapping and source context filter.
+model::metadata make_api_sr_metadata(
+  ss::sstring name,
+  std::optional<sr_cfg::destination_mapping_t> destination,
+  chunked_vector<ss::sstring> filter_contexts = {},
+  chunked_vector<ss::sstring> filter_subjects = {}) {
+    model::metadata md{
+      .name = model::name_t(std::move(name)),
+      .uuid = model::uuid_t(::uuid_t::create()),
+      .connection = model::connection_config{
+        .bootstrap_servers{net::unresolved_address{"localhost", 9092}}}};
+    sr_cfg::shadow_schema_registry_api api;
+    api.source_url = "http://source.example:8081";
+    api.filter.contexts = std::move(filter_contexts);
+    api.filter.subjects = std::move(filter_subjects);
+    api.destination = std::move(destination);
+    md.configuration.schema_registry_sync_cfg.sync_mode = std::move(api);
+    return md;
+}
+
+sr_cfg::destination_mapping_t identity_mapping() {
+    return sr_cfg::destination_mapping_t{sr_cfg::identity_context_mapping{}};
+}
+
+sr_cfg::destination_mapping_t
+exact_mapping(ss::sstring source, ss::sstring destination) {
+    sr_cfg::exact_context_mapping mapping;
+    mapping.mappings.emplace(std::move(source), std::move(destination));
+    return sr_cfg::destination_mapping_t{std::move(mapping)};
+}
+
+ss::future<> seed_subject(
+  schema::fake_registry& reg,
+  ppsr::context ctx,
+  ss::sstring sub,
+  ppsr::is_deleted deleted = ppsr::is_deleted::no) {
+    co_await reg.import_schema(
+      ppsr::stored_schema{
+        .schema = ppsr::
+          subject_schema{ppsr::context_subject{std::move(ctx), ppsr::subject{std::move(sub)}}, ppsr::schema_definition{ppsr::schema_definition::raw_string{R"({"type":"string"})"}, ppsr::schema_type::avro}},
+        .version = ppsr::schema_version{1},
+        .id = ppsr::schema_id{1},
+        .deleted = deleted});
+}
+} // namespace
+
+// A link that is not in Schema Registry API mode skips both SR checks: the
+// source prober is not consulted even though it is primed to fail.
+TEST_F_CORO(link_test_manager_started, sr_preflight_skipped_when_not_api_mode) {
+    _fake_sr_prober->error = err_info(
+      errc::link_sr_unreachable, "prober must not be consulted");
+    model::metadata md{
+      .name = model::name_t("link1"),
+      .uuid = model::uuid_t(::uuid_t::create()),
+      .connection = model::connection_config{
+        .bootstrap_servers{net::unresolved_address{"localhost", 9092}}}};
+    auto res = co_await _manager->test_connection(std::move(md));
+    ASSERT_TRUE_CORO(res.has_value());
+    EXPECT_THAT(_fake_sr_prober->call_count, testing::Eq(0));
+}
+
+// Source reachable and the destination empty: preflight passes, and the source
+// probe actually ran.
+TEST_F_CORO(link_test_manager_started, sr_preflight_reachable_and_empty_ok) {
+    auto res = co_await _manager->test_connection(
+      make_api_sr_metadata("link1", identity_mapping()));
+    ASSERT_TRUE_CORO(res.has_value());
+    EXPECT_THAT(_fake_sr_prober->call_count, testing::Eq(1));
+}
+
+// The prober reporting an error surfaces as link_sr_unreachable.
+TEST_F_CORO(link_test_manager_started, sr_preflight_source_unreachable) {
+    _fake_sr_prober->error = err_info(
+      errc::link_sr_unreachable, "connection refused");
+    auto res = co_await _manager->test_connection(
+      make_api_sr_metadata("link1", identity_mapping()));
+    EXPECT_THAT(res, IsLinkError(errc::link_sr_unreachable));
+}
+
+// Identity mapping, select-all filter: a populated destination context fails.
+TEST_F_CORO(link_test_manager_started, sr_preflight_identity_target_not_empty) {
+    co_await seed_subject(
+      _fake_schema_registry, ppsr::context{".ctxA"}, "sub1");
+    auto res = co_await _manager->test_connection(
+      make_api_sr_metadata("link1", identity_mapping()));
+    EXPECT_THAT(res, IsLinkError(errc::link_sr_target_not_empty));
+}
+
+// Identity mapping: a populated in-scope destination context fails even when
+// the source has no such context. Only the destination registry is inspected
+// for emptiness (the prober reports nothing here), so a context present only in
+// the destination is still caught.
+TEST_F_CORO(
+  link_test_manager_started, sr_preflight_identity_target_absent_from_source) {
+    co_await seed_subject(
+      _fake_schema_registry, ppsr::context{".ctxA"}, "sub1");
+    auto res = co_await _manager->test_connection(
+      make_api_sr_metadata("link1", identity_mapping(), {".ctxA"}));
+    EXPECT_THAT(res, IsLinkError(errc::link_sr_target_not_empty));
+}
+
+// Exact mapping keys emptiness off the destination context name, not the
+// source: a subject in the source-named context does not fail the check.
+TEST_F_CORO(
+  link_test_manager_started, sr_preflight_exact_mapping_checks_destination) {
+    co_await seed_subject(_fake_schema_registry, ppsr::context{".src"}, "sub1");
+    auto res = co_await _manager->test_connection(
+      make_api_sr_metadata("link1", exact_mapping(".src", ".dst")));
+    ASSERT_TRUE_CORO(res.has_value());
+    EXPECT_THAT(_fake_sr_prober->call_count, testing::Eq(1));
+}
+
+// Exact mapping: a subject in the destination context fails the check.
+TEST_F_CORO(
+  link_test_manager_started, sr_preflight_exact_mapping_destination_not_empty) {
+    co_await seed_subject(_fake_schema_registry, ppsr::context{".dst"}, "sub1");
+    auto res = co_await _manager->test_connection(
+      make_api_sr_metadata("link1", exact_mapping(".src", ".dst")));
+    EXPECT_THAT(res, IsLinkError(errc::link_sr_target_not_empty));
+}
+
+// The context filter narrows the identity target set: a populated context
+// excluded by the filter is out of scope.
+TEST_F_CORO(
+  link_test_manager_started, sr_preflight_identity_filtered_context_ignored) {
+    co_await seed_subject(
+      _fake_schema_registry, ppsr::context{".ctxB"}, "sub1");
+    auto res = co_await _manager->test_connection(
+      make_api_sr_metadata("link1", identity_mapping(), {".ctxA"}));
+    ASSERT_TRUE_CORO(res.has_value());
+    EXPECT_THAT(_fake_sr_prober->call_count, testing::Eq(1));
+}
+
+// A subjects-only filter selects the source context parsed from the qualified
+// subject, so identity mapping imports into it and its populated target is
+// checked. Guards against dropping filter.subjects from target resolution.
+TEST_F_CORO(
+  link_test_manager_started, sr_preflight_identity_subject_filter_selects) {
+    co_await seed_subject(
+      _fake_schema_registry, ppsr::context{".ctxB"}, "sub1");
+    // Qualified subject ":.ctxB:sub1" selects source context ".ctxB".
+    auto res = co_await _manager->test_connection(make_api_sr_metadata(
+      "link1", identity_mapping(), /*filter_contexts=*/{}, {":.ctxB:sub1"}));
+    EXPECT_THAT(res, IsLinkError(errc::link_sr_target_not_empty));
+}
+
+// A context selected by neither filter.contexts nor filter.subjects is out of
+// scope, even when populated.
+TEST_F_CORO(
+  link_test_manager_started, sr_preflight_identity_subject_filter_excludes) {
+    co_await seed_subject(
+      _fake_schema_registry, ppsr::context{".ctxB"}, "sub1");
+    auto res = co_await _manager->test_connection(make_api_sr_metadata(
+      "link1", identity_mapping(), /*filter_contexts=*/{}, {":.ctxA:sub1"}));
+    ASSERT_TRUE_CORO(res.has_value());
+    EXPECT_THAT(_fake_sr_prober->call_count, testing::Eq(1));
+}
+
+// Exact mapping whose source is excluded by the filter is inert, so its
+// populated destination context does not fail the check.
+TEST_F_CORO(
+  link_test_manager_started, sr_preflight_exact_mapping_filtered_source_inert) {
+    co_await seed_subject(_fake_schema_registry, ppsr::context{".dst"}, "sub1");
+    auto res = co_await _manager->test_connection(
+      make_api_sr_metadata("link1", exact_mapping(".src", ".dst"), {".other"}));
+    ASSERT_TRUE_CORO(res.has_value());
+    EXPECT_THAT(_fake_sr_prober->call_count, testing::Eq(1));
+}
+
+// A soft-deleted subject still occupies the context namespace and counts as
+// non-empty (include_deleted::yes).
+TEST_F_CORO(
+  link_test_manager_started, sr_preflight_soft_deleted_counts_as_not_empty) {
+    co_await seed_subject(
+      _fake_schema_registry,
+      ppsr::context{".ctxA"},
+      "sub1",
+      ppsr::is_deleted::yes);
+    auto res = co_await _manager->test_connection(
+      make_api_sr_metadata("link1", identity_mapping()));
+    EXPECT_THAT(res, IsLinkError(errc::link_sr_target_not_empty));
+}
+
+// An unset destination mapping defaults to identity mapping.
+TEST_F_CORO(
+  link_test_manager_started,
+  sr_preflight_unset_destination_defaults_to_identity) {
+    co_await seed_subject(
+      _fake_schema_registry, ppsr::context{".ctxA"}, "sub1");
+    auto res = co_await _manager->test_connection(
+      make_api_sr_metadata("link1", std::nullopt));
+    EXPECT_THAT(res, IsLinkError(errc::link_sr_target_not_empty));
+}
+
+// A fault querying the destination registry surfaces as
+// link_sr_verification_failed.
+TEST_F_CORO(
+  link_test_manager_started,
+  sr_preflight_destination_fault_verification_failed) {
+    _fake_schema_registry.set_inject_failures(
+      std::make_exception_ptr(std::runtime_error("registry unavailable")));
+    auto res = co_await _manager->test_connection(
+      make_api_sr_metadata("link1", identity_mapping()));
+    EXPECT_THAT(res, IsLinkError(errc::link_sr_verification_failed));
 }
 
 } // namespace cluster_link::tests

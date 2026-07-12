@@ -23,7 +23,8 @@ public:
       , _sync_writes_disabled(sync_writes_disabled) {}
 
     writes_disabled_t writes_disabled(
-      pandaproxy::schema_registry::write_source source) const final {
+      pandaproxy::schema_registry::write_source source,
+      const pandaproxy::schema_registry::context&) const final {
         switch (source) {
         case pandaproxy::schema_registry::write_source::client:
             return _client_writes_disabled;

@@ -31,6 +31,7 @@ public:
           .invoke_on_all(
             [](features::feature_table& f) { f.testing_activate_all(); })
           .get();
+        resources.start().get();
     }
 
     std::unique_ptr<storage::kvstore> make_kvstore() {
@@ -40,6 +41,7 @@ public:
 
     ~kvstore_test_fixture() {
         _feature_table.stop().get();
+        resources.stop().get();
         cleanup_store().get();
     }
 

@@ -769,10 +769,8 @@ class ClusterLinkingTopicSyncingWithMtls(ClusterLinkingTopicSyncingTestBase):
         )
 
 
-class ClusterLinkingSchemaRegistry(ShadowLinkTestBase):
-    """
-    These tests verify the behavior of syncing schema registry
-    """
+class ClusterLinkingSchemaRegistryBase(ShadowLinkTestBase):
+    """Shared setup and helpers for Schema Registry shadow-linking tests."""
 
     simple_proto_def = """
 syntax = "proto3";
@@ -853,6 +851,12 @@ message CType {
         result = result_raw.json()
         assert isinstance(result, list), f"Expected list but got {result}"
         return result
+
+
+class ClusterLinkingSchemaRegistry(ClusterLinkingSchemaRegistryBase):
+    """
+    These tests verify the behavior of syncing schema registry
+    """
 
     @cluster(num_nodes=6)
     def test_schema_registry_basic(self):

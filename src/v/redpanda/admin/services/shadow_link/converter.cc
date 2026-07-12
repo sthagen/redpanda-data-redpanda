@@ -409,6 +409,8 @@ create_shadow_schema_registry_api_config(
     config.feature_policy = to_unsupported_feature_policy(
       api.get_unsupported_schema_feature_policy());
 
+    config.is_enabled = cluster_link::model::enabled_t{!api.get_paused()};
+
     return config;
 }
 
@@ -1403,6 +1405,8 @@ create_shadow_schema_registry_api_options(
 
     api.set_unsupported_schema_feature_policy(
       to_proto_unsupported_feature_policy(cfg.feature_policy));
+
+    api.set_paused(!bool(cfg.is_enabled));
 
     return api;
 }

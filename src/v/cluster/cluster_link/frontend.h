@@ -21,11 +21,12 @@
 #include "features/feature_table.h"
 #include "features/fwd.h"
 #include "model/timeout_clock.h"
-#include "pandaproxy/schema_registry/fwd.h"
 #include "rpc/connection_cache.h"
 #include "rpc/fwd.h"
 
 #include <seastar/core/sharded.hh>
+
+#include <string_view>
 
 namespace cluster::cluster_link {
 class frontend : public ss::peering_sharded_service<frontend> {
@@ -147,13 +148,18 @@ public:
     /// True if any Schema Registry shadowing mode is active.
     bool schema_registry_shadowing_active() const;
 
-    /// True if Schema Registry writes from this source must be rejected.
-    bool schema_registry_writes_disabled(
-      pandaproxy::schema_registry::write_source) const;
+    /// True if a client Schema Registry write to the given context must be
+    /// rejected. With API-mode shadowing, only contexts owned by the mirroring
+    /// (per source_filter/destination) are blocked; topic-mode shadowing
+    /// blocks every context. The context is identified by name (the underlying
+    /// value of pandaproxy::schema_registry::context).
+    bool schema_registry_client_writes_disabled(std::string_view context) const;
 
-    /// True if this node must not create a local _schemas topic because
-    /// topic-mode shadowing owns it.
-    bool schema_registry_internal_topic_creation_blocked() const;
+    /// True if a write to the local _schemas topic must be rejected. Covers
+    /// both the internal sync importer and _schemas topic creation; it is
+    /// context-independent because only topic-mode shadowing owns the local
+    /// topic.
+    bool schema_registry_local_topic_writes_disabled() const;
 
 private:
     ss::future<errc>

@@ -10,6 +10,8 @@
 #pragma once
 
 #include "datalake/schema_descriptor.h"
+#include "iceberg/datatypes.h"
+#include "iceberg/values.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/record.h"
@@ -53,11 +55,12 @@ iceberg::struct_type
 rp_base_struct_type(model::iceberg_mode::headers_config headers_cfg);
 
 /// Build the redpanda system struct_value. Single definition used
-/// by all translators.
+/// by all translators. `key` is the already-decoded key value: binary_value
+/// for raw-bytes mode, or a schema-decoded value for schema-mode keys.
 std::unique_ptr<iceberg::struct_value> build_rp_struct(
   model::partition_id pid,
   kafka::offset o,
-  std::optional<iobuf> key,
+  std::optional<iceberg::value> key,
   model::timestamp ts,
   model::timestamp_type ts_t,
   const chunked_vector<model::record_header>& headers,

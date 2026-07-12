@@ -291,3 +291,6 @@ perf.data*
 
  # rpk binary
 src/go/rpk/cmd/rpk/rpk
+
+# antithesis
+/.antithesis

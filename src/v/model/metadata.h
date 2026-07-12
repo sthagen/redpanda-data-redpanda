@@ -646,6 +646,74 @@ std::optional<redpanda_storage_mode>
 fmt::iterator format_to(redpanda_storage_mode m, fmt::iterator out);
 std::istream& operator>>(std::istream&, redpanda_storage_mode&);
 
+// Selects which storage mode the plain 'tiered' user-facing alias refers to:
+// 'tiered_v1' is redpanda_storage_mode::tiered, 'tiered_v2' is
+// redpanda_storage_mode::tiered_cloud. Value of the
+// redpanda_storage_mode_tiered_impl cluster config.
+enum class redpanda_storage_mode_tiered_impl : uint8_t {
+    tiered_v1 = 0,
+    tiered_v2 = 1,
+};
+
+constexpr const char* redpanda_storage_mode_tiered_impl_to_string(
+  redpanda_storage_mode_tiered_impl m) {
+    switch (m) {
+    case redpanda_storage_mode_tiered_impl::tiered_v1:
+        return "tiered_v1";
+    case redpanda_storage_mode_tiered_impl::tiered_v2:
+        return "tiered_v2";
+    }
+    throw std::invalid_argument("unknown redpanda_storage_mode_tiered_impl");
+}
+
+std::optional<redpanda_storage_mode_tiered_impl>
+  redpanda_storage_mode_tiered_impl_from_string(std::string_view);
+
+fmt::iterator format_to(redpanda_storage_mode_tiered_impl m, fmt::iterator out);
+std::istream& operator>>(std::istream&, redpanda_storage_mode_tiered_impl&);
+
+/// Parse a user-supplied storage mode string (the redpanda.storage.mode topic
+/// property). The user vocabulary is local/tiered/cloud/unset: 'tiered'
+/// resolves against the redpanda_storage_mode_tiered_impl cluster config, and
+/// the variant names (tiered_v1/tiered_v2) as well as the internal
+/// 'tiered_cloud' spelling are rejected -- a specific variant is selected with
+/// the separate redpanda.storage.mode.impl property instead.
+std::optional<redpanda_storage_mode> redpanda_storage_mode_from_user_string(
+  std::string_view, redpanda_storage_mode_tiered_impl);
+
+/// The user-facing name of a storage mode: both tiered variants display as
+/// 'tiered' (the variant is exposed via redpanda.storage.mode.impl);
+/// other modes display as their enum name.
+const char* redpanda_storage_mode_user_name(redpanda_storage_mode);
+
+/// The tiered variant of a storage mode: tiered -> tiered_v1,
+/// tiered_cloud -> tiered_v2, nullopt for the other modes.
+std::optional<redpanda_storage_mode_tiered_impl>
+  storage_mode_tiered_impl(redpanda_storage_mode);
+
+/// The unambiguous implementation name of a storage mode, the value of the
+/// read-only redpanda.storage.mode.impl topic property:
+/// unset/local/cloud display as their enum name, the tiered variants as
+/// tiered_v1/tiered_v2.
+const char* redpanda_storage_mode_impl_name(redpanda_storage_mode);
+
+/// Parse the redpanda.storage.mode.impl vocabulary
+/// (unset|local|tiered_v1|tiered_v2|cloud): the exact inverse of
+/// redpanda_storage_mode_impl_name. The ambiguous 'tiered' alias and the
+/// internal 'tiered_cloud' spelling are rejected.
+std::optional<redpanda_storage_mode>
+  redpanda_storage_mode_from_impl_string(std::string_view);
+
+/// Combine the redpanda.storage.mode value with an explicit
+/// redpanda.storage.mode.impl into the storage mode enum: the version
+/// picks the tiered variant.
+constexpr redpanda_storage_mode
+storage_mode_with_tiered_impl(redpanda_storage_mode_tiered_impl version) {
+    return version == redpanda_storage_mode_tiered_impl::tiered_v2
+             ? redpanda_storage_mode::tiered_cloud
+             : redpanda_storage_mode::tiered;
+}
+
 enum class recovery_validation_mode : std::uint16_t {
     // ensure that either the manifest is in TS or that no manifest is present.
     // download issues will fail the validation
@@ -677,10 +745,17 @@ public:
         binary,           ///< Store as raw bytes, no schema decoding.
         schema_id_prefix, ///< Decode using schema ID embedded in the record.
         schema_latest, ///< Decode using latest schema for a registry subject.
+        string, ///< Store as UTF-8 string, replacing invalid bytes with U+FFFD.
     };
 
     /// Whether header values are stored as binary or decoded as UTF-8 strings.
     enum class header_schema_mode : uint8_t { binary, string };
+
+    /// How translated value fields are placed in the Iceberg row.
+    enum class value_layout : uint8_t {
+        flat,   ///< User fields placed at top level of the row (default).
+        nested, ///< User fields wrapped inside a "value" struct.
+    };
 
     /// Schema decoding config for the key section.
     struct key_config {
@@ -697,7 +772,14 @@ public:
         ss::sstring subject; ///< Empty = <topic>-value (topic name strategy).
         ss::sstring
           protobuf_name; ///< Empty = first proto message definition in schema.
+        value_layout layout{value_layout::flat};
         bool operator==(const value_config&) const = default;
+
+        /// Returns true if this config can be fully represented by the legacy
+        /// wire discriminants (0–3).
+        bool is_legacy_compatible() const noexcept {
+            return layout == value_layout::flat;
+        }
     };
 
     /// Config for the headers section.
@@ -748,7 +830,8 @@ public:
         }
         const auto& e = std::get<enabled_impl>(_impl);
         return e.key.mode != schema_mode::binary
-               || e.headers.value_type != header_schema_mode::binary;
+               || e.headers.value_type != header_schema_mode::binary
+               || !e.value.is_legacy_compatible();
     }
 
     /// \pre !is_disabled()

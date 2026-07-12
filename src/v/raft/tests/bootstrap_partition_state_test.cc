@@ -36,7 +36,8 @@ struct bootstrap_partition_state_test : public seastar_test {
           [kv_conf]() { return kv_conf; },
           [this]() { return default_log_cfg(); },
           std::ref(_feature_table));
-        co_await _storage.invoke_on_all(&storage::api::start);
+        co_await _storage.invoke_on_all(
+          [](storage::api& a) { return a.start(); });
 
         co_await _feature_table.start();
         co_await _feature_table.invoke_on_all(

@@ -14,21 +14,23 @@
 #include "http/client.h"
 #include "json/document.h"
 
+#include <memory>
+
 namespace cloud_roles {
 
 ss::future<api_response> make_request(
-  http::client client,
+  std::unique_ptr<http::client> client,
   http::client::request_header req,
   std::optional<std::chrono::milliseconds> timeout = std::nullopt);
 
 ss::future<api_response> request_with_payload(
-  http::client client,
+  std::unique_ptr<http::client> client,
   http::client::request_header req,
   iobuf content,
   std::optional<std::chrono::milliseconds> timeout = std::nullopt);
 
 ss::future<api_response> request_with_payload(
-  http::client client,
+  std::unique_ptr<http::client> client,
   http::client::request_header req,
   ss::sstring content,
   std::optional<std::chrono::milliseconds> timeout = std::nullopt);

@@ -55,6 +55,36 @@ public:
         _leveling_extents_reclaimed += reclaimed;
     }
 
+    void add_compaction_objects_committed(uint64_t objects) {
+        _compaction_objects_committed += objects;
+    }
+    void add_compaction_bytes_committed(uint64_t bytes) {
+        _compaction_bytes_committed += bytes;
+    }
+
+    void add_leveling_objects_committed(uint64_t objects) {
+        _leveling_objects_committed += objects;
+    }
+    void add_leveling_bytes_committed(uint64_t bytes) {
+        _leveling_bytes_committed += bytes;
+    }
+
+    // Output objects/bytes that a maintenance job uploaded to object storage
+    // but whose metastore commit did not succeed.
+    void add_compaction_objects_rejected(uint64_t objects) {
+        _compaction_objects_rejected += objects;
+    }
+    void add_compaction_bytes_rejected(uint64_t bytes) {
+        _compaction_bytes_rejected += bytes;
+    }
+
+    void add_leveling_objects_rejected(uint64_t objects) {
+        _leveling_objects_rejected += objects;
+    }
+    void add_leveling_bytes_rejected(uint64_t bytes) {
+        _leveling_bytes_rejected += bytes;
+    }
+
 private:
     hist_t _compaction_runs;
     hist_t _leveling_runs;
@@ -64,6 +94,14 @@ private:
     uint64_t _records_removed{0};
     uint64_t _tombstones_removed{0};
     uint64_t _leveling_extents_reclaimed{0};
+    uint64_t _compaction_objects_committed{0};
+    uint64_t _compaction_bytes_committed{0};
+    uint64_t _leveling_objects_committed{0};
+    uint64_t _leveling_bytes_committed{0};
+    uint64_t _compaction_objects_rejected{0};
+    uint64_t _compaction_bytes_rejected{0};
+    uint64_t _leveling_objects_rejected{0};
+    uint64_t _leveling_bytes_rejected{0};
 
     metrics::internal_metric_groups _metrics;
 };

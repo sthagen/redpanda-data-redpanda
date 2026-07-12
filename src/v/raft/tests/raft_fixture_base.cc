@@ -365,28 +365,6 @@ in_memory_test_protocol::distribute_compaction_mtro(
 raft_node_instance::raft_node_instance(
   model::node_id id,
   model::revision_id revision,
-  raft_node_map& node_map,
-  ss::sharded<features::feature_table>& feature_table,
-  leader_update_clb_t leader_update_clb,
-  bool enable_longest_log_detection,
-  config::binding<std::chrono::milliseconds> election_timeout,
-  config::binding<std::chrono::milliseconds> heartbeat_interval,
-  bool with_offset_translation)
-  : raft_node_instance(
-      id,
-      revision,
-      test_env::random_dir_path("test_raft_{}_", 12),
-      node_map,
-      feature_table,
-      std::move(leader_update_clb),
-      enable_longest_log_detection,
-      std::move(election_timeout),
-      std::move(heartbeat_interval),
-      with_offset_translation) {}
-
-raft_node_instance::raft_node_instance(
-  model::node_id id,
-  model::revision_id revision,
   ss::sstring base_directory,
   raft_node_map& node_map,
   ss::sharded<features::feature_table>& feature_table,
@@ -456,7 +434,7 @@ raft_node_instance::initialise(std::vector<raft::vnode> initial_nodes) {
       },
       [this] { return storage::log_config(_base_directory, 8_MiB); },
       std::ref(_features));
-    co_await _storage.invoke_on_all(&storage::api::start);
+    co_await _storage.invoke_on_all([](storage::api& a) { return a.start(); });
     storage::ntp_config ntp_cfg(ntp(), _base_directory);
 
     _underlying_log = co_await _storage.local().log_mgr().manage(
@@ -602,6 +580,10 @@ void raft_node_instance::reset_dispatch_handlers() {
     _protocol->reset_dispatch_handlers();
 }
 
+raft_fixture_base::raft_fixture_base()
+  : _logger("raft-fixture")
+  , _test_dir(test_env::random_dir_path("test_raft_", 12)) {}
+
 seastar::future<> raft_fixture_base::stop() {
     co_await ss::smp::invoke_on_all(
       []() { config::shard_local_cfg().for_each([](auto& p) { p.reset(); }); });
@@ -630,24 +612,8 @@ seastar::future<> raft_fixture_base::start() {
 
 raft_node_instance&
 raft_fixture_base::add_node(model::node_id id, model::revision_id rev) {
-    auto instance = std::make_unique<raft_node_instance>(
-      id,
-      rev,
-      *this,
-      _features,
-      [id, this](leadership_status lst) {
-          _leaders_view[id] = lst;
-          if (_leader_clb) {
-              _leader_clb.value()(id, lst);
-          }
-      },
-      _enable_longest_log_detection,
-      _election_timeout.bind(),
-      _heartbeat_interval.bind(),
-      _with_offset_translation);
-
-    auto [it, success] = _nodes.emplace(id, std::move(instance));
-    return *it->second;
+    return add_node(
+      id, rev, fmt::format("{}/node_{}", _test_dir.string(), id()));
 }
 
 raft_node_instance& raft_fixture_base::add_node(

@@ -101,7 +101,9 @@ public:
                 "Batch size across all topics measured at the kafka layer."),
               {},
               [this] { return _batch_size.batch_size_histogram_logform(); }),
-          });
+          },
+          {},
+          {sm::shard_label});
 
         _metrics.add_group(
           "kafka_rpc",

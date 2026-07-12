@@ -304,6 +304,21 @@ func TestValidateParsedShadowLinkConfig(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "valid config - self-hosted with role sync",
+			config: &ShadowLinkConfig{
+				Name: "test-link",
+				ClientOptions: &ShadowLinkClientOptions{
+					BootstrapServers: []string{"broker1:9092"},
+				},
+				RoleSyncOptions: &RoleSyncOptions{
+					Interval: 30 * time.Second,
+					RoleNameFilters: []*NameFilter{
+						{PatternType: PatternTypePrefix, FilterType: FilterTypeInclude, Name: "team-"},
+					},
+				},
+			},
+		},
 		// Cloud-specific validation tests
 		{
 			name: "cloud config - missing shadow_redpanda_id",
@@ -329,6 +344,24 @@ func TestValidateParsedShadowLinkConfig(t *testing.T) {
 				},
 			},
 			expectedErr: "shadow_redpanda_id and source_redpanda_id cannot be the same",
+		},
+		{
+			name: "cloud config - role sync not allowed",
+			config: &ShadowLinkConfig{
+				Name: "test-link",
+				CloudOptions: &CloudShadowLinkOptions{
+					ShadowRedpandaID: "shadow-cluster",
+				},
+				ClientOptions: &ShadowLinkClientOptions{
+					BootstrapServers: []string{"broker1:9092"},
+				},
+				RoleSyncOptions: &RoleSyncOptions{
+					RoleNameFilters: []*NameFilter{
+						{PatternType: PatternTypeLiteral, FilterType: FilterTypeInclude, Name: "*"},
+					},
+				},
+			},
+			expectedErr: "role sync options are not yet supported for Redpanda Cloud shadow links",
 		},
 		{
 			name: "cloud config - TLS file settings not allowed",

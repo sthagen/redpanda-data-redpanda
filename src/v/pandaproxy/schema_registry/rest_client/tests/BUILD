@@ -29,6 +29,26 @@ redpanda_cc_gtest(
         "//src/v/pandaproxy/schema_registry/rest_client:retry_policy",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "error_test",
+    timeout = "short",
+    srcs = [
+        "error_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/http:request_builder",
+        "//src/v/pandaproxy/schema_registry:types",
+        "//src/v/pandaproxy/schema_registry/rest_client:error",
+        "//src/v/pandaproxy/schema_registry/rest_client:parse",
+        "//src/v/test_utils:gtest",
+        "@fmt",
+        "@googletest//:gtest",
+        "@seastar",
     ],
 )
 

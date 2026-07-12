@@ -56,9 +56,7 @@
 #include <seastar/core/condition-variable.hh>
 
 void application::start_runtime_services(
-  cluster::cluster_discovery& cd,
-  ::stop_signal& app_signal,
-  cloud_topics::test_fixture_cfg ct_test_cfg) {
+  ::stop_signal& app_signal, cloud_topics::test_fixture_cfg ct_test_cfg) {
     // single instance
     node_status_backend.invoke_on_all(&cluster::node_status_backend::start)
       .get();
@@ -114,7 +112,8 @@ void application::start_runtime_services(
     // Initialize the Raft RPC endpoint before the rest of the runtime RPC
     // services so the cluster seeds can elect a leader and write a cluster
     // UUID before proceeding with the rest of bootstrap.
-    const bool start_raft_rpc_early = cd.is_cluster_founder().get();
+    const bool start_raft_rpc_early
+      = _cluster_discovery->is_cluster_founder().get();
     if (start_raft_rpc_early) {
         syschecks::systemd_message("Starting RPC/raft").get();
         _rpc
@@ -155,7 +154,7 @@ void application::start_runtime_services(
     }
     controller
       ->start(
-        cd,
+        *_cluster_discovery,
         app_signal.abort_source(),
         std::move(offsets_upload_requestor),
         producer_id_recovery_manager,
@@ -213,9 +212,11 @@ void application::start_runtime_services(
     // By this point during startup we have enough information to evaluate both
     // the state of the license and what enterprise features are used.
     // - If redpanda has been restarted on an existing node, we have already
-    //   loaded the feature table from the local snapshot in
-    //   application::load_feature_table_snapshot and replayed the local
-    //   controller log in controller::start.
+    //   loaded the feature table from the local snapshot via
+    //   application::maybe_apply_local_feature_table_snapshot and replayed
+    //   the local controller log in controller::start. We may also have
+    //   refreshed the feature table from a fresh controller snapshot
+    //   fetched via fetch_controller_snapshot in establish_cluster_view.
     // - If this is a new node joining an existing cluster, by this point we
     //   have received a controller snapshot from another node in the join
     //   response and have replicated and replayed the the controller stm to the

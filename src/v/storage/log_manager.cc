@@ -292,6 +292,13 @@ log_manager::housekeeping_scan(model::timestamp collection_threshold) {
 
         current_log.flags |= bflags::compaction_checked;
 
+        // Cloud topics manage their local log via ctp_stm (compaction is at
+        // L1), so skip gc/compaction housekeeping for them. segment.ms rolling
+        // ran above and still applies.
+        if (current_log.handle->config().cloud_topic_enabled()) {
+            continue;
+        }
+
         // Hold the housekeeping gate to prevent issues with concurrent removal
         // of the log meta.
         auto gate = current_log.housekeeping_gate.hold();
@@ -507,6 +514,12 @@ ss::future<> log_manager::gc_loop() {
 
                 co_await log_meta.handle->apply_segment_ms();
                 if (!log_meta.link.is_linked()) {
+                    continue;
+                }
+
+                // Cloud topics are gc'd by ctp_stm, not here; exclude them from
+                // the reclaim estimate (segment.ms above still applies).
+                if (log_meta.handle->config().cloud_topic_enabled()) {
                     continue;
                 }
 

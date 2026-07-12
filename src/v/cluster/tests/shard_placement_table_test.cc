@@ -1055,6 +1055,8 @@ public:
         co_await ntpt.start();
         co_await _ntp2shards.start_single();
         co_await sr.start();
+        co_await sr.invoke_on_all(
+          [](storage::storage_resources& s) { return s.start(); });
 
         co_await restart_node(true);
     }

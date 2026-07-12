@@ -10,6 +10,7 @@
 #include "storage/record_batch_builder.h"
 
 #include "model/batch_compression.h"
+#include "model/compression.h"
 #include "model/record.h"
 #include "model/record_utils.h"
 
@@ -55,7 +56,11 @@ record_batch_builder& record_batch_builder::add_raw_kw(
     return *this;
 }
 
-model::record_batch record_batch_builder::build() && {
+model::record_batch record_batch_builder::build(reset_size_checksum reset) && {
+    vassert(
+      reset == reset_size_checksum::yes
+        || _compression == model::compression::none,
+      "reset_size::checksum::no is only valid for compression::none");
     if (!_timestamp) {
         _timestamp = model::timestamp::now();
     }
@@ -63,7 +68,9 @@ model::record_batch record_batch_builder::build() && {
     auto batch = model::record_batch(
       header, std::move(_records), model::record_batch::tag_ctor_ng{});
     if (_compression == model::compression::none) {
-        batch.header().reset_size_checksum_metadata(batch.data());
+        if (reset == reset_size_checksum::yes) {
+            batch.header().reset_size_checksum_metadata(batch.data());
+        }
         return batch;
     }
     return model::compress_batch_sync(_compression, std::move(batch));

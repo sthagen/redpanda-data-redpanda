@@ -62,6 +62,7 @@ struct debug_bundle_service_fixture : public seastar_test {
         co_await _feature_table.start();
         co_await _feature_table.invoke_on_all(
           [](features::feature_table& f) { f.testing_activate_all(); });
+        co_await _resources.start();
         _kvstore = std::make_unique<storage::kvstore>(
           *_kvconfig, ss::this_shard_id(), _resources, _feature_table);
         co_await _kvstore->start();
@@ -71,6 +72,7 @@ struct debug_bundle_service_fixture : public seastar_test {
     ss::future<> TearDownAsync() override {
         co_await _service.stop();
         co_await _kvstore->stop();
+        co_await _resources.stop();
         co_await _feature_table.stop();
     }
 

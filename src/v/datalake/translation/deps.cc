@@ -212,12 +212,12 @@ public:
     ss::future<checked<std::nullopt_t, errc>> ensure_table(
       const model::topic& topic,
       model::revision_id topic_revision,
-      record_schema_components comps) const final {
+      const record_type& rt) const final {
         auto ensure_res = co_await coordinator_fe_.ensure_table_exists(
           coordinator::ensure_table_exists_request{
             topic,
             topic_revision,
-            comps,
+            rt.comps,
           });
         switch (ensure_res.errc) {
         case coordinator::errc::ok:
@@ -451,7 +451,8 @@ public:
       model::revision_id topic_revision,
       cloud_data_io& uploader,
       schema_manager& schema_mgr,
-      std::unique_ptr<type_resolver> type_resolver,
+      std::unique_ptr<type_resolver> val_type_resolver,
+      std::unique_ptr<type_resolver> key_type_resolver,
       std::unique_ptr<record_translator> record_translator,
       std::unique_ptr<table_creator> table_creator,
       location_provider location_provider,
@@ -464,7 +465,8 @@ public:
       , _topic_revision(topic_revision)
       , _cloud_io(uploader)
       , _schema_mgr(schema_mgr)
-      , _type_resolver(std::move(type_resolver))
+      , _val_type_resolver(std::move(val_type_resolver))
+      , _key_type_resolver(std::move(key_type_resolver))
       , _record_translator(std::move(record_translator))
       , _table_creator(std::move(table_creator))
       , _location_provider(std::move(location_provider))
@@ -492,7 +494,8 @@ public:
                 _cloud_io,
                 &_features,
                 _schema_mgr,
-                *_type_resolver,
+                *_val_type_resolver,
+                *_key_type_resolver,
                 *_record_translator,
                 *_table_creator,
                 _invalid_record_action,
@@ -600,6 +603,10 @@ public:
         _probe->update_commit_offset_lag(new_lag);
     }
 
+    void report_backpressure_backoff() final {
+        _probe->increment_backpressure_backoff();
+    }
+
 private:
     scheduling::clock::duration compute_target_lag() const {
         // todo: In addition to integrating with config subsystem, an additional
@@ -642,7 +649,8 @@ private:
     model::revision_id _topic_revision;
     cloud_data_io& _cloud_io;
     schema_manager& _schema_mgr;
-    std::unique_ptr<type_resolver> _type_resolver;
+    std::unique_ptr<type_resolver> _val_type_resolver;
+    std::unique_ptr<type_resolver> _key_type_resolver;
     std::unique_ptr<record_translator> _record_translator;
     std::unique_ptr<table_creator> _table_creator;
     location_provider _location_provider;
@@ -664,7 +672,8 @@ translation_context::make_default_translation_context(
   model::revision_id topic_revision,
   cloud_data_io& uploader,
   schema_manager& schema_mgr,
-  std::unique_ptr<type_resolver> type_resolver,
+  std::unique_ptr<type_resolver> val_type_resolver,
+  std::unique_ptr<type_resolver> key_type_resolver,
   std::unique_ptr<record_translator> record_translator,
   std::unique_ptr<table_creator> table_creator,
   location_provider location_provider,
@@ -678,7 +687,8 @@ translation_context::make_default_translation_context(
       topic_revision,
       uploader,
       schema_mgr,
-      std::move(type_resolver),
+      std::move(val_type_resolver),
+      std::move(key_type_resolver),
       std::move(record_translator),
       std::move(table_creator),
       std::move(location_provider),

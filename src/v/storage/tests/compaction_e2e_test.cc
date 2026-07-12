@@ -16,7 +16,9 @@
 #include "features/feature_table.h"
 #include "gtest/gtest.h"
 #include "kafka/server/tests/produce_consume_utils.h"
+#include "model/batch_builder.h"
 #include "model/namespace.h"
+#include "model/record.h"
 #include "model/record_batch_reader.h"
 #include "model/record_batch_types.h"
 #include "model/timeout_clock.h"
@@ -28,6 +30,7 @@
 #include "storage/segment_set.h"
 #include "storage/segment_utils.h"
 #include "storage/tests/manual_mixin.h"
+#include "storage/tests/utils/disk_log_builder.h"
 #include "storage/types.h"
 #include "test_utils/async.h"
 #include "test_utils/container_ostream.h" // IWYU pragma: keep
@@ -38,9 +41,12 @@
 
 #include <seastar/core/sleep.hh>
 
+#include <algorithm>
 #include <chrono>
+#include <limits>
 #include <numeric>
 #include <ranges>
+#include <string_view>
 
 using namespace std::chrono_literals;
 
@@ -2503,4 +2509,162 @@ TEST_F(CompactionFixtureTest, CommitTransactions) {
         // keys, not per record.
         ASSERT_EQ(num_data_records, 1);
     }
+}
+
+namespace {
+
+iobuf ts_test_iobuf(std::string_view s) {
+    iobuf b;
+    b.append(s.data(), s.size());
+    return b;
+}
+
+model::record ts_test_record(
+  int32_t offset_delta, int64_t timestamp_delta, std::string_view key) {
+    return model::record(
+      model::record_attributes{},
+      timestamp_delta,
+      offset_delta,
+      ts_test_iobuf(key),
+      ts_test_iobuf("v"),
+      chunked_vector<model::record_header>{});
+}
+
+// Appends batch1 and batch2 into separate sealed segments, runs sliding-window
+// compaction (which drops batch1's superseded base record and re-encodes it
+// through copy_data_segment_reducer::filter()) and reads the log back.
+ss::future<model::record_batch_reader::data_t> ts_compact_and_read(
+  model::record_batch batch1,
+  model::record_batch batch2,
+  model::offset max_off) {
+    storage::log_config cfg = storage::log_builder_config();
+    storage::disk_log_builder b(
+      cfg, model::offset_translator_batch_types(), raft::group_id{0});
+    model::ntp ntp(
+      model::kafka_namespace,
+      model::topic_partition(
+        model::topic("compaction-ts"), model::partition_id{0}));
+    co_await b.start(ntp);
+    ss::abort_source as;
+    co_await b.get_disk_log_impl().start(std::nullopt, as);
+    std::exception_ptr error = nullptr;
+    try {
+        co_await b.add_batch(std::move(batch1));
+        co_await b.get_disk_log_impl().force_roll();
+        co_await b.add_batch(std::move(batch2));
+        co_await b.get_disk_log_impl().force_roll();
+        auto compact_cfg = compaction::compaction_config(
+          max_off, max_off, max_off, std::nullopt, std::nullopt, as);
+        std::ignore = co_await b.apply_sliding_window_compaction(compact_cfg);
+    } catch (...) {
+        error = std::current_exception();
+    }
+    model::record_batch_reader::data_t batches;
+    if (!error) {
+        auto reader = co_await b.get_disk_log_impl().make_reader(
+          storage::local_log_reader_config(
+            model::offset{0}, model::offset::max()));
+        batches = co_await model::consume_reader_to_memory(
+          std::move(reader), model::no_timeout);
+    }
+    co_await b.stop();
+    if (error) {
+        std::rethrow_exception(error);
+    }
+    co_return batches;
+}
+
+} // namespace
+
+// Regression test for compaction minting future record timestamps.
+// copy_data_segment_reducer::filter() re-encodes a batch when compaction drops
+// records. When the delta-0 base record is dropped (superseded/tombstoned) and
+// the batch is out of order, advancing first_timestamp without re-basing the
+// per-record deltas shifted every survivor forward -- minting FUTURE timestamps
+// from strictly-past input. This drives that path end to end and asserts that
+// absolute timestamps are preserved and encoded as Kafka does (first_timestamp
+// = first surviving record, deltas re-based, max_timestamp = greatest
+// survivor).
+TEST(CompactionReducerTimestampTest, PreservesTimestampsWhenBaseRecordDropped) {
+    const int64_t base = 1'700'000'000'000;                 // 2023-11-14, past
+    const int64_t delta_b = int64_t{30} * 24 * 3600 * 1000; // +30 days
+    const int64_t delta_c = 100;                            // +100 ms
+
+    // Batch 1 (first_timestamp=base), offsets [0,1,2]: A@0 delta 0 (base
+    // record, dropped below); B@1 delta +30d (first survivor, big delta); C@2
+    // delta +100 (out of order vs B).
+    model::batch_builder bb1;
+    bb1.set_batch_type(model::record_batch_type::raft_data);
+    bb1.set_term(model::term_id{0});
+    bb1.set_batch_timestamp(
+      model::timestamp_type::create_time, model::timestamp(base));
+    bb1.set_base_offset(model::offset{0});
+    bb1.add_record(ts_test_record(0, 0, "A"));
+    bb1.add_record(ts_test_record(1, delta_b, "B"));
+    bb1.add_record(ts_test_record(2, delta_c, "C"));
+
+    // Batch 2: a newer A@3 supersedes A@0, so compaction drops batch 1's
+    // delta-0 base record and re-encodes the batch.
+    model::batch_builder bb2;
+    bb2.set_batch_type(model::record_batch_type::raft_data);
+    bb2.set_term(model::term_id{0});
+    bb2.set_batch_timestamp(
+      model::timestamp_type::create_time, model::timestamp(base));
+    bb2.set_base_offset(model::offset{3});
+    bb2.add_record(ts_test_record(0, 0, "A"));
+
+    auto batch1 = bb1.build_sync();
+    auto batch2 = bb2.build_sync();
+    const auto max_off = batch2.last_offset();
+    auto batches = ts_compact_and_read(
+                     std::move(batch1), std::move(batch2), max_off)
+                     .get();
+
+    bool saw_b = false;
+    bool saw_c = false;
+    bool saw_rebuilt = false;
+    for (auto& batch : batches) {
+        if (batch.header().type != model::record_batch_type::raft_data) {
+            continue;
+        }
+        ASSERT_FALSE(batch.compressed());
+        const int64_t first_ts = batch.header().first_timestamp.value();
+        int64_t observed_max_delta = std::numeric_limits<int64_t>::min();
+        for (const auto& r : batch.copy_records()) {
+            const int64_t abs_ts = first_ts + r.timestamp_delta();
+            observed_max_delta = std::max(
+              observed_max_delta, r.timestamp_delta());
+            if (r.key() == ts_test_iobuf("A")) {
+                EXPECT_EQ(abs_ts, base) << "A shifted";
+            } else if (r.key() == ts_test_iobuf("B")) {
+                // The bug shifted this to base + 2*delta_b (a future
+                // timestamp).
+                EXPECT_EQ(abs_ts, base + delta_b) << "B shifted";
+                saw_b = true;
+            } else if (r.key() == ts_test_iobuf("C")) {
+                EXPECT_EQ(abs_ts, base + delta_c) << "C shifted";
+                saw_c = true;
+            }
+            EXPECT_LE(abs_ts, base + delta_b)
+              << "record timestamp shifted forward by compaction";
+        }
+        // Batch-level invariant for every batch: max_timestamp is
+        // first_timestamp plus the greatest surviving delta.
+        EXPECT_EQ(
+          batch.header().max_timestamp.value(), first_ts + observed_max_delta);
+        // The re-encoded batch 1 keeps base offset 0 but drops its delta-0 base
+        // record; like Kafka, first_timestamp advances to the first survivor
+        // (B) and max_timestamp is the greatest surviving timestamp.
+        if (batch.base_offset() == model::offset{0}) {
+            saw_rebuilt = true;
+            EXPECT_EQ(batch.record_count(), 2);
+            EXPECT_EQ(first_ts, base + delta_b);
+            EXPECT_EQ(batch.header().max_timestamp.value(), base + delta_b);
+        }
+    }
+    // B and C must have survived (A@0 dropped, A@3 survives) and batch 1 must
+    // have been re-encoded.
+    EXPECT_TRUE(saw_b);
+    EXPECT_TRUE(saw_c);
+    EXPECT_TRUE(saw_rebuilt);
 }

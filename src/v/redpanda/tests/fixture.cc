@@ -125,9 +125,16 @@ redpanda_thread_fixture::redpanda_thread_fixture(
               return std::make_optional(proxy_client_config(kafka_port));
           }),
           audit_log_client_config(kafka_port));
-        app.check_environment();
         app.wire_up_and_start_crypto_services();
-        app.wire_up_and_start(*app_signal, true, ct_test_cfg);
+        app.wire_up_bootstrap_services();
+        app.hydrate_cluster_config(make_minimal_cfg());
+        app.bootstrap_from_kvstore();
+        app.establish_cluster_view();
+        app.check_environment();
+        app.wire_up_and_start(
+          *app_signal,
+          true,
+          test_cfg{.ct_test_cfg = ct_test_cfg, .chunk_cache_prealloc = false});
     } catch (...) {
         // shutdown half-initialized app nicely so that its destructor doesn't
         // assert and the exception bubbles up
@@ -347,9 +354,16 @@ void redpanda_thread_fixture::restart(should_wipe w) {
         config.get("disable_metrics").set_value(false);
     }).get();
     app.initialize(proxy_config(), proxy_client_config());
-    app.check_environment();
     app.wire_up_and_start_crypto_services();
-    app.wire_up_and_start(*app_signal, true, ct_test_cfg);
+    app.wire_up_bootstrap_services();
+    app.hydrate_cluster_config(make_minimal_cfg());
+    app.bootstrap_from_kvstore();
+    app.establish_cluster_view();
+    app.check_environment();
+    app.wire_up_and_start(
+      *app_signal,
+      true,
+      test_cfg{.ct_test_cfg = ct_test_cfg, .chunk_cache_prealloc = false});
 }
 
 void redpanda_thread_fixture::configure(
@@ -462,7 +476,7 @@ void redpanda_thread_fixture::configure(
             // without their own lane; an empty reservation keeps the
             // policy active while routing every admit through the
             // common pool.
-            config.get("cloud_io_scheduler_reservation")
+            config.get("cloud_io_admission_control_reservation")
               .set_value(std::vector<ss::sstring>{});
         }
 

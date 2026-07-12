@@ -17,6 +17,7 @@
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/condition-variable.hh>
+#include <seastar/core/coroutine.hh>
 #include <seastar/core/future-util.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
@@ -352,17 +353,35 @@ inline void spawn_with_gate(seastar::gate& g, Func&& func) noexcept {
 template<class Func>
 inline void
 repeat_until_gate_closed(seastar::gate& gate, Func&& func) noexcept {
-    spawn_with_gate(gate, [&gate, func = std::forward<Func>(func)]() mutable {
-        return ss::do_until(
-          [&gate] { return gate.is_closed(); },
-          [func = std::forward<Func>(func)]() mutable {
-              return ss::futurize_invoke(func).handle_exception(
-                [](const std::exception_ptr&) {
-                    // A generic catch all to avoid exceptional futures.
-                    // The input func may include it's own exception handling.
-                });
-          });
-    });
+    repeat_until_gate_closed(
+      gate, std::forward<Func>(func), [](const std::exception_ptr&) {});
+}
+
+/// \brief Repeats the passed func in a detached fiber until the gate is closed,
+/// invoking exception_handler on any exception.
+///
+/// \param gate Gate object to use.
+/// \param func function to invoke.
+/// \param exception_handler called with any exception thrown by func.
+template<class Func, class ExceptionHandler>
+inline void repeat_until_gate_closed(
+  seastar::gate& gate,
+  Func&& func,
+  ExceptionHandler&& exception_handler) noexcept {
+    spawn_with_gate(
+      gate,
+      [&gate,
+       func = std::forward<Func>(func),
+       exception_handler = std::forward<ExceptionHandler>(exception_handler)](
+        this auto) -> seastar::future<> {
+          while (!gate.is_closed()) {
+              try {
+                  co_await seastar::futurize_invoke(func);
+              } catch (...) {
+                  exception_handler(std::current_exception());
+              }
+          }
+      });
 }
 
 /// \brief Repeats the passed func in a detached fiber until the gate is closed
@@ -374,17 +393,37 @@ repeat_until_gate_closed(seastar::gate& gate, Func&& func) noexcept {
 template<class Func>
 inline void repeat_until_gate_closed_or_aborted(
   ss::gate& gate, ss::abort_source& as, Func&& func) noexcept {
+    repeat_until_gate_closed_or_aborted(
+      gate, as, std::forward<Func>(func), [](const std::exception_ptr&) {});
+}
+
+/// \brief Repeats the passed func in a detached fiber until the gate is closed
+/// or abort is triggered, invoking exception_handler on any exception.
+///
+/// \param gate Gate object to use.
+/// \param as Abort source to use.
+/// \param func function to invoke.
+/// \param exception_handler called with any exception thrown by func.
+template<class Func, class ExceptionHandler>
+inline void repeat_until_gate_closed_or_aborted(
+  ss::gate& gate,
+  ss::abort_source& as,
+  Func&& func,
+  ExceptionHandler&& exception_handler) noexcept {
     spawn_with_gate(
-      gate, [&gate, &as, func = std::forward<Func>(func)]() mutable {
-          return ss::do_until(
-            [&gate, &as] { return as.abort_requested() || gate.is_closed(); },
-            [func = std::forward<Func>(func)]() mutable {
-                return ss::futurize_invoke(func).handle_exception(
-                  [](const std::exception_ptr&) {
-                      // A generic catch all to avoid exceptional futures.
-                      // The input func may include it's own exception handling.
-                  });
-            });
+      gate,
+      [&gate,
+       &as,
+       func = std::forward<Func>(func),
+       exception_handler = std::forward<ExceptionHandler>(exception_handler)](
+        this auto) -> seastar::future<> {
+          while (!as.abort_requested() && !gate.is_closed()) {
+              try {
+                  co_await seastar::futurize_invoke(func);
+              } catch (...) {
+                  exception_handler(std::current_exception());
+              }
+          }
       });
 }
 

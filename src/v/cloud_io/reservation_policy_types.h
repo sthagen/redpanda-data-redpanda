@@ -12,7 +12,7 @@
 #include "base/format_to.h"
 #include "base/seastarx.h"
 #include "base/vassert.h"
-#include "cloud_io/scheduler_types.h"
+#include "cloud_io/admission_control_types.h"
 #include "container/intrusive_list_helpers.h"
 
 #include <seastar/core/abort_source.hh>
@@ -141,7 +141,7 @@ private:
     static inline thread_local uint64_t _seq_counter{0};
 };
 
-/// Per-group scheduling state.
+/// Per-group admission state.
 ///
 /// Invariant: the sum of `target_reserved` across all groups is bounded
 /// by the policy's `capacity` (asserted at construction in

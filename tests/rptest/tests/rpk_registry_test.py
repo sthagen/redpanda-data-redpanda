@@ -71,7 +71,6 @@ class RpkRegistryTest(RedpandaTest):
 
         self.schema_registry_config = SchemaRegistryConfig()
         self.schema_registry_config.require_client_auth = True
-        self.schema_registry_config.mode_mutability = True
 
     # Override Redpanda start to create the certs and enable auth.
     def setUp(self):

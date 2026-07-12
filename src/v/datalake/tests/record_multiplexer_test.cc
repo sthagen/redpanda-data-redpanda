@@ -35,7 +35,9 @@
 using namespace datalake;
 
 namespace {
-structured_data_translator translator;
+// Configured to match record_schema_resolver (schema_id_prefix val mode).
+record_translator translator{
+  {}, {model::iceberg_mode::schema_mode::schema_id_prefix}, {}};
 const model::ntp
   ntp(model::ns{"rp"}, model::topic{"t"}, model::partition_id{0});
 const model::revision_id topic_rev{123};
@@ -120,18 +122,19 @@ public:
     RecordMultiplexerTestBase()
       : schema_mgr(catalog, &features)
       , type_resolver(registry)
-      , t_creator(type_resolver, schema_mgr) {
+      , t_creator(schema_mgr) {
         features.testing_activate_all();
     }
 
-    record_multiplexer make_mux() {
+    record_multiplexer make_mux(record_translator& t = translator) {
         return record_multiplexer(
           ntp,
           topic_rev,
           std::make_unique<test_data_writer_factory>(false),
           schema_mgr,
           type_resolver,
-          translator,
+          bin_key_resolver,
+          t,
           t_creator,
           model::iceberg_invalid_record_action::dlq_table,
           iceberg::field_name_comparison::verbatim,
@@ -253,6 +256,7 @@ public:
     features::feature_table features;
     catalog_schema_manager schema_mgr;
     record_schema_resolver type_resolver;
+    binary_type_resolver bin_key_resolver;
     direct_table_creator t_creator;
     std::map<model::ntp, ss::lw_shared_ptr<translation_probe>> probes;
     ss::abort_source as;
@@ -591,13 +595,14 @@ TEST_F(RecordMultiplexerTest, TestMultiplexingFromMiddleOfBatch) {
 TEST_F(RecordMultiplexerTest, TestRecordTimestamp) {
     // Make sure we respect client vs broker timestamps.
     binary_type_resolver kv_resolver; // This test doesn't need schemas
-    direct_table_creator table_creator(kv_resolver, schema_mgr);
-    key_value_translator kv_translator;
+    direct_table_creator table_creator(schema_mgr);
+    record_translator kv_translator;
     auto mux = record_multiplexer(
       ntp,
       topic_rev,
       std::make_unique<test_data_writer_factory>(false),
       schema_mgr,
+      kv_resolver,
       kv_resolver,
       kv_translator,
       table_creator,
@@ -642,4 +647,46 @@ TEST_F(RecordMultiplexerTest, TestRecordTimestamp) {
           &partitioning_writer::partitioned_file::partition_key_path,
           remote_path("redpanda.timestamp_hour=2025-09-14-21"))));
     EXPECT_EQ(files.dlq_files.size(), 0);
+}
+
+TEST_F(RecordMultiplexerTest, NestedLayoutSchema) {
+    using vl = model::iceberg_mode::value_layout;
+    using sm = model::iceberg_mode::schema_mode;
+    record_translator nested_translator{
+      {}, {.mode = sm::schema_id_prefix, .layout = vl::nested}, {}};
+
+    tests::record_generator gen(&registry);
+    auto reg_res
+      = gen.register_avro_schema("avro_v1", avro_schema_v1_str).get();
+    ASSERT_FALSE(reg_res.has_error()) << reg_res.error();
+
+    storage::record_batch_builder batch_builder(
+      model::record_batch_type::raft_data, model::offset{0});
+    auto add_res
+      = gen.add_random_avro_record(batch_builder, "avro_v1", std::nullopt)
+          .get();
+    ASSERT_FALSE(add_res.has_error());
+
+    auto reader = model::make_memory_record_batch_reader(
+      {std::move(batch_builder).build()});
+    auto mux = make_mux(nested_translator);
+    mux.multiplex(std::move(reader), kafka::offset{0}, model::no_timeout, as)
+      .get();
+    record_multiplexer::finished_files files;
+    ASSERT_FALSE(std::move(mux).finish(files).get().has_error());
+
+    auto schema = get_current_schema();
+    ASSERT_TRUE(schema.has_value());
+
+    // Nested layout: top-level fields are only "redpanda" and "value".
+    const auto& top = schema->schema_struct.fields;
+    ASSERT_EQ(top.size(), 2);
+    EXPECT_EQ(top[0]->name, "redpanda");
+    EXPECT_EQ(top[1]->name, "value");
+
+    // "value" should be a struct containing the two avro fields.
+    const auto& value_struct = std::get<iceberg::struct_type>(top[1]->type);
+    ASSERT_EQ(value_struct.fields.size(), 2);
+    EXPECT_EQ(value_struct.fields[0]->name, "mynum");
+    EXPECT_EQ(value_struct.fields[1]->name, "mylong");
 }

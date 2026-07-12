@@ -133,6 +133,7 @@ ss::future<> do_compact(
       as,
       config::mock_binding<size_t>(128_MiB),
       16_MiB,
+      probe,
       logger);
     auto reducer = compaction::sliding_window_reducer(
       std::move(src), std::move(sink));
@@ -186,6 +187,7 @@ ss::future<> do_compact_with_throwing_sink(
       as,
       config::mock_binding<size_t>(128_MiB),
       16_MiB,
+      probe,
       logger);
     auto sink = std::make_unique<l1::throwing_compaction_sink>(
       std::move(inner_sink), std::move(should_roll), std::move(should_throw));

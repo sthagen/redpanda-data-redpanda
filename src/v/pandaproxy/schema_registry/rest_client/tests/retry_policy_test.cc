@@ -11,6 +11,8 @@
 
 #include "pandaproxy/schema_registry/rest_client/retry_policy.h"
 
+#include <seastar/core/future.hh>
+
 #include <gtest/gtest.h>
 
 namespace r = pandaproxy::schema_registry::rest_client;
@@ -68,9 +70,21 @@ TEST(default_retry_policy, boost_system_errors) {
     auto retriable = throw_and_catch(
       boost::system::system_error{boost::beast::http::error::end_of_stream});
     ASSERT_EQ(retriable.kind, r::error_kind::network_error);
+    // A partial_message (peer closed mid-response) is the other treated-as-
+    // retriable beast error, distinct from end_of_stream.
+    auto retriable_partial = throw_and_catch(
+      boost::system::system_error{boost::beast::http::error::partial_message});
+    ASSERT_EQ(retriable_partial.kind, r::error_kind::network_error);
     auto permanent_failure = throw_and_catch(
       boost::system::system_error{boost::beast::http::error::bad_alloc});
     ASSERT_EQ(permanent_failure.kind, r::error_kind::permanent_failure);
+}
+
+TEST(default_retry_policy, timed_out_error_is_retriable) {
+    // A seastar timeout (e.g. the per-request deadline elapsing) is retriable
+    // as a timeout, distinct from the network_error/permanent classes above.
+    auto result = throw_and_catch(ss::timed_out_error{});
+    ASSERT_EQ(result.kind, r::error_kind::timeout);
 }
 
 TEST(default_retry_policy, system_errors) {

@@ -15,10 +15,12 @@
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/future.hh>
+#include <seastar/core/reactor.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/timed_out_error.hh>
 #include <seastar/core/with_timeout.hh>
+#include <seastar/net/socket_defs.hh>
 #include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/defer.hh>
 #include <seastar/util/later.hh>
@@ -80,6 +82,12 @@ SEASTAR_THREAD_TEST_CASE(test_client_pool_acquire_abortable) {
 SEASTAR_THREAD_TEST_CASE(test_client_pool_acquire_with_timeout) {
     constexpr size_t num_connections_per_shard = 1;
 
+    // Listen without ever accepting: connections complete the TCP
+    // handshake in the kernel backlog and requests hang waiting for a
+    // response, staying in flight until something interrupts them.
+    auto silent_server = ss::engine().listen(
+      ss::socket_address(ss::ipv4_addr("127.0.0.1", httpd_port_number)));
+
     ss::sharded<cloud_storage_clients::client_pool> pool;
     auto stop_guard
       = test_pool_builder.connections_per_shard(num_connections_per_shard)
@@ -97,8 +105,9 @@ SEASTAR_THREAD_TEST_CASE(test_client_pool_acquire_with_timeout) {
         auto lease
           = pool.local().acquire_with_timeout(test_bucket, as, 100ms).get();
 
-        // The request should fail w/in 500ms due to lease expiry
-        // Note that the default timeout for the request itself is 5s
+        // The lease expires after 100ms, shutting down the client and
+        // failing the in-flight request: list_objects resolves with an
+        // error before the outer 500ms with_timeout fires.
         auto res = ss::with_timeout(
                      ss::lowres_clock::now() + 500ms,
                      lease.client->list_objects(
@@ -119,8 +128,9 @@ SEASTAR_THREAD_TEST_CASE(test_client_pool_acquire_with_timeout) {
           ss::lowres_clock::now() + 500ms,
           lease.client->list_objects(random_test_plain_bucket_name()));
 
-        // This time the lease never expires, so internally we should keep
-        // trying to connect for at least 500ms.
+        // This time the lease never expires, so nothing interrupts the
+        // request hanging on the unresponsive server: it must still be
+        // pending after 500ms.
         BOOST_REQUIRE_THROW(f.get(), ss::timed_out_error);
     }
 

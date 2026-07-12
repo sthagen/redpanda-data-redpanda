@@ -56,7 +56,7 @@ static inline ss::future<> persist_log_file(
             },
             std::ref(feature_table))
           .get();
-        storage.invoke_on_all(&storage::api::start).get();
+        storage.invoke_on_all([](storage::api& a) { return a.start(); }).get();
 
         auto& mgr = storage.local().log_mgr();
         try {
@@ -128,7 +128,7 @@ read_log_file(ss::sstring base_dir, model::ntp file_ntp) {
             },
             std::ref(feature_table))
           .get();
-        storage.invoke_on_all(&storage::api::start).get();
+        storage.invoke_on_all([](storage::api& a) { return a.start(); }).get();
         auto& mgr = storage.local().log_mgr();
         try {
             auto batches

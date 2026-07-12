@@ -8,7 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_io/scheduler_types.h"
+#include "cloud_io/admission_control_types.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/common/micro_probe.h"
 #include "cloud_topics/level_zero/reader/materialized_extent.h"

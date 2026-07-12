@@ -991,12 +991,15 @@ SEASTAR_THREAD_TEST_CASE(test_sharded_store_referenced_by) {
 namespace {
 
 bool contains_subject_version(
-  const chunked_vector<pps::subject_version>& got,
+  const chunked_vector<pps::subject_version_deleted>& got,
   const pps::context_subject& sub,
-  pps::schema_version version) {
-    return std::ranges::any_of(got, [&](const pps::subject_version& sv) {
-        return sv.sub == sub && sv.version == version;
-    });
+  pps::schema_version version,
+  pps::is_deleted deleted = pps::is_deleted::no) {
+    return std::ranges::any_of(
+      got, [&](const pps::subject_version_deleted& sv) {
+          return sv.sub == sub && sv.version == version
+                 && sv.deleted == deleted;
+      });
 }
 
 void upsert_version(
@@ -1068,15 +1071,18 @@ SEASTAR_THREAD_TEST_CASE(test_sharded_store_list_subject_versions) {
     BOOST_REQUIRE(contains_subject_version(live, a, pps::schema_version{1}));
     BOOST_REQUIRE(contains_subject_version(live, b, pps::schema_version{1}));
 
-    // include_deleted brings back a's second version and subject d entirely.
+    // include_deleted brings back a's second version and subject d entirely,
+    // each flagged with its soft-delete state in a single scan.
     auto with_deleted
       = store.list_subject_versions(only_default, pps::include_deleted::yes)
           .get();
     BOOST_REQUIRE_EQUAL(with_deleted.size(), 4);
-    BOOST_REQUIRE(
-      contains_subject_version(with_deleted, a, pps::schema_version{2}));
-    BOOST_REQUIRE(
-      contains_subject_version(with_deleted, d, pps::schema_version{1}));
+    BOOST_REQUIRE(contains_subject_version(
+      with_deleted, a, pps::schema_version{1}, pps::is_deleted::no));
+    BOOST_REQUIRE(contains_subject_version(
+      with_deleted, a, pps::schema_version{2}, pps::is_deleted::yes));
+    BOOST_REQUIRE(contains_subject_version(
+      with_deleted, d, pps::schema_version{1}, pps::is_deleted::yes));
 
     // A different predicate selects only the other context.
     auto in_other = store

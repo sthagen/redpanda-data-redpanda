@@ -640,6 +640,25 @@ struct subject_version {
       , version{v} {}
     context_subject sub;
     schema_version version;
+
+    friend bool
+    operator==(const subject_version&, const subject_version&) = default;
+
+    template<typename H>
+    friend H AbslHashValue(H h, const subject_version& sv) {
+        return H::combine(std::move(h), sv.sub, sv.version);
+    }
+};
+
+/// A (subject, version) pair carrying that version's soft-delete state, so a
+/// single include_deleted scan can report both the live and deleted nodes.
+struct subject_version_deleted {
+    context_subject sub;
+    schema_version version;
+    is_deleted deleted{is_deleted::no};
+
+    friend bool operator==(
+      const subject_version_deleted&, const subject_version_deleted&) = default;
 };
 
 // Very similar to topic_key_type, separate to avoid intermingling storage code
@@ -728,6 +747,33 @@ struct stored_schema {
         return {schema.share(), version, id, deleted};
     }
     context_schema_id context_id() const { return {schema.sub().ctx, id}; }
+};
+
+/// \brief A field in a source Schema Registry response that Redpanda does not
+/// model and therefore cannot store (e.g. a rule set or metadata tags).
+///
+/// Surfaced as a sidecar diagnostic alongside the parsed schema so a migration
+/// task can apply its configured unsupported-feature policy and log what was
+/// dropped. Identified by a JSON pointer into the response (e.g. "/ruleSet" or
+/// "/metadata/tags").
+struct unsupported_feature {
+    ss::sstring json_pointer;
+    ss::sstring json_type;
+
+    friend bool operator==(
+      const unsupported_feature&, const unsupported_feature&) = default;
+
+    fmt::iterator format_to(fmt::iterator out) const {
+        return fmt::format_to(out, "{} ({})", json_pointer, json_type);
+    }
+};
+
+/// \brief The outcome of reading one schema from a source Schema Registry: the
+/// schema projected into Redpanda's supported model, plus any unsupported
+/// fields that were seen but not stored.
+struct source_schema_read {
+    stored_schema schema;
+    chunked_vector<unsupported_feature> unsupported;
 };
 
 ///\brief A mapping of version and schema id for a subject.

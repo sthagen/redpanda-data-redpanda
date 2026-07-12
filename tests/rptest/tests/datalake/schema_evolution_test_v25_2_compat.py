@@ -182,6 +182,7 @@ class GenericSchema:
             {
                 "bootstrap.servers": dl.redpanda.brokers(),
                 "schema.registry.url": dl.redpanda.schema_reg().split(",")[0],
+                "enable.idempotence": True,
             },
             default_value_schema=avro.loads(json.dumps(self._rep)),
         )

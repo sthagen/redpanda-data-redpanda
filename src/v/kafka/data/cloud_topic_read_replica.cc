@@ -10,7 +10,7 @@
 
 #include "kafka/data/cloud_topic_read_replica.h"
 
-#include "cloud_io/scheduler_types.h"
+#include "cloud_io/admission_control_types.h"
 #include "cloud_topics/level_one/frontend_reader/level_one_reader.h"
 #include "cloud_topics/log_reader_config.h"
 #include "cloud_topics/read_replica/metadata_provider.h"

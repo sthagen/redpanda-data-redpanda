@@ -289,7 +289,9 @@ eviction_policy::collect_reclaimable_offsets() {
      */
     chunked_vector<ss::lw_shared_ptr<cluster::partition>> partitions;
     for (const auto& p : _pm->local().partitions()) {
-        if (!p.second->remote_partition()) {
+        if (
+          !p.second->remote_partition()
+          && !p.second->log()->config().is_tiered_cloud()) {
             continue;
         }
         partitions.push_back(p.second);

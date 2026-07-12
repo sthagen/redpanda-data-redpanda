@@ -288,14 +288,20 @@ TEST(IcebergModeFormat, NewKeySchema) {
     enabled e{};
     e.key.mode = sm::schema_id_prefix;
     model::iceberg_mode m{std::move(e)};
-    EXPECT_EQ(to_string(m), "key:mode=schema_id_prefix");
+    EXPECT_EQ(
+      to_string(m),
+      "key:mode=schema_id_prefix;value:mode=binary,layout=flat;"
+      "headers:value_type=binary");
 }
 
 TEST(IcebergModeFormat, NewHeadersString) {
     enabled e{};
     e.headers.value_type = hsm::string;
     model::iceberg_mode m{std::move(e)};
-    EXPECT_EQ(to_string(m), "headers:value_type=string");
+    EXPECT_EQ(
+      to_string(m),
+      "key:mode=binary;value:mode=binary,layout=flat;"
+      "headers:value_type=string");
 }
 
 // New-format string that is equivalent to an old-format string serializes
@@ -491,4 +497,220 @@ TEST(IcebergModeNormalize, AllSectionsAllDefaults) {
     auto m = parse("key:;value:;headers:");
     ASSERT_TRUE(m.has_value());
     EXPECT_EQ(to_string(*m), "key_value");
+}
+
+// --- mode=string ---
+
+TEST(IcebergModeParse, KeyModeString) {
+    auto m = parse("key:mode=string");
+    ASSERT_TRUE(m.has_value());
+    ASSERT_FALSE(m->is_disabled());
+    EXPECT_EQ(m->key().mode, sm::string);
+    EXPECT_EQ(m->value().mode, sm::binary);
+}
+
+TEST(IcebergModeParse, ValueModeString) {
+    auto m = parse("value:mode=string");
+    ASSERT_TRUE(m.has_value());
+    ASSERT_FALSE(m->is_disabled());
+    EXPECT_EQ(m->key().mode, sm::binary);
+    EXPECT_EQ(m->value().mode, sm::string);
+}
+
+TEST(IcebergModeParse, KeyAndValueModeString) {
+    auto m = parse("key:mode=string;value:mode=string");
+    ASSERT_TRUE(m.has_value());
+    EXPECT_EQ(m->key().mode, sm::string);
+    EXPECT_EQ(m->value().mode, sm::string);
+}
+
+TEST(IcebergModeParse, StringModeWithHeaders) {
+    auto m = parse(
+      "key:mode=string;value:mode=string;headers:value_type=string");
+    ASSERT_TRUE(m.has_value());
+    EXPECT_EQ(m->key().mode, sm::string);
+    EXPECT_EQ(m->value().mode, sm::string);
+    EXPECT_EQ(m->headers().value_type, hsm::string);
+}
+
+TEST(IcebergModeParseError, SubjectWithStringMode) {
+    EXPECT_FALSE(parse("value:mode=string,subject=foo").has_value());
+    EXPECT_FALSE(parse("key:mode=string,subject=foo").has_value());
+}
+
+TEST(IcebergModeParseError, ProtobufNameWithStringMode) {
+    EXPECT_FALSE(parse("value:mode=string,protobuf_name=foo.Bar").has_value());
+}
+
+TEST(IcebergModeFormat, KeyModeString) {
+    enabled e{};
+    e.key.mode = sm::string;
+    model::iceberg_mode m{std::move(e)};
+    EXPECT_EQ(
+      to_string(m),
+      "key:mode=string;value:mode=binary,layout=flat;"
+      "headers:value_type=binary");
+}
+
+TEST(IcebergModeFormat, ValueModeString) {
+    enabled e{};
+    e.value.mode = sm::string;
+    model::iceberg_mode m{std::move(e)};
+    EXPECT_EQ(
+      to_string(m),
+      "key:mode=binary;value:mode=string,layout=flat;"
+      "headers:value_type=binary");
+}
+
+TEST(IcebergModeFormat, KeyAndValueModeString) {
+    enabled e{};
+    e.key.mode = sm::string;
+    e.value.mode = sm::string;
+    model::iceberg_mode m{std::move(e)};
+    EXPECT_EQ(
+      to_string(m),
+      "key:mode=string;value:mode=string,layout=flat;"
+      "headers:value_type=binary");
+}
+
+TEST(IcebergModeStringRoundtrip, KeyModeString) {
+    enabled e{};
+    e.key.mode = sm::string;
+    check_stable(model::iceberg_mode{std::move(e)});
+}
+
+TEST(IcebergModeStringRoundtrip, ValueModeString) {
+    enabled e{};
+    e.value.mode = sm::string;
+    check_stable(model::iceberg_mode{std::move(e)});
+}
+
+TEST(IcebergModeStringRoundtrip, KeyAndValueModeStringWithHeaders) {
+    enabled e{};
+    e.key.mode = sm::string;
+    e.value.mode = sm::string;
+    e.headers.value_type = hsm::string;
+    check_stable(model::iceberg_mode{std::move(e)});
+}
+
+TEST(IcebergModeWireRoundtrip, KeyModeString) {
+    enabled e{};
+    e.key.mode = sm::string;
+    model::iceberg_mode m{std::move(e)};
+    EXPECT_EQ(wire_roundtrip(m), m);
+}
+
+TEST(IcebergModeWireRoundtrip, ValueModeString) {
+    enabled e{};
+    e.value.mode = sm::string;
+    model::iceberg_mode m{std::move(e)};
+    EXPECT_EQ(wire_roundtrip(m), m);
+}
+
+TEST(IcebergModeWireRoundtrip, KeyAndValueModeStringWithHeaders) {
+    enabled e{};
+    e.key.mode = sm::string;
+    e.value.mode = sm::string;
+    e.headers.value_type = hsm::string;
+    model::iceberg_mode m{std::move(e)};
+    EXPECT_EQ(wire_roundtrip(m), m);
+}
+
+TEST(IcebergModeParseErrorMsg, SubjectWithStringMode) {
+    auto e = parse_err("value:mode=string,subject=foo");
+    EXPECT_EQ(
+      e,
+      "subject and protobuf_name require mode=schema_latest in section "
+      "'value'");
+}
+
+// --- value layout ---
+
+using vl = model::iceberg_mode::value_layout;
+
+TEST(IcebergModeLayout, ParseNestedWithSchemaIdPrefix) {
+    auto m = parse("value:mode=schema_id_prefix,layout=nested");
+    ASSERT_TRUE(m.has_value());
+    EXPECT_EQ(m->value().mode, sm::schema_id_prefix);
+    EXPECT_EQ(m->value().layout, vl::nested);
+}
+
+TEST(IcebergModeLayout, ParseNestedWithSchemaLatest) {
+    auto m = parse("value:mode=schema_latest,layout=nested");
+    ASSERT_TRUE(m.has_value());
+    EXPECT_EQ(m->value().mode, sm::schema_latest);
+    EXPECT_EQ(m->value().layout, vl::nested);
+}
+
+TEST(IcebergModeLayout, ParseFlatExplicit) {
+    // explicit flat is a no-op; serializes as the legacy key_value string
+    auto m = parse("value:layout=flat");
+    ASSERT_TRUE(m.has_value());
+    EXPECT_EQ(m->value().layout, vl::flat);
+    EXPECT_EQ(to_string(*m), "key_value");
+}
+
+TEST(IcebergModeLayout, ParseNestedWithBinaryRejected) {
+    auto e = parse_err("value:layout=nested");
+    EXPECT_EQ(
+      e,
+      "layout=nested requires a schema mode (schema_id_prefix or "
+      "schema_latest) in section 'value'");
+}
+
+TEST(IcebergModeLayout, ParseNestedWithStringRejected) {
+    auto e = parse_err("value:mode=string,layout=nested");
+    EXPECT_EQ(
+      e,
+      "layout=nested requires a schema mode (schema_id_prefix or "
+      "schema_latest) in section 'value'");
+}
+
+TEST(IcebergModeLayout, ParseLayoutInKeySection) {
+    auto e = parse_err("key:layout=nested");
+    EXPECT_EQ(e, "layout is only valid in the value section, not 'key'");
+}
+
+TEST(IcebergModeLayout, ParseUnknownLayout) {
+    auto e = parse_err("value:layout=sideways");
+    EXPECT_EQ(e, "unknown layout 'sideways' in section 'value'");
+}
+
+TEST(IcebergModeLayout, FormatNested) {
+    enabled e{};
+    e.value.mode = sm::schema_id_prefix;
+    e.value.layout = vl::nested;
+    model::iceberg_mode m{std::move(e)};
+    EXPECT_EQ(
+      to_string(m),
+      "key:mode=binary;value:mode=schema_id_prefix,layout=nested;"
+      "headers:value_type=binary");
+}
+
+TEST(IcebergModeLayout, StringRoundtripNested) {
+    enabled e{};
+    e.value.mode = sm::schema_id_prefix;
+    e.value.layout = vl::nested;
+    check_stable(model::iceberg_mode{std::move(e)});
+}
+
+TEST(IcebergModeLayout, WireRoundtripNested) {
+    enabled e{};
+    e.value.mode = sm::schema_id_prefix;
+    e.value.layout = vl::nested;
+    model::iceberg_mode m{std::move(e)};
+    EXPECT_EQ(wire_roundtrip(m), m);
+}
+
+TEST(IcebergModeLayout, NestedNeedsExtendedClusterFeature) {
+    enabled e{};
+    e.value.mode = sm::schema_id_prefix;
+    e.value.layout = vl::nested;
+    model::iceberg_mode m{std::move(e)};
+    EXPECT_TRUE(m.needs_extended_cluster_feature());
+}
+
+TEST(IcebergModeLayout, FlatDoesNotNeedExtendedClusterFeature) {
+    EXPECT_FALSE(
+      model::iceberg_mode::key_value.needs_extended_cluster_feature());
 }

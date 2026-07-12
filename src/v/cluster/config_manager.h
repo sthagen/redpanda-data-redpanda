@@ -54,8 +54,7 @@ public:
       ss::sharded<rpc::connection_cache>&,
       ss::sharded<partition_leaders_table>&,
       ss::sharded<cluster::members_table>&,
-      ss::sharded<ss::abort_source>&,
-      ss::sharded<cluster_recovery_table>&);
+      ss::sharded<ss::abort_source>&);
 
     // Preload early in startup, from bootstrap file or config cache
     static ss::future<preload_result> preload(const YAML::Node&);
@@ -140,7 +139,6 @@ private:
 
     ss::condition_variable _reconcile_wait;
     ss::sharded<ss::abort_source>& _as;
-    ss::sharded<cluster_recovery_table>& _recovery_table;
     ss::gate _gate;
 };
 

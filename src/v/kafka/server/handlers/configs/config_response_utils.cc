@@ -1218,7 +1218,41 @@ config_response_container_t make_topic_configs(
       maybe_make_documentation(
         include_documentation,
         config::shard_local_cfg().default_redpanda_storage_mode.desc()),
-      &describe_as_string<model::redpanda_storage_mode>);
+      [](const model::redpanda_storage_mode& mode) {
+          return ss::sstring(model::redpanda_storage_mode_user_name(mode));
+      });
+
+    // Read-only companion of redpanda.storage.mode: the exact
+    // implementation of the topic's storage mode, always present and never
+    // ambiguous (the tiered variants report tiered_v1/tiered_v2 while the
+    // mode itself displays both as 'tiered').
+    if (
+      config_property_requested(
+        config_keys, topic_property_redpanda_storage_mode_impl)) {
+        result.push_back(
+          config_response{
+            .name = ss::sstring(topic_property_redpanda_storage_mode_impl),
+            .value = ss::sstring(
+              model::redpanda_storage_mode_impl_name(
+                topic_properties.storage_mode)),
+            .read_only = true,
+            // The value is derived from the storage mode rather than being
+            // an explicit override: report it as a default so config
+            // backup/replay tooling does not treat it as user-set (and so
+            // upgrade config comparisons tolerate its appearance).
+            .is_default = true,
+            .config_source = describe_configs_source::default_config,
+            .config_type = describe_configs_type::string,
+            .documentation = maybe_make_documentation(
+              include_documentation,
+              "Exact implementation of the topic's storage mode. Tiered "
+              "topics report tiered_v1 (classic tiered-storage "
+              "architecture) or tiered_v2 (new tiered-storage "
+              "architecture); other modes mirror redpanda.storage.mode. "
+              "Read-only after creation: supply it at topic creation to "
+              "select the implementation explicitly."),
+          });
+    }
 
     return result;
 }

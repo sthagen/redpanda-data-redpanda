@@ -31,9 +31,13 @@ public:
             auto& config = config::shard_local_cfg();
             config.get("disable_metrics").set_value(false);
         }).get();
+        app.wire_up_and_start_crypto_services();
+        app.wire_up_bootstrap_services();
+        app.hydrate_cluster_config(make_minimal_cfg());
+        app.bootstrap_from_kvstore();
+        app.establish_cluster_view();
         app.initialize(proxy_config(), proxy_client_config());
         app.check_environment();
-        app.wire_up_and_start_crypto_services();
         app.wire_up_and_start(*app_signal, test_mode);
     }
 

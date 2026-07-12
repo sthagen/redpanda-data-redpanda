@@ -89,8 +89,9 @@ protected:
     bool _any_object_failed{false};
 
     // Number of output L1 objects successfully registered with the metadata
-    // builder.
+    // builder, and their total size in bytes.
     size_t _output_objects{0};
+    size_t _output_bytes{0};
 
     // The L1 object currently being built via multipart upload.
     struct inflight_object_t {

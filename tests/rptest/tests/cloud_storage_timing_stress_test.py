@@ -58,9 +58,11 @@ def assert_cloud_storage_usage(test):
     # updated the in-memory manifest (via the STM) while the S3 manifest
     # still reflects the old, larger segment sizes.
     wait_until(
-        lambda: not test.admin.get_partition_cloud_storage_status(test.topic, 0)[
-            "metadata_update_pending"
-        ],
+        lambda: (
+            not test.admin.get_partition_cloud_storage_status(test.topic, 0)[
+                "metadata_update_pending"
+            ]
+        ),
         timeout_sec=60,
         backoff_sec=1,
         err_msg="Timed out waiting for partition manifest upload to S3",
@@ -245,7 +247,6 @@ class CloudStorageTimingStressTest(RedpandaTest, PartitionMovementMixin):
     target_runtime = 60  # seconds
     check_interval = 10  # seconds
     check_timeout = 10  # seconds
-    allow_runtime_overshoot_by = 2
 
     topic_spec = TopicSpec(
         name="test-topic",
@@ -292,7 +293,12 @@ class CloudStorageTimingStressTest(RedpandaTest, PartitionMovementMixin):
         self.admin = Admin(self.redpanda)
         self.checks = []
 
-    def _create_producer(self, cleanup_policy: str = None) -> KgoVerifierProducer:
+        # 2x overshoot is allowed for dedicated nodes, 10x for non-dedicated
+        # nodes as the test is sensitive to the performance of the underlying
+        # hardware.
+        self.allow_runtime_overshoot_by = 2 if self.redpanda.dedicated_nodes else 10
+
+    def _create_producer(self, cleanup_policy: str) -> KgoVerifierProducer:
         bps = self.produce_byte_rate_per_ntp * self.topics[0].partition_count
         bytes_count = bps * self.target_runtime
         msg_count = bytes_count // self.message_size

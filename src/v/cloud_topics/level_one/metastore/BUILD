@@ -176,8 +176,14 @@ redpanda_cc_library(
 
 redpanda_cc_library(
     name = "retry",
+    srcs = [
+        "retry.cc",
+    ],
     hdrs = [
         "retry.h",
+    ],
+    implementation_deps = [
+        "//src/v/config",
     ],
     visibility = ["//visibility:public"],
     deps = [

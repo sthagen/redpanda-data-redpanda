@@ -530,6 +530,14 @@ class ResourceSettings:
     def num_cpus(self) -> int | None:
         return self._num_cpus
 
+    @property
+    def core_dump_limit(self) -> str | None:
+        return self._core_dump_limit
+
+    @core_dump_limit.setter
+    def core_dump_limit(self, value: str | None) -> None:
+        self._core_dump_limit = value
+
     def to_cli(self, *, dedicated_node: bool) -> Tuple[str, str]:
         """
 
@@ -999,12 +1007,12 @@ class SISettings:
             # per-group target_reserved values fits under the pool capacity.
             # The cluster default sums to 6; shrink to a 1+1+1=3 override when
             # the pool fits that but not the default. For pools smaller than 3
-            # we leave the override unset so build_scheduler_config's clamp
+            # we leave the override unset so build_admission_control_config's clamp
             # falls back to no reservation (every admit through the common
             # pool) — at cap<3 there isn't enough room to keep a per-group
             # floor under the assertion.
             if 3 <= self.cloud_storage_max_connections < 6:
-                conf["cloud_io_scheduler_reservation"] = [
+                conf["cloud_io_admission_control_reservation"] = [
                     "producer_upload:1",
                     "consumer_fetch:1",
                     "default_group:1",
@@ -1269,7 +1277,7 @@ class SchemaRegistryConfig(TlsConfig):
     SR_TLS_CLIENT_KEY_FILE = "/etc/redpanda/sr_client.key"
     SR_TLS_CLIENT_CRT_FILE = "/etc/redpanda/sr_client.crt"
 
-    mode_mutability = False
+    mode_mutability = True
 
     def __init__(self) -> None:
         super(SchemaRegistryConfig, self).__init__()
@@ -1306,6 +1314,10 @@ class RedpandaServiceConstants:
     # at bootstrap with rf=1 and reconfigured up to
     # internal_topic_replication_factor as nodes join.
     CLOUD_TOPICS_METASTORE_TOPIC = "ct_l1_domain"
+    # ID allocator topic (model::id_allocator_nt). Created lazily on the first
+    # init_producer_id request, so it may appear in the data directory even on
+    # an otherwise-idle cluster.
+    ID_ALLOCATOR_TOPIC = "id_allocator"
 
 
 class RedpandaServiceABC(ABC, RedpandaServiceConstants):
@@ -3490,7 +3502,10 @@ class RedpandaService(Service, RedpandaServiceABC):
                     "_redpanda.audit_log",
                     "_redpanda.transform_logs",
                 },
-                self.KAFKA_INTERNAL_NAMESPACE: {self.CLOUD_TOPICS_METASTORE_TOPIC},
+                self.KAFKA_INTERNAL_NAMESPACE: {
+                    self.CLOUD_TOPICS_METASTORE_TOPIC,
+                    self.ID_ALLOCATOR_TOPIC,
+                },
             }
             expected["l1_staging"] = set()  # make type deduction happy
 
@@ -3753,6 +3768,28 @@ class RedpandaService(Service, RedpandaServiceABC):
         finally:
             self.signal_redpanda(node, signal=signal.SIGCONT)
             self.add_to_started_nodes(node)
+
+    @contextmanager
+    def core_dumps_disabled(self):
+        """Context manager that disables core dumps for redpanda processes
+        started within the block, restoring the prior limit on exit.
+
+        Intended for tests that deliberately abort a node -- e.g. a startup that
+        is expected to fail -- where the SIGILL from vassert's __builtin_trap()
+        would otherwise trigger a core dump. Flushing a multi-GB core on a loaded
+        host can take longer than the start/termination timeout and flake the
+        test; the abort reason is already captured in the log and the
+        crash_tracker crash file, so the kernel core adds no diagnostic value.
+
+        The limit is a shared resource setting, so this affects every node
+        started while the block is active -- fine for the sequential single-node
+        starts these tests perform."""
+        prev = self._resource_settings.core_dump_limit
+        self._resource_settings.core_dump_limit = "0"
+        try:
+            yield
+        finally:
+            self._resource_settings.core_dump_limit = prev
 
     def sockets_clear(self, node: RemoteClusterNode):
         """
@@ -4331,8 +4368,12 @@ class RedpandaService(Service, RedpandaServiceABC):
         cur_state = self.get_feature_state(feature_name)
         if active and cur_state == "unavailable":
             # If we have just restarted after an upgrade, wait for cluster version
-            # to progress and for the feature to become available.
-            self.await_feature(feature_name, "available", timeout_sec=timeout_sec)
+            # to progress and for the feature to become available. Features with
+            # available_policy::always auto-activate as soon as they become
+            # available, so accept "active" too.
+            self.await_feature(
+                feature_name, {"available", "active"}, timeout_sec=timeout_sec
+            )
         self._admin.put_feature(feature_name, {"state": target_state})
         self.await_feature(feature_name, target_state, timeout_sec=timeout_sec)
 
@@ -4348,7 +4389,7 @@ class RedpandaService(Service, RedpandaServiceABC):
     def await_feature(
         self,
         feature_name: str,
-        await_state: str,
+        await_state: str | set[str],
         *,
         timeout_sec: int,
         nodes: list[ClusterNode] | None = None,
@@ -4360,16 +4401,18 @@ class RedpandaService(Service, RedpandaServiceABC):
         if nodes is None:
             nodes = self.started_nodes()
 
+        await_states = {await_state} if isinstance(await_state, str) else await_state
+
         def is_awaited_state():
             for n in nodes:
                 state = self.get_feature_state(feature_name, node=n)
-                if state != await_state:
+                if state not in await_states:
                     self.logger.info(
-                        f"Feature {feature_name} not yet {await_state} on {n.name} (state {state})"
+                        f"Feature {feature_name} not yet in {await_states} on {n.name} (state {state})"
                     )
                     return False
 
-            self.logger.info(f"Feature {feature_name} is now {await_state}")
+            self.logger.info(f"Feature {feature_name} is now in {await_states}")
             return True
 
         wait_until(is_awaited_state, timeout_sec=timeout_sec, backoff_sec=1)

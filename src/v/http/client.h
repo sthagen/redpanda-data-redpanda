@@ -36,6 +36,7 @@
 
 #include <chrono>
 #include <exception>
+#include <memory>
 #include <stdexcept>
 #include <string>
 
@@ -101,6 +102,11 @@ public:
     using field = boost::beast::http::field;
     using verb = boost::beast::http::verb;
 
+    /// Thrown by the dial abort check between dialed addresses when
+    /// shutdown_now() was requested; converted by get_connected into a
+    /// graceful timed_out result.
+    struct shutdown_requested_exception : ss::abort_requested_exception {};
+
     explicit client(const net::base_transport::configuration& cfg);
     client(
       const net::base_transport::configuration& cfg,
@@ -115,6 +121,13 @@ public:
       ss::shared_ptr<client_probe> probe,
       ss::lowres_clock::duration max_idle_time);
 
+    // Request and response streams and in-flight continuations hold
+    // back-pointers to the client.
+    client(const client&) = delete;
+    client& operator=(const client&) = delete;
+    client(client&&) = delete;
+    client& operator=(client&&) = delete;
+
     /// Stop must be called before destroying the client object.
     ss::future<> stop();
     using net::base_transport::shutdown;
@@ -124,9 +137,10 @@ public:
      * Calling transport::shutdown will shutdown the underlying transport and
      * cause active connections and on-going connection attempts to fail.
      * However, the underlying transport can be reused by calling
-     * transport::connect. This behavior is not sufficient to break out of a
-     * connection retry loop, such as `client::get_connected`. Instead, we set a
-     * flag that is checked in such situations so that fast tear down can occur.
+     * transport::connect. This behavior is not sufficient to interrupt a
+     * connection attempt in progress in `client::get_connected`. Instead, we
+     * abort the in-flight dial with a typed exception that `get_connected`
+     * converts into a graceful timed_out result instead of an abort error.
      *
      * Note that we avoid doing this by closing the _connect_gate because http
      * clients are stored in a pool and reused. Closing this gate is reserved
@@ -134,15 +148,16 @@ public:
      * difficult to orchestrate correctly.
      */
     void shutdown_now() noexcept {
-        _shutdown_now = true;
+        _shutdown_as.request_abort_ex(shutdown_requested_exception{});
         shutdown();
     }
 
     // close the connect gate and fail_outstanding_futures which calls shutdown
     ss::future<> shutdown_and_stop() final { co_return co_await stop(); }
 
-    /// Return immediately if connected or make connection attempts
-    /// until success, timeout or error
+    /// Make a single connection attempt bounded by \p timeout, dialing
+    /// every resolved address in sequence. Failures to connect surface
+    /// as reconnect_result_t::timed_out; retrying is up to the caller.
     ss::future<reconnect_result_t>
     get_connected(ss::lowres_clock::duration timeout, prefix_logger ctxlog);
 
@@ -304,6 +319,13 @@ private:
     template<class BufferSeq>
     static ss::future<> forward(client* client, BufferSeq&& seq);
 
+    /// Unlike the base implementation which dials only the first
+    /// resolved address, try all of them in sequence (e.g. both IPv4
+    /// and IPv6 for dual-stack endpoints).
+    ss::future<ss::connected_socket> dial(
+      const net::unresolved_address& target,
+      net::clock_type::time_point deadline) override;
+
     // Make http_request, if the transport is not yet connected it will connect
     // first otherwise the future will resolve immediately.
     ss::future<request_response_t>
@@ -318,8 +340,9 @@ private:
     void check() const;
 
     prefix_logger _ctxlog;
-    bool _stopped{false};
-    bool _shutdown_now{false};
+    /// Recreated at the start of every connection attempt;
+    /// shutdown_now() aborts it.
+    ss::abort_source _shutdown_as;
     std::string _host_with_port;
     ss::gate _connect_gate;
     const ss::abort_source* _as;
@@ -347,15 +370,16 @@ inline ss::future<> client::forward(client* client, BufferSeq&& seq) {
 /// Helper to close an http client after a function has been called on it.
 /// Modeled after ss::with_file
 template<typename Func>
-auto with_client(client&& cl, Func func) {
+auto with_client(std::unique_ptr<client> cl, Func func) {
     static_assert(
       std::is_nothrow_move_constructible_v<Func>,
       "Func's move constructor must not throw");
     return ss::do_with(
-      std::move(cl), [func = std::move(func)](client& cl) mutable {
-          return ss::futurize_invoke(func, cl).finally([&cl] {
-              return cl.stop().then([&cl] {
-                  cl.shutdown();
+      std::move(cl),
+      [func = std::move(func)](std::unique_ptr<client>& cl) mutable {
+          return ss::futurize_invoke(func, *cl).finally([&cl] {
+              return cl->stop().then([&cl] {
+                  cl->shutdown();
                   return ss::make_ready_future<>();
               });
           });

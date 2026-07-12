@@ -248,17 +248,6 @@ partition_properties_stm::replicate_properties_update(
           current_state);
         co_return errc::invalid_data_migration_state;
     }
-    if (
-      cmd.writes_revision_id == current_state.writes_revision_id
-      && cmd.writes_disabled != current_state.writes_disabled) [[unlikely]] {
-        vlog(
-          _log.error,
-          "Conflicting writes_disabled state for the same revision: {}, "
-          "current state: {}",
-          cmd,
-          current_state);
-        co_return errc::invalid_data_migration_state;
-    }
 
     // replicate the command
     auto b = make_update_partitions_batch(cmd);

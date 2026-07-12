@@ -45,7 +45,7 @@ redpanda_cc_gtest(
         "materialized_extent_test.cc",
     ],
     deps = [
-        "//src/v/cloud_io:scheduler_types",
+        "//src/v/cloud_io:admission_control_types",
         "//src/v/cloud_topics:types",
         "//src/v/cloud_topics/level_zero/common:extent_meta",
         "//src/v/cloud_topics/level_zero/common:micro_probe",
@@ -70,7 +70,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         "//src/v/base",
-        "//src/v/cloud_io:scheduler_types",
+        "//src/v/cloud_io:admission_control_types",
         "//src/v/cloud_topics:types",
         "//src/v/cloud_topics/level_zero/reader:materialized_extent_reader",
         "//src/v/cloud_topics/level_zero/reader/tests:materialized_extent_fixture",
@@ -92,7 +92,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         "//src/v/base",
-        "//src/v/cloud_io:scheduler_types",
+        "//src/v/cloud_io:admission_control_types",
         "//src/v/cloud_topics:types",
         "//src/v/cloud_topics/level_zero/pipeline:read_pipeline",
         "//src/v/cloud_topics/level_zero/reader:fetch_handler",

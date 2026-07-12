@@ -16,12 +16,15 @@
 #include "datalake/record_schema_resolver.h"
 #include "datalake/record_translator.h"
 #include "datalake/serde_parquet_writer.h"
+#include "datalake/table_id_provider.h"
 #include "datalake/tests/catalog_and_registry_fixture.h"
 #include "datalake/tests/record_generator.h"
 #include "datalake/tests/test_data_writer.h"
 #include "datalake/tests/test_utils.h"
 #include "datalake/translation/translation_probe.h"
 #include "features/feature_table.h"
+#include "iceberg/datatypes.h"
+#include "iceberg/schema.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/record_batch_reader.h"
@@ -35,11 +38,11 @@ using namespace datalake;
 namespace {
 simple_schema_manager simple_schema_mgr(iceberg::uri("s3://bucket/test"));
 binary_type_resolver bin_resolver;
-direct_table_creator t_creator{bin_resolver, simple_schema_mgr};
+direct_table_creator t_creator{simple_schema_mgr};
 const model::ntp
   ntp(model::ns{"rp"}, model::topic{"t"}, model::partition_id{0});
 const model::revision_id rev{123};
-default_translator translator;
+record_translator translator;
 ss::abort_source as;
 } // namespace
 
@@ -57,6 +60,7 @@ TEST(DatalakeMultiplexerTest, TestMultiplexer) {
       rev,
       std::move(writer_factory),
       simple_schema_mgr,
+      bin_resolver,
       bin_resolver,
       translator,
       t_creator,
@@ -119,6 +123,7 @@ TEST(DatalakeMultiplexerTest, TestMultiplexerWriteError) {
       std::move(writer_factory),
       simple_schema_mgr,
       bin_resolver,
+      bin_resolver,
       translator,
       t_creator,
       model::iceberg_invalid_record_action::dlq_table,
@@ -174,6 +179,7 @@ TEST(DatalakeMultiplexerTest, WritesDataFiles) {
       rev,
       std::move(writer_factory),
       simple_schema_mgr,
+      bin_resolver,
       bin_resolver,
       translator,
       t_creator,
@@ -250,13 +256,17 @@ public:
     RecordMultiplexerParquetTest()
       : schema_mgr(catalog, &features)
       , type_resolver(registry)
-      , t_creator(type_resolver, schema_mgr) {
+      , t_creator(schema_mgr) {
         features.testing_activate_all();
     }
 
     features::feature_table features;
     catalog_schema_manager schema_mgr;
     record_schema_resolver type_resolver;
+    binary_type_resolver bin_key_resolver;
+    // Configured to match record_schema_resolver (schema_id_prefix val mode).
+    record_translator schema_translator{
+      {}, {model::iceberg_mode::schema_mode::schema_id_prefix}, {}};
     direct_table_creator t_creator;
 };
 
@@ -312,7 +322,8 @@ TEST_F(RecordMultiplexerParquetTest, TestSimple) {
       std::move(writer_factory),
       schema_mgr,
       type_resolver,
-      translator,
+      bin_key_resolver,
+      schema_translator,
       t_creator,
       model::iceberg_invalid_record_action::dlq_table,
       iceberg::field_name_comparison::verbatim,
@@ -331,4 +342,100 @@ TEST_F(RecordMultiplexerParquetTest, TestSimple) {
     const auto num_records = num_hrs * batches_per_hr * records_per_batch;
     EXPECT_EQ(res.value().last_offset(), start_offset() + num_records - 1);
     EXPECT_EQ(res.value().kafka_bytes_processed, total_bytes);
+}
+
+namespace {
+constexpr std::string_view key_avro_schema = R"({
+    "type": "record",
+    "name": "KeyRecord",
+    "fields": [
+        { "name": "id", "type": "long" }
+    ]
+})";
+} // namespace
+
+// Verify that key:mode=schema_id_prefix decodes keys via the schema registry
+// and promotes the decoded schema type into the "redpanda.key" iceberg field
+// (replacing the default binary type).
+TEST_F(RecordMultiplexerParquetTest, TestKeySchemaMode) {
+    tests::record_generator gen(&registry);
+    auto key_reg
+      = gen.register_avro_schema("key_schema", key_avro_schema).get();
+    ASSERT_FALSE(key_reg.has_error()) << key_reg.error();
+    auto val_reg = gen.register_avro_schema("val_schema", avro_schema).get();
+    ASSERT_FALSE(val_reg.has_error()) << val_reg.error();
+
+    // Build records with Avro-encoded keys and values.
+    const int num_records = 5;
+    chunked_circular_buffer<model::record_batch> batches;
+    model::offset o{0};
+    for (int i = 0; i < num_records; ++i) {
+        storage::record_batch_builder builder(
+          model::record_batch_type::raft_data, model::offset{o});
+        auto key_buf = gen.encode_avro_buf("key_schema").get();
+        ASSERT_FALSE(key_buf.has_error()) << key_buf.error();
+        auto add_res = gen
+                         .add_random_avro_record(
+                           builder, "val_schema", std::move(key_buf.value()))
+                         .get();
+        ASSERT_FALSE(add_res.has_error());
+        ++o;
+        batches.emplace_back(std::move(builder).build());
+    }
+
+    auto reader = model::make_memory_record_batch_reader(std::move(batches));
+
+    temporary_dir tmp_dir("datalake_key_schema_test");
+    noop_mem_tracker tracker;
+    auto writer_factory = std::make_unique<local_parquet_file_writer_factory>(
+      datalake::local_path(tmp_dir.get_path()),
+      "data",
+      ss::make_shared<datalake::serde_parquet_writer_factory>(),
+      tracker);
+    translation_probe probe(ntp);
+
+    // Translator with key and value both in schema_id_prefix mode.
+    using sm = model::iceberg_mode::schema_mode;
+    record_translator key_schema_translator{
+      {sm::schema_id_prefix}, {sm::schema_id_prefix}, {}};
+
+    record_multiplexer mux(
+      ntp,
+      rev,
+      std::move(writer_factory),
+      schema_mgr,
+      type_resolver, // val resolver: record_schema_resolver
+      type_resolver, // key resolver: same, both use schema_id prefix
+      key_schema_translator,
+      t_creator,
+      model::iceberg_invalid_record_action::dlq_table,
+      iceberg::field_name_comparison::verbatim,
+      location_provider(scoped_remote->remote.local().provider(), bucket_name),
+      probe,
+      &features);
+
+    mux.multiplex(std::move(reader), kafka::offset{0}, model::no_timeout, as)
+      .get();
+    record_multiplexer::finished_files files;
+    auto res = std::move(mux).finish(files).get();
+    ASSERT_FALSE(res.has_error()) << res.error();
+    ASSERT_EQ(files.data_files.size(), 1);
+    EXPECT_EQ(files.data_files[0].local_file.row_count, num_records);
+
+    // The "redpanda.key" field in the iceberg schema should be a struct_type
+    // decoded from the Avro key schema, not the default binary_type.
+    auto load_res
+      = catalog.load_table(datalake::table_id_provider::table_id(ntp.tp.topic))
+          .get();
+    ASSERT_FALSE(load_res.has_error()) << load_res.error();
+    auto& table = load_res.value();
+    auto sit = std::ranges::find(
+      table.schemas, table.current_schema_id, &iceberg::schema::schema_id);
+    ASSERT_FALSE(sit == table.schemas.end());
+    auto* key_field = sit->schema_struct.find_field_by_name(
+      {ss::sstring("redpanda"), ss::sstring("key")});
+    ASSERT_NE(key_field, nullptr);
+    EXPECT_TRUE(std::holds_alternative<iceberg::struct_type>(key_field->type))
+      << "expected redpanda.key to be struct_type (decoded Avro key schema), "
+         "not binary";
 }

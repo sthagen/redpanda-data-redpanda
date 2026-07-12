@@ -14,8 +14,8 @@
 #include "schema/registry.h"
 
 #include <seastar/core/future.hh>
+#include <seastar/util/noncopyable_function.hh>
 
-#include <functional>
 #include <map>
 
 namespace schema {
@@ -42,6 +42,8 @@ class fake_registry : public schema::registry {
 public:
     bool is_enabled() const override { return true; };
 
+    ss::future<> ensure_internal_topic() override { return ss::now(); }
+
     ss::future<pandaproxy::schema_registry::schema_getter*>
     getter() const override;
     ss::future<pandaproxy::schema_registry::schema_getter*>
@@ -64,10 +66,19 @@ public:
       std::optional<pandaproxy::schema_registry::schema_version> version)
       const override;
 
-    ss::future<chunked_vector<pandaproxy::schema_registry::subject_version>>
+    ss::future<
+      chunked_vector<pandaproxy::schema_registry::subject_version_deleted>>
     list_subject_versions(
-      std::function<bool(const pandaproxy::schema_registry::context_subject&)>
-        filter,
+      ss::noncopyable_function<
+        bool(const pandaproxy::schema_registry::context_subject&)> filter,
+      pandaproxy::schema_registry::include_deleted inc_del) const override;
+
+    ss::future<bool> has_subjects(
+      pandaproxy::schema_registry::context ctx,
+      pandaproxy::schema_registry::include_deleted inc_del) const override;
+
+    ss::future<chunked_vector<pandaproxy::schema_registry::context_subject>>
+    get_subjects(
       pandaproxy::schema_registry::include_deleted inc_del) const override;
 
     ss::future<pandaproxy::schema_registry::context_schema_id> create_schema(
@@ -101,6 +112,21 @@ public:
     delete_config(pandaproxy::schema_registry::context_subject sub) override;
 
     const std::vector<pandaproxy::schema_registry::stored_schema>& get_all();
+
+    /// Test accessors for the mode/config overrides written to the registry, so
+    /// a test can assert what mode/config replication applied.
+    const std::map<
+      pandaproxy::schema_registry::context_subject,
+      pandaproxy::schema_registry::mode>&
+    modes() const {
+        return _modes;
+    }
+    const std::map<
+      pandaproxy::schema_registry::context_subject,
+      pandaproxy::schema_registry::compatibility_level>&
+    configs() const {
+        return _configs;
+    }
 
     void set_inject_failures(const std::exception_ptr& injected) {
         _injected_failure = injected;

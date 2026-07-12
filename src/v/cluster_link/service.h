@@ -135,16 +135,18 @@ public:
     delete_cluster_link(model::name_t name, bool force_delete_link);
 
     /**
-     * @brief Tests connectivity and permissions to a source cluster without
+     * @brief Tests connectivity and permissions for a prospective link without
      * persisting any state. Used to implement the validate_only path of
      * CreateShadowLink.
      *
-     * @param name Link name used in log and error messages
-     * @param config Connection configuration to test
+     * Takes the full metadata (not just the connection config) so that
+     * replication-specific preflight checks, such as the Schema Registry API
+     * sync checks, can inspect the link configuration.
+     *
+     * @param md Prospective link metadata to validate
      * @return nothing on success or a preflight error
      */
-    ss::future<cl_result<void>>
-    test_connection(model::name_t name, model::connection_config config);
+    ss::future<cl_result<void>> test_connection(model::metadata md);
 
     /**
      * @brief Removes a shadow topic from a shadow link, removing all state but
@@ -198,6 +200,14 @@ private:
     ss::future<> do_handle_enable_shadow_link_change();
     ss::future<> maybe_start_manager();
     ss::future<> maybe_stop_manager();
+
+    /// If any shadow link uses Schema-Registry API mode, ensures the
+    /// destination Schema Registry's internal `_schemas` topic exists so the
+    /// sync task (which runs on the topic's partition-0 leader) can start
+    /// without external Schema Registry traffic. A no-op when no such link
+    /// exists, so a cluster with shadow linking enabled but no API-mode link
+    /// keeps a clean data directory. Idempotent, cluster-wide, best-effort.
+    ss::future<> maybe_bootstrap_destination_sr();
 
     template<typename Func, typename Ret = std::invoke_result_t<Func, manager*>>
     requires std::invocable<Func, manager*>

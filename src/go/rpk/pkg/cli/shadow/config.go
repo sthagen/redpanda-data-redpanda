@@ -199,12 +199,26 @@ func generateSampleConfig(cloud bool) *ShadowLinkConfig {
 		SchemaRegistrySyncOptions: &SchemaRegistrySyncOptions{
 			ShadowSchemaRegistryTopic: &ShadowSchemaRegistryTopic{},
 		},
+		RoleSyncOptions: &RoleSyncOptions{
+			Interval: 30 * time.Second,
+			Paused:   false,
+			RoleNameFilters: []*NameFilter{
+				{
+					PatternType: PatternTypeLiteral,
+					FilterType:  FilterTypeInclude,
+					Name:        "*",
+				},
+			},
+		},
 	}
 	if cloud {
 		slCfg.CloudOptions = &CloudShadowLinkOptions{
 			SourceRedpandaID: "m7xtv2qq5njbhwruk88f",
 			ShadowRedpandaID: "p9skc1dd3fmzgvquj66h",
 		}
+
+		// Role sync is not yet supported for Redpanda Cloud shadow links.
+		slCfg.RoleSyncOptions = nil
 
 		slCfg.ClientOptions.BootstrapServers = nil
 		// This is confusing on Cloud, user is already providing the Redpanda ID.
@@ -352,6 +366,10 @@ func toScreamingSnakeCase(s string) string {
 func writeFieldTemplate(sb *strings.Builder, field protoreflect.FieldDescriptor, indent int, cloud bool) {
 	// Skip tls_file_settings for Cloud (only tls_pem_settings is valid)
 	if cloud && string(field.Name()) == "tls_file_settings" {
+		return
+	}
+	// Role sync is not yet supported for Redpanda Cloud shadow links.
+	if cloud && string(field.Name()) == "role_sync_options" {
 		return
 	}
 

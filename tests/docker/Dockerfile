@@ -100,6 +100,14 @@ RUN --mount=type=cache,id=dl-cache,target=/dl-cache /kafka-tools && \
 
 #################################
 
+FROM base AS confluent-schema-registry
+
+COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/confluent-schema-registry /
+RUN --mount=type=cache,id=dl-cache,target=/dl-cache /confluent-schema-registry && \
+    rm /confluent-schema-registry
+
+#################################
+
 FROM java-base AS base-with-tools
 
 COPY --chmod=0755 tests/docker/ducktape-deps/tool-pkgs /
@@ -444,6 +452,7 @@ COPY --from=java-verifiers /opt/redpanda-tests/java /opt/redpanda-tests/java
 COPY --from=java-verifiers /opt/verifiers /opt/verifiers
 COPY --from=java-verifiers /opt/kafka-serde /opt/kafka-serde
 COPY --from=kafka-tools /opt /opt
+COPY --from=confluent-schema-registry /opt/confluent /opt/confluent
 COPY --from=kcat /usr/local/bin/kcat /usr/local/bin/
 COPY --from=sarama-examples /opt/sarama /opt/sarama
 COPY --from=golang-test-clients /opt/redpanda-tests/go /opt/redpanda-tests/go

@@ -307,4 +307,60 @@ record_generator::add_random_json_record(
     co_return std::nullopt;
 }
 
+ss::future<checked<iobuf, record_generator::error>>
+record_generator::encode_avro_buf(
+  std::string_view name, testing::avro_generator_config config) {
+    using namespace pandaproxy::schema_registry;
+    auto it = _id_by_name.find(name);
+    if (it == _id_by_name.end()) {
+        co_return error{fmt::format("Schema {} is missing", name)};
+    }
+    auto ctx_schema_id = it->second;
+    auto schema_def_res = co_await _sr->get_valid_schema(ctx_schema_id);
+    if (!schema_def_res.has_value()) {
+        co_return error{
+          fmt::format("Schema {} not in store", ctx_schema_id.id)};
+    }
+    auto& schema_def = schema_def_res.value();
+    if (schema_def.type() != schema_type::avro) {
+        co_return error{
+          fmt::format("Schema {} has wrong type: {}", name, schema_def.type())};
+    }
+
+    iobuf buf;
+    buf.append("\0", 1);
+    int32_t encoded_id = ss::cpu_to_be(ctx_schema_id.id());
+    buf.append((const uint8_t*)(&encoded_id), 4);
+
+    avro::NodePtr node_ptr;
+    struct visitor {
+    public:
+        explicit visitor(avro::NodePtr& ptr)
+          : node_ptr(ptr) {}
+        avro::NodePtr& node_ptr;
+        void operator()(const avro_schema_definition& avro_def) {
+            node_ptr = avro_def().root();
+        }
+        void operator()(const protobuf_schema_definition&) {}
+        void operator()(const json_schema_definition&) {}
+    };
+    schema_def.visit(visitor(node_ptr));
+    if (!node_ptr) {
+        co_return error{
+          fmt::format("Schema {} didn't resolve Avro node", name)};
+    }
+    testing::avro_generator gen(config);
+    auto datum = gen.generate_datum(node_ptr);
+    std::unique_ptr<avro::OutputStream> out = avro::memoryOutputStream();
+    avro::EncoderPtr e = avro::binaryEncoder();
+    e->init(*out);
+    avro::encode(*e, datum);
+    e->flush();
+    auto snap = avro::snapshot(*out);
+    iobuf data_buf;
+    data_buf.append(snap->data(), snap->size());
+    buf.append(std::move(data_buf));
+    co_return buf;
+}
+
 } // namespace datalake::tests

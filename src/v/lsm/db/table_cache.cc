@@ -310,7 +310,8 @@ private:
 
     ss::future<ss::lw_shared_ptr<sst::reader>>
     open_reader(internal::file_handle h, uint64_t file_size) {
-        auto file = co_await _persistence->open_random_access_reader(h);
+        auto file = co_await _persistence->open_random_access_reader(
+          h, file_size);
         if (!file) {
             throw invalid_argument_exception("file for ID {} is not found", h);
         }

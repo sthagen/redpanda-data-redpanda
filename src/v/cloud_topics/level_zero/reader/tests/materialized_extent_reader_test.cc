@@ -9,7 +9,7 @@
  */
 
 #include "base/vlog.h"
-#include "cloud_io/scheduler_types.h"
+#include "cloud_io/admission_control_types.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/reader/materialized_extent_reader.h"
 #include "cloud_topics/level_zero/reader/tests/materialized_extent_fixture.h"

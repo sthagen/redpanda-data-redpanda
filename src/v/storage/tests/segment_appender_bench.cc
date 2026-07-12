@@ -33,6 +33,7 @@ struct appender_fixture {
          */
         tmpbuf_file::store_t store;
         ss::gate gate;
+        co_await _resources.start();
         auto appender = co_await make_appender(store);
 
         static constexpr std::array<char, WriteSize> write_buf = [] {
@@ -56,6 +57,7 @@ struct appender_fixture {
 
         co_await gate.close();
         co_await appender->close();
+        co_await _resources.stop();
         co_return iterations;
     }
 

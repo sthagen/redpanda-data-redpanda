@@ -16,6 +16,8 @@
 #include "bytes/iobuf.h"
 #include "config/base_property.h"
 #include "http/logger.h"
+#include "net/dial.h"
+#include "net/dns.h"
 #include "ssx/sformat.h"
 
 #include <seastar/core/abort_source.hh>
@@ -118,9 +120,28 @@ void client::check() const {
     }
 }
 
+ss::future<ss::connected_socket> client::dial(
+  const net::unresolved_address& target, net::clock_type::time_point deadline) {
+    auto addresses = co_await net::resolve_dns_all(target);
+    // A TCP handshake is one RTT; no physical link exceeds 1s. We favor
+    // latency: on a bad network, fail fast and rely on the callers'
+    // retry loops rather than wait on a single attempt.
+    co_return co_await net::dial_serially(
+      std::move(addresses),
+      deadline,
+      net::fixed_timeout_dial_policy{.attempt_timeout = 1s},
+      &http_log,
+      [this] {
+          // The caller's abort propagates; a shutdown_now() throws its
+          // typed exception which get_connected converts to timed_out.
+          check();
+          _shutdown_as.check();
+      });
+}
+
 ss::future<client::request_response_t> client::make_request(
   client::request_header&& header, ss::lowres_clock::duration timeout) {
-    if (unlikely(_stopped)) {
+    if (unlikely(_connect_gate.is_closed())) {
         std::runtime_error err("client is stopped");
         return ss::make_exception_future<client::request_response_t>(err);
     }
@@ -224,77 +245,72 @@ ss::future<client::request_response_t> client::make_request(
 
 ss::future<reconnect_result_t> client::get_connected(
   ss::lowres_clock::duration timeout, prefix_logger ctxlog) {
-    auto clear_shutdown_signal = ss::defer(
-      [this]() noexcept { _shutdown_now = false; });
-    if (unlikely(_stopped)) {
+    // A fresh abort source so that a shutdown_now() from a previous
+    // connection attempt can't affect this one.
+    _shutdown_as = {};
+    if (unlikely(_connect_gate.is_closed())) {
         co_await ss::coroutine::return_exception(
           std::runtime_error("client is stopped"));
     }
     vlog(
       ctxlog.debug,
-      "about to start connecting, is_valid: {}, connect gate closed: {}, "
-      "dispatch gate closed: {}",
+      "about to start connecting, is_valid: {}, dispatch gate closed: {}",
       is_valid(),
-      _connect_gate.is_closed(),
       _dispatch_gate.is_closed());
-    auto current = ss::lowres_clock::now();
-    const auto deadline = current + timeout;
-    const auto interval = 1s; // 500ms;
-    while (!_connect_gate.is_closed() && current < deadline) {
-        if (_as != nullptr) {
-            _as->check();
-        }
-        // Reconnect attempts have to stop if:
-        // - shutdown method was called
-        // - abort was requested
-        // - unrecoverable error occurred
-        // - timeout reached
-        try {
-            // base_transport::connect calls _dispatcher_gate.close
-            // on every reconnect. Because of that concurrent call
-            // to base_transport::stop could lead to failure because
-            // _dispatcher_gate is already closed. We need to synchronize
-            // this loop with the `stop` call.
-            ss::gate::holder gg(_connect_gate);
-            co_await connect(current + interval);
-            break;
-        } catch (const std::system_error& err) {
-            vlog(ctxlog.trace, "connection refused {}", err);
-        } catch (const ss::timed_out_error&) {
-            vlog(ctxlog.trace, "connection timeout");
-        }
-        // on the off chance that shutdown_now flag got set outside this loop,
-        // we allow for one successful connect attempt. the alternative to this
-        // heuristic would be to add reset interfaces and plumb that down
-        // through the http client pool / storage client interfaces.
-        if (_shutdown_now) {
-            vlog(
-              ctxlog.debug,
-              "Stopping connect attempts due to shutdown request");
-            if (is_valid()) {
-                // We might have established connection at this point
-                // which has to be closed.
-                shutdown();
-            }
-            co_return reconnect_result_t::timed_out;
-        }
-        current = ss::lowres_clock::now();
-        // Any TLS error have to be propagated because it's not
-        // transient. It won't help to try once again.
+
+    if (_as != nullptr) {
+        _as->check();
     }
+
+    // The connection attempt is skipped or cut short if:
+    // - shutdown method was called
+    // - abort was requested
+    // - unrecoverable error occurred
+    // - timeout reached
+    // Any TLS error has to be propagated because it's not transient; retrying
+    // won't help. Aborts requested through the caller's abort source are
+    // propagated too.
+    try {
+        // base_transport::connect calls _dispatcher_gate.close
+        // on every reconnect. Because of that concurrent call
+        // to base_transport::stop could lead to failure because
+        // _dispatcher_gate is already closed. We need to synchronize
+        // this connection attempt with the `stop` call.
+        ss::gate::holder gg(_connect_gate);
+        co_await connect(ss::lowres_clock::now() + timeout);
+    } catch (const std::system_error& err) {
+        vlog(ctxlog.trace, "connection refused {}", err);
+    } catch (const shutdown_requested_exception&) {
+        vlog(ctxlog.trace, "connection attempt aborted by shutdown");
+    } catch (const ss::timed_out_error&) {
+        vlog(ctxlog.trace, "connection timeout");
+    }
+
+    // Checked on the success path too: shutdown_now() called while the
+    // connection was being established may have missed it (the socket
+    // is local to do_connect until the very end), so a successful
+    // connect must be dropped here instead of being handed back to the
+    // caller.
+    if (_shutdown_as.abort_requested()) {
+        vlog(ctxlog.debug, "shutdown requested while connecting");
+        if (is_valid()) {
+            shutdown();
+        }
+        co_return reconnect_result_t::timed_out;
+    }
+
     vlog(ctxlog.debug, "connected, {}", is_valid());
     co_return is_valid() ? reconnect_result_t::connected
                          : reconnect_result_t::timed_out;
 }
 
 ss::future<> client::stop() {
-    if (_stopped) {
+    if (_connect_gate.is_closed()) {
         // Prevent double call to stop() as constructs such as with_client()
         // will unconditionally call stop(), while exception handlers in this
         // file may also call stop()
         co_return;
     }
-    _stopped = true;
     co_await _connect_gate.close();
     // Can safely stop base_transport
     co_return co_await base_transport::stop();

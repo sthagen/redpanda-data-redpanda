@@ -59,6 +59,9 @@ public:
     request_authenticator& authenticator() { return _auth; }
     security::authorizer& authorizor();
     ss::future<> ensure_started() { return _ensure_started(); }
+    /// Creates the internal `_schemas` topic if it does not exist, without
+    /// running the full start-up (no store load). Idempotent.
+    ss::future<> ensure_internal_topic();
     security::audit::audit_log_manager& audit_mgr() {
         return _audit_mgr.local();
     }

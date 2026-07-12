@@ -75,7 +75,7 @@ public:
 
     protected:
         /// Returns an http client with the API host and port applied
-        ss::future<http::client> make_api_client(
+        ss::future<std::unique_ptr<http::client>> make_api_client(
           ss::sstring name = "",
           client_tls_enabled enable_tls = client_tls_enabled::no);
 

@@ -165,12 +165,14 @@ class RedpandaCluster(Cluster):
 
 class SecondaryClusterArgs:
     """
-    Container used to hold args and kwargs for the secondary cluster.
+    Container used to hold args and kwargs for the secondary (source) cluster.
 
-    Will be passed to the secondary cluster's create method
+    `num_brokers` sizes the source cluster; the remaining args/kwargs are
+    passed to the source cluster's create method.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, num_brokers: int = 3, *args, **kwargs):
+        self.num_brokers = num_brokers
         self.args = args
         self.kwargs = kwargs
 
@@ -184,7 +186,6 @@ class MultiClusterServices:
         secondary_spec: SecondaryClusterSpec = SecondaryClusterSpec(
             ServiceType.REDPANDA
         ),
-        num_brokers=3,
         secondary_args: SecondaryClusterArgs = SecondaryClusterArgs(),
     ):
         self.test_ctx = test_ctx
@@ -194,7 +195,7 @@ class MultiClusterServices:
             self._clusters.append(
                 RedpandaCluster.create(
                     self.test_ctx,
-                    num_brokers,
+                    secondary_args.num_brokers,
                     *secondary_args.args,
                     **secondary_args.kwargs,
                 )
@@ -203,7 +204,7 @@ class MultiClusterServices:
             self._clusters.append(
                 KafkaCluster.create(
                     self.test_ctx,
-                    num_brokers,
+                    secondary_args.num_brokers,
                     secondary_spec.kafka_version
                     if secondary_spec.kafka_version
                     else KAFKA_VERSION,

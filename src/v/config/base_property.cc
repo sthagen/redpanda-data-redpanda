@@ -44,7 +44,8 @@ base_property::base_property(
   std::string_view name,
   std::string_view desc,
   base_property::metadata meta)
-  : _meta(intern_metadata(name, desc, std::move(meta))) {
+  : _meta(intern_metadata(name, desc, std::move(meta)))
+  , _conf(&conf) {
     conf._properties.emplace(_meta->name, this);
     for (const auto& alias : _meta->aliases) {
         auto [_, inserted] = conf._aliases.emplace(alias, this);
@@ -77,6 +78,17 @@ void base_property::assert_live_settable() const {
     vassert(
       _meta->needs_restart == needs_restart::no,
       "Property {} must be be marked as needs_restart::no",
+      name());
+}
+
+void base_property::debug_assert_readable() const {
+    dassert(
+      _conf == nullptr || _conf->is_ready()
+        || _meta->usable_before_ready == usable_before_ready::yes,
+      "Read property '{}' before its config_store was marked as ready by the "
+      "startup process. If this property must be consumed during bootstrap, "
+      "mark it usable_before_ready after auditing that a potentially stale "
+      "value is safe there.",
       name());
 }
 

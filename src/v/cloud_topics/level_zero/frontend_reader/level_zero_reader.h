@@ -76,6 +76,10 @@ public:
       ss::lw_shared_ptr<cluster::partition> underlying,
       data_plane_api* ct_api);
 
+    // Resolves the config's max_placeholder_offset out-channel (if any) with
+    // the largest placeholder offset observed by the metadata pass.
+    ~level_zero_log_reader_impl() override;
+
     bool is_end_of_stream() const final;
 
     ss::future<model::record_batch_reader::storage_t>
@@ -155,6 +159,10 @@ private:
     bool _end_of_stream{false};
 
     cloud_topic_log_reader_config _config;
+    // Largest last-offset among the placeholder batches observed by
+    // fetch_metadata (a const method, hence mutable): feeds the
+    // max_placeholder_offset out-channel on destruction.
+    mutable kafka::offset _max_placeholder_offset{kafka::offset::min()};
     kafka::offset _next_offset;
     ss::lw_shared_ptr<cluster::partition> _ctp;
     data_plane_api* _ct_api;

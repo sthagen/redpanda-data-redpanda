@@ -585,7 +585,134 @@ redpanda_storage_mode_from_string(std::string_view s) {
         model::redpanda_storage_mode_to_string(
           model::redpanda_storage_mode::unset),
         model::redpanda_storage_mode::unset)
+      .match(
+        model::redpanda_storage_mode_tiered_impl_to_string(
+          model::redpanda_storage_mode_tiered_impl::tiered_v1),
+        model::redpanda_storage_mode::tiered)
+      .match(
+        model::redpanda_storage_mode_tiered_impl_to_string(
+          model::redpanda_storage_mode_tiered_impl::tiered_v2),
+        model::redpanda_storage_mode::tiered_cloud)
       .default_match(std::nullopt);
+}
+
+fmt::iterator
+format_to(redpanda_storage_mode_tiered_impl mode, fmt::iterator out) {
+    return fmt::format_to(
+      out, "{}", redpanda_storage_mode_tiered_impl_to_string(mode));
+}
+
+std::istream&
+operator>>(std::istream& i, redpanda_storage_mode_tiered_impl& mode) {
+    ss::sstring s;
+    i >> s;
+    auto value = redpanda_storage_mode_tiered_impl_from_string(s);
+    if (!value) {
+        i.setstate(std::ios::failbit);
+        return i;
+    }
+    mode = *value;
+    return i;
+}
+
+std::optional<redpanda_storage_mode_tiered_impl>
+redpanda_storage_mode_tiered_impl_from_string(std::string_view s) {
+    return string_switch<std::optional<redpanda_storage_mode_tiered_impl>>(s)
+      .match(
+        redpanda_storage_mode_tiered_impl_to_string(
+          redpanda_storage_mode_tiered_impl::tiered_v1),
+        redpanda_storage_mode_tiered_impl::tiered_v1)
+      .match(
+        redpanda_storage_mode_tiered_impl_to_string(
+          redpanda_storage_mode_tiered_impl::tiered_v2),
+        redpanda_storage_mode_tiered_impl::tiered_v2)
+      .default_match(std::nullopt);
+}
+
+std::optional<redpanda_storage_mode> redpanda_storage_mode_from_user_string(
+  std::string_view s, redpanda_storage_mode_tiered_impl default_mode) {
+    if (s == redpanda_storage_mode_to_string(redpanda_storage_mode::tiered)) {
+        return storage_mode_with_tiered_impl(default_mode);
+    }
+    return string_switch<std::optional<redpanda_storage_mode>>(s)
+      .match(
+        redpanda_storage_mode_to_string(redpanda_storage_mode::local),
+        redpanda_storage_mode::local)
+      .match(
+        redpanda_storage_mode_to_string(redpanda_storage_mode::cloud),
+        redpanda_storage_mode::cloud)
+      .match(
+        redpanda_storage_mode_to_string(redpanda_storage_mode::unset),
+        redpanda_storage_mode::unset)
+      // The variant names and the internal 'tiered_cloud' spelling are not
+      // valid mode values: variants are selected with the separate
+      // redpanda.storage.mode.impl property.
+      .default_match(std::nullopt);
+}
+
+const char* redpanda_storage_mode_user_name(redpanda_storage_mode mode) {
+    switch (mode) {
+    case redpanda_storage_mode::tiered:
+    case redpanda_storage_mode::tiered_cloud:
+        return redpanda_storage_mode_to_string(redpanda_storage_mode::tiered);
+    case redpanda_storage_mode::local:
+    case redpanda_storage_mode::cloud:
+    case redpanda_storage_mode::unset:
+        return redpanda_storage_mode_to_string(mode);
+    }
+    throw std::invalid_argument("unknown redpanda_storage_mode");
+}
+
+const char* redpanda_storage_mode_impl_name(redpanda_storage_mode mode) {
+    switch (mode) {
+    case redpanda_storage_mode::tiered:
+        return redpanda_storage_mode_tiered_impl_to_string(
+          redpanda_storage_mode_tiered_impl::tiered_v1);
+    case redpanda_storage_mode::tiered_cloud:
+        return redpanda_storage_mode_tiered_impl_to_string(
+          redpanda_storage_mode_tiered_impl::tiered_v2);
+    case redpanda_storage_mode::local:
+    case redpanda_storage_mode::cloud:
+    case redpanda_storage_mode::unset:
+        return redpanda_storage_mode_to_string(mode);
+    }
+    throw std::invalid_argument("unknown redpanda_storage_mode");
+}
+
+std::optional<redpanda_storage_mode>
+redpanda_storage_mode_from_impl_string(std::string_view s) {
+    return string_switch<std::optional<redpanda_storage_mode>>(s)
+      .match(
+        redpanda_storage_mode_impl_name(redpanda_storage_mode::local),
+        redpanda_storage_mode::local)
+      .match(
+        redpanda_storage_mode_impl_name(redpanda_storage_mode::tiered),
+        redpanda_storage_mode::tiered)
+      .match(
+        redpanda_storage_mode_impl_name(redpanda_storage_mode::tiered_cloud),
+        redpanda_storage_mode::tiered_cloud)
+      .match(
+        redpanda_storage_mode_impl_name(redpanda_storage_mode::cloud),
+        redpanda_storage_mode::cloud)
+      .match(
+        redpanda_storage_mode_impl_name(redpanda_storage_mode::unset),
+        redpanda_storage_mode::unset)
+      .default_match(std::nullopt);
+}
+
+std::optional<redpanda_storage_mode_tiered_impl>
+storage_mode_tiered_impl(redpanda_storage_mode mode) {
+    switch (mode) {
+    case redpanda_storage_mode::tiered:
+        return redpanda_storage_mode_tiered_impl::tiered_v1;
+    case redpanda_storage_mode::tiered_cloud:
+        return redpanda_storage_mode_tiered_impl::tiered_v2;
+    case redpanda_storage_mode::local:
+    case redpanda_storage_mode::cloud:
+    case redpanda_storage_mode::unset:
+        return std::nullopt;
+    }
+    throw std::invalid_argument("unknown redpanda_storage_mode");
 }
 
 fmt::iterator format_to(recovery_validation_mode vm, fmt::iterator out) {
@@ -659,6 +786,8 @@ constexpr std::string_view to_sv(iceberg_mode::schema_mode m) {
         return "schema_id_prefix";
     case iceberg_mode::schema_mode::schema_latest:
         return "schema_latest";
+    case iceberg_mode::schema_mode::string:
+        return "string";
     }
     __builtin_unreachable();
 }
@@ -671,6 +800,16 @@ constexpr std::string_view to_sv(iceberg_mode::header_schema_mode t) {
         return "string";
     }
     __builtin_unreachable();
+}
+
+constexpr std::string_view to_sv(iceberg_mode::value_layout l) {
+    switch (l) {
+    case iceberg_mode::value_layout::flat:
+        return "flat";
+    case iceberg_mode::value_layout::nested:
+        return "nested";
+    }
+    return "unknown";
 }
 
 // Parse "opt1=val1,opt2=val2" into a map, enforcing no duplicate keys and no
@@ -762,6 +901,7 @@ parse_extended_iceberg_mode(std::string_view str) {
                            .match("binary", sm::binary)
                            .match("schema_id_prefix", sm::schema_id_prefix)
                            .match("schema_latest", sm::schema_latest)
+                           .match("string", sm::string)
                            .default_match(std::nullopt);
                 if (!m) {
                     return std::unexpected(
@@ -773,6 +913,29 @@ parse_extended_iceberg_mode(std::string_view str) {
                 cfg.subject = ss::sstring(v);
             } else if (k == "protobuf_name") {
                 cfg.protobuf_name = ss::sstring(v);
+            } else if (k == "layout") {
+                // layout is value-only; key_config has no layout field.
+                if constexpr (requires { cfg.layout; }) {
+                    using vl = iceberg_mode::value_layout;
+                    auto l = string_switch<std::optional<vl>>(v)
+                               .match("flat", vl::flat)
+                               .match("nested", vl::nested)
+                               .default_match(std::nullopt);
+                    if (!l) {
+                        return std::unexpected(
+                          fmt::format(
+                            "unknown layout '{}' in section '{}'",
+                            v,
+                            sec_name));
+                    }
+                    cfg.layout = *l;
+                } else {
+                    return std::unexpected(
+                      fmt::format(
+                        "layout is only valid in the value section, "
+                        "not '{}'",
+                        sec_name));
+                }
             } else {
                 return std::unexpected(
                   fmt::format(
@@ -787,6 +950,19 @@ parse_extended_iceberg_mode(std::string_view str) {
                 "subject and protobuf_name require mode=schema_latest in "
                 "section '{}'",
                 sec_name));
+        }
+        if constexpr (requires { cfg.layout; }) {
+            using sm = iceberg_mode::schema_mode;
+            if (
+              cfg.layout == iceberg_mode::value_layout::nested
+              && cfg.mode != sm::schema_id_prefix
+              && cfg.mode != sm::schema_latest) {
+                return std::unexpected(
+                  fmt::format(
+                    "layout=nested requires a schema mode "
+                    "(schema_id_prefix or schema_latest) in section '{}'",
+                    sec_name));
+            }
         }
         return {};
     };
@@ -838,7 +1014,8 @@ void write_nested(iobuf& out, const iceberg_mode& m) {
     // with the old wire discriminants so that old nodes can read them.
     if (
       e.key == iceberg_mode::key_config{}
-      && e.headers == iceberg_mode::headers_config{}) {
+      && e.headers == iceberg_mode::headers_config{}
+      && e.value.is_legacy_compatible()) {
         switch (e.value.mode) {
         case iceberg_mode::schema_mode::binary:
             write(out, wire_key_value);
@@ -851,6 +1028,8 @@ void write_nested(iobuf& out, const iceberg_mode& m) {
             write(out, e.value.protobuf_name);
             write(out, e.value.subject);
             return;
+        case iceberg_mode::schema_mode::string:
+            break; // no legacy wire format; fall through to discriminant 4
         }
     }
     // Discriminant 4: the encoded form is the canonicalized config string.
@@ -905,15 +1084,17 @@ fmt::iterator iceberg_mode::format_to(fmt::iterator it) const {
     }
     const auto& e = std::get<enabled_impl>(_impl);
 
-    // If key and headers are at their defaults the config is expressible as a
-    // legacy string; prefer that for maximal compatibility.
-    if (e.key == key_config{} && e.headers == headers_config{}) {
+    // If key, headers, and value are legacy-compatible the config is
+    // expressible as a legacy string; prefer that for maximal compatibility.
+    if (
+      e.key == key_config{} && e.headers == headers_config{}
+      && e.value.is_legacy_compatible()) {
         switch (e.value.mode) {
         case schema_mode::binary:
             return fmt::format_to(it, "key_value");
         case schema_mode::schema_id_prefix:
             return fmt::format_to(it, "value_schema_id_prefix");
-        case schema_mode::schema_latest:
+        case schema_mode::schema_latest: {
             it = fmt::format_to(it, "value_schema_latest");
             bool delim = false;
             auto emit = [&]() {
@@ -931,9 +1112,13 @@ fmt::iterator iceberg_mode::format_to(fmt::iterator it) const {
             }
             return it;
         }
+        case schema_mode::string:
+            break; // no legacy string format; fall through to section format
+        }
     }
 
-    // Section-based format. Only emit sections that differ from defaults.
+    // Section-based format. Always emit all sections and options so that
+    // defaults are frozen at set-time (prevents schema drift on upgrade).
     bool any = false;
     auto sep = [&]() {
         if (any) {
@@ -942,12 +1127,9 @@ fmt::iterator iceberg_mode::format_to(fmt::iterator it) const {
         any = true;
     };
 
-    auto emit_schema_section = [&](std::string_view name, const auto& cfg) {
-        if (cfg.mode == schema_mode::binary) {
-            return; // all defaults, omit
-        }
+    auto emit_key_section = [&](const key_config& cfg) {
         sep();
-        it = fmt::format_to(it, "{}:mode={}", name, to_sv(cfg.mode));
+        it = fmt::format_to(it, "key:mode={}", to_sv(cfg.mode));
         if (!cfg.subject.empty()) {
             it = fmt::format_to(it, ",subject={}", cfg.subject);
         }
@@ -956,14 +1138,26 @@ fmt::iterator iceberg_mode::format_to(fmt::iterator it) const {
         }
     };
 
-    emit_schema_section("key", e.key);
-    emit_schema_section("value", e.value);
-
-    if (e.headers.value_type != header_schema_mode::binary) {
+    auto emit_value_section = [&](const value_config& cfg) {
         sep();
-        it = fmt::format_to(
-          it, "headers:value_type={}", to_sv(e.headers.value_type));
-    }
+        it = fmt::format_to(it, "value:mode={}", to_sv(cfg.mode));
+        if (!cfg.subject.empty()) {
+            it = fmt::format_to(it, ",subject={}", cfg.subject);
+        }
+        if (!cfg.protobuf_name.empty()) {
+            it = fmt::format_to(it, ",protobuf_name={}", cfg.protobuf_name);
+        }
+        it = fmt::format_to(it, ",layout={}", to_sv(cfg.layout));
+    };
+
+    auto emit_headers_section = [&](const headers_config& cfg) {
+        sep();
+        it = fmt::format_to(it, "headers:value_type={}", to_sv(cfg.value_type));
+    };
+
+    emit_key_section(e.key);
+    emit_value_section(e.value);
+    emit_headers_section(e.headers);
 
     return it;
 }

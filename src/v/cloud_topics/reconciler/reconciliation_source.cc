@@ -10,7 +10,7 @@
 
 #include "cloud_topics/reconciler/reconciliation_source.h"
 
-#include "cloud_io/scheduler_types.h"
+#include "cloud_io/admission_control_types.h"
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/frontend/frontend.h"
 #include "cloud_topics/level_zero/stm/ctp_stm.h"
@@ -19,6 +19,7 @@
 #include "cloud_topics/logger.h"
 #include "cluster/partition.h"
 #include "config/configuration.h"
+#include "features/feature_table.h"
 #include "kafka/utils/txn_reader.h"
 #include "model/fundamental.h"
 #include "model/record_batch_reader.h"
@@ -92,9 +93,24 @@ public:
 
     ss::future<std::expected<void, errc>> set_last_reconciled_offset(
       kafka::offset offset, ss::abort_source& as) override {
+        // The floor may only cover placeholder-backed data that this commit
+        // makes readable from L1: clamp the reader's observation to the
+        // committed LRO (the metadata pass may have scanned ahead of it).
+        // The feature gate is checked at the propagation point as well as
+        // at observation time: the set_min_allowed_local_threshold stm
+        // command cannot be applied by pre-v26.2 replicas, so it must never
+        // be replicated before the cluster is fully upgraded.
+        std::optional<kafka::offset> min_allowed_local_threshold;
+        if (
+          auto hwm = harvest_placeholder_observation();
+          hwm.has_value()
+          && _partition->feature_table().local().is_active(
+            features::feature::tiered_cloud_topics)) {
+            min_allowed_local_threshold = std::min(offset, *hwm);
+        }
         ctp_stm_api api(_partition->raft()->stm_manager()->get<ctp_stm>());
         auto res = co_await api.advance_reconciled_offset(
-          offset, model::no_timeout, as);
+          offset, model::no_timeout, as, min_allowed_local_threshold);
         if (!res.has_value()) {
             switch (res.error()) {
             case ctp_stm_api_errc::timeout:
@@ -149,6 +165,21 @@ public:
         if (cfg.max_offset < cfg.start_offset) {
             co_return model::make_empty_record_batch_reader();
         }
+        discard_placeholder_observation();
+        if (
+          _partition->feature_table().local().is_active(
+            features::feature::tiered_cloud_topics)) {
+            // Ask the reader to report the placeholder-backed high watermark
+            // of the range it scans; the commit path advances the local-read
+            // floor (min_allowed_local_threshold) over it, so that data
+            // reconciled from placeholders is read from L1 rather than from
+            // local placeholders whose L0 objects may be garbage-collected.
+            // Gated on the feature flag because the floor command cannot be
+            // applied by pre-v26.2 replicas.
+            auto p = ss::make_lw_shared<ss::promise<kafka::offset>>();
+            _max_placeholder_offset = p->get_future();
+            cfg.max_placeholder_offset = std::move(p);
+        }
         auto reader = co_await _fe->make_reader(cfg);
 
         // It's important the `aborted_transaction_tracker_impl` takes a shared
@@ -165,8 +196,43 @@ public:
     }
 
 private:
+    // Collect the placeholder high watermark reported by the most recent
+    // reader. The reader resolves the promise on destruction, which in the
+    // reconciler's flow happens strictly before the LRO commit; an
+    // unresolved observation is simply skipped (the next reconciliation
+    // covers the same prefix again).
+    std::optional<kafka::offset> harvest_placeholder_observation() {
+        if (
+          !_max_placeholder_offset.has_value()
+          || !_max_placeholder_offset->available()) {
+            return std::nullopt;
+        }
+        auto fut = std::move(*_max_placeholder_offset);
+        _max_placeholder_offset.reset();
+        if (fut.failed()) {
+            fut.ignore_ready_future();
+            return std::nullopt;
+        }
+        auto hwm = fut.get();
+        if (hwm == kafka::offset::min()) {
+            // The scanned range contained no placeholders.
+            return std::nullopt;
+        }
+        return hwm;
+    }
+
+    void discard_placeholder_observation() {
+        if (_max_placeholder_offset.has_value()) {
+            if (_max_placeholder_offset->available()) {
+                _max_placeholder_offset->ignore_ready_future();
+            }
+            _max_placeholder_offset.reset();
+        }
+    }
+
     ss::lw_shared_ptr<frontend> _fe;
     ss::lw_shared_ptr<cluster::partition> _partition;
+    std::optional<ss::future<kafka::offset>> _max_placeholder_offset;
 };
 
 } // namespace

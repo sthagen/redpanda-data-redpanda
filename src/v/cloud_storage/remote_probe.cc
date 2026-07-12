@@ -162,7 +162,9 @@ remote_probe::remote_probe(
                   return _segment_download_latency.public_histogram_logform();
               },
               sm::description("Segment download latency histogram")),
-          });
+          },
+          {},
+          {sm::shard_label});
     }
 
     if (!public_disabled) {

@@ -224,6 +224,7 @@ schema_registry_sync_config::shadow_schema_registry_api::copy() const {
           });
     }
     copy.feature_policy = feature_policy;
+    copy.is_enabled = is_enabled;
     return copy;
 }
 
@@ -450,7 +451,7 @@ schema_registry_sync_config::shadow_schema_registry_api::format_to(
       "tls_enabled: {}, cert: {}, key: {:s}, ca: {}, tls_provide_sni: {}, "
       "tail_interval: {}, full_sync_interval: {}, "
       "max_source_requests_per_second: {}, source_filter: {}, destination: {}, "
-      "unsupported_schema_feature_policy: {} }} }}",
+      "unsupported_schema_feature_policy: {}, is_enabled: {} }} }}",
       source_url,
       auth,
       tls_enabled,
@@ -463,7 +464,8 @@ schema_registry_sync_config::shadow_schema_registry_api::format_to(
       max_source_requests_per_second,
       filter,
       destination_mapping,
-      to_string_view(feature_policy));
+      to_string_view(feature_policy),
+      is_enabled);
 }
 
 fmt::iterator schema_registry_sync_config::format_to(fmt::iterator it) const {

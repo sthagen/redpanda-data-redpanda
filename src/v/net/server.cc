@@ -343,7 +343,9 @@ void server::setup_metrics() {
        sm::make_histogram(
          "dispatch_handler_latency",
          [this] { return _hist.internal_histogram_logform(); },
-         sm::description(ssx::sformat("{}: Latency ", cfg.name)))});
+         sm::description(ssx::sformat("{}: Latency ", cfg.name)))},
+      {},
+      {sm::shard_label});
 }
 
 void server::setup_public_metrics() {

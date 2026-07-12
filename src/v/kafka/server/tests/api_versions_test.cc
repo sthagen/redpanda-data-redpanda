@@ -7,6 +7,8 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "features/feature_table.h"
+#include "kafka/protocol/describe_redpanda_roles.h"
 #include "kafka/protocol/types.h"
 #include "kafka/server/handlers/api_versions.h"
 #include "redpanda/tests/fixture.h"
@@ -95,4 +97,32 @@ FIXTURE_TEST(reserved_range_apis_advertised, redpanda_thread_fixture) {
     BOOST_CHECK(std::ranges::any_of(apis, [](const auto& a) {
         return a.api_key == kafka::redpanda_api_key_base;
     }));
+}
+
+SEASTAR_THREAD_TEST_CASE(reserved_api_gated_by_feature) {
+    auto make_resp = [] {
+        kafka::api_versions_response r;
+        r.data.api_keys.push_back(
+          kafka::api_versions_response_key{
+            kafka::describe_redpanda_roles_api::key,
+            kafka::api_version{0},
+            kafka::api_version{0}});
+        return r;
+    };
+    const auto has_key = [](const kafka::api_versions_response& r) {
+        return std::ranges::any_of(r.data.api_keys, [](const auto& a) {
+            return a.api_key == kafka::describe_redpanda_roles_api::key;
+        });
+    };
+
+    features::feature_table inactive;
+    auto r1 = make_resp();
+    kafka::remove_unavailable_reserved_apis(r1, inactive);
+    BOOST_CHECK(!has_key(r1));
+
+    features::feature_table active;
+    active.testing_activate_all();
+    auto r2 = make_resp();
+    kafka::remove_unavailable_reserved_apis(r2, active);
+    BOOST_CHECK(has_key(r2));
 }

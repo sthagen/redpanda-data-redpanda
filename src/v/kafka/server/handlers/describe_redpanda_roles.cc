@@ -11,6 +11,7 @@
 #include "kafka/server/handlers/describe_redpanda_roles.h"
 
 #include "container/chunked_hash_map.h"
+#include "features/feature_table.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/server/handlers/details/roles.h"
 #include "kafka/server/request_context.h"
@@ -32,10 +33,19 @@ ss::future<response_ptr> describe_redpanda_roles_handler::handle(
     request.decode(ctx.reader(), ctx.header().version);
     log_request(ctx.header(), request);
 
+    describe_redpanda_roles_response resp;
+
+    if (!ctx.feature_table().local().is_active(
+          features::feature::shadow_link_role_sync)) {
+        resp.data.error_code = error_code::unsupported_version;
+        resp.data.error_message
+          = "DescribeRedpandaRoles is not available until the cluster is "
+            "fully upgraded";
+        co_return co_await ctx.respond(std::move(resp));
+    }
+
     auto authz = ctx.authorized(
       security::acl_operation::describe, security::default_cluster_name);
-
-    describe_redpanda_roles_response resp;
 
     if (!ctx.audit()) {
         resp.data.error_code = error_code::broker_not_available;

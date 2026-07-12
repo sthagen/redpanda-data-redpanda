@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include "cloud_io/scheduler_types.h"
+#include "cloud_io/admission_control_types.h"
 #include "config/leaders_preference.h"
 #include "config/types.h"
 #include "model/compression.h"
@@ -593,6 +593,23 @@ struct convert<model::redpanda_storage_mode> {
     static bool decode(const Node& node, type& rhs) {
         auto value = node.as<std::string>();
         auto mode = model::redpanda_storage_mode_from_string(value);
+        if (!mode) {
+            return false;
+        }
+        rhs = mode.value();
+        return true;
+    }
+};
+
+template<>
+struct convert<model::redpanda_storage_mode_tiered_impl> {
+    using type = model::redpanda_storage_mode_tiered_impl;
+
+    static Node encode(const type& rhs) { return Node(fmt::format("{}", rhs)); }
+
+    static bool decode(const Node& node, type& rhs) {
+        auto value = node.as<std::string>();
+        auto mode = model::redpanda_storage_mode_tiered_impl_from_string(value);
         if (!mode) {
             return false;
         }

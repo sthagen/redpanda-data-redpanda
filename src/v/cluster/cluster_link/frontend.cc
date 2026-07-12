@@ -18,6 +18,7 @@
 #include "cluster/partition_leaders_table.h"
 #include "cluster/types.h"
 #include "cluster_link/model/filter_utils.h"
+#include "cluster_link/model/sr_context_mapping.h"
 #include "cluster_link/model/types.h"
 #include "config/configuration.h"
 #include "model/namespace.h"
@@ -27,6 +28,7 @@
 #include "ssx/when_all.h"
 
 #include <algorithm>
+#include <variant>
 
 namespace cluster::cluster_link {
 
@@ -333,44 +335,109 @@ bool link_shadows_schema_registry_topic(
     return md.configuration.schema_registry_sync_cfg.is_topic_mode();
 }
 
-bool link_disables_schema_registry_writes(
-  const ::cluster_link::model::metadata& md, ppsr::write_source source) {
-    switch (source) {
-    case ppsr::write_source::client:
-        return link_shadows_schema_registry_topic(md)
-               || md.configuration.schema_registry_sync_cfg.api_mode()
-                    != nullptr;
-    case ppsr::write_source::schema_registry_sync:
-        return link_shadows_schema_registry_topic(md);
+bool link_shadows_schema_registry(const ::cluster_link::model::metadata& md) {
+    return link_shadows_schema_registry_topic(md)
+           || md.configuration.schema_registry_sync_cfg.api_mode() != nullptr;
+}
+
+bool api_mode_shadows_context(
+  const ::cluster_link::model::schema_registry_sync_config::
+    shadow_schema_registry_api& api,
+  const ppsr::context& dest_context) {
+    // Identity mapping: the destination context name equals the source name.
+    if (!api.destination) {
+        return ::cluster_link::model::filter_selects_source_context(
+          api.filter, dest_context);
     }
-    __builtin_unreachable();
+
+    return ss::visit(
+      *api.destination,
+      [&api, &dest_context](
+        const ::cluster_link::model::schema_registry_sync_config::
+          identity_context_mapping&) {
+          // Identity mapping: the destination context name equals the source
+          // name.
+          return ::cluster_link::model::filter_selects_source_context(
+            api.filter, dest_context);
+      },
+      [&api, &dest_context](
+        const ::cluster_link::model::schema_registry_sync_config::
+          exact_context_mapping& destination) {
+          // Exact mapping: a destination context is owned only when some
+          // filter-selected source maps to it. Both conditions matter -- a
+          // mapping whose source is not selected by the filter is inert
+          // (nothing is mirrored into its destination), so matching the
+          // destination name alone would over-block.
+          for (const auto& [src_ctx, dst_ctx] : destination.mappings) {
+              if (
+                dest_context == dst_ctx
+                && ::cluster_link::model::filter_selects_source_context(
+                  api.filter, ppsr::context{src_ctx})) {
+                  return true;
+              }
+          }
+          return false;
+      });
+}
+
+bool link_disables_client_writes(
+  const ::cluster_link::model::metadata& md, const ppsr::context& context) {
+    // Topic-mode shadowing owns the whole _schemas topic, so it blocks every
+    // context.
+    if (link_shadows_schema_registry_topic(md)) {
+        return true;
+    }
+    // API-mode shadowing only blocks the contexts it mirrors, identified by
+    // source_filter/destination.
+    if (auto* api = md.configuration.schema_registry_sync_cfg.api_mode()) {
+        // A paused link relinquishes ownership of its contexts: replication
+        // has stopped, so client writes to them are allowed again.
+        if (!bool(api->is_enabled)) {
+            return false;
+        }
+        return api_mode_shadows_context(*api, context);
+    }
+    return false;
 }
 
 } // namespace
 
 bool frontend::schema_registry_shadowing_active() const {
-    return schema_registry_writes_disabled(ppsr::write_source::client);
+    if (!cluster_link_active()) {
+        return false;
+    }
+    auto link_ids = get_all_link_ids();
+    return std::ranges::any_of(link_ids, [this](id_t link_id) -> bool {
+        const auto md = find_link_by_id(link_id);
+        return md && link_shadows_schema_registry(*md);
+    });
 }
 
-bool frontend::schema_registry_writes_disabled(
-  ppsr::write_source source) const {
+bool frontend::schema_registry_client_writes_disabled(
+  std::string_view context) const {
+    if (!cluster_link_active()) {
+        return false;
+    }
+
+    ppsr::context local_context{ss::sstring{context}};
+    auto link_ids = get_all_link_ids();
+    return std::ranges::any_of(
+      link_ids, [this, &local_context](id_t link_id) -> bool {
+          const auto md = find_link_by_id(link_id);
+          return md && link_disables_client_writes(*md, local_context);
+      });
+}
+
+bool frontend::schema_registry_local_topic_writes_disabled() const {
     if (!cluster_link_active()) {
         return false;
     }
 
     auto link_ids = get_all_link_ids();
-    return std::ranges::any_of(link_ids, [this, source](id_t link_id) -> bool {
+    return std::ranges::any_of(link_ids, [this](id_t link_id) -> bool {
         const auto md = find_link_by_id(link_id);
-        if (!md) {
-            return false;
-        }
-        return link_disables_schema_registry_writes(*md, source);
+        return md && link_shadows_schema_registry_topic(*md);
     });
-}
-
-bool frontend::schema_registry_internal_topic_creation_blocked() const {
-    return schema_registry_writes_disabled(
-      ppsr::write_source::schema_registry_sync);
 }
 
 ss::future<errc> frontend::do_mutation(

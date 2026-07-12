@@ -185,7 +185,7 @@ class CompactionStressKeyCardinalityTest(CompactionStressBase):
         storage_mode = (self.test_context.injected_args or {}).get(
             "storage_mode", TopicSpec.STORAGE_MODE_CLOUD
         )
-        if storage_mode == TopicSpec.STORAGE_MODE_TIERED_CLOUD:
+        if storage_mode == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2:
             self.redpanda.set_feature_active(
                 "tiered_cloud_topics", True, timeout_sec=30
             )
@@ -194,7 +194,7 @@ class CompactionStressKeyCardinalityTest(CompactionStressBase):
             partitions=1,
             replicas=3,
             config={
-                TopicSpec.PROPERTY_STORAGE_MODE: storage_mode,
+                **TopicSpec.storage_mode_config(storage_mode),
                 "cleanup.policy": TopicSpec.CLEANUP_COMPACT,
                 "min.cleanable.dirty.ratio": "0.0",
             },
@@ -204,7 +204,7 @@ class CompactionStressKeyCardinalityTest(CompactionStressBase):
     @matrix(
         storage_mode=[
             TopicSpec.STORAGE_MODE_CLOUD,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
         ],
     )
     def test_key_cardinality_overflow(self, storage_mode: str):

@@ -127,7 +127,7 @@ class ProducerSwarm(ClientSwarmBase):
                 self._node, ProducerSwarm.CUSTOM_PAYLOAD_DIR
             )
 
-    def wait_for_all_started(self):
+    def wait_for_all_started(self, timeout_scale: float = 1.0):
         """Wait until the requested number of producers have started. Note that if the expected
         swarm runtime (messages / rate) is short, this may fail as all producers and start and
         finish before we are able to see this via the metrics endpoint and an exception is thrown."""
@@ -146,6 +146,7 @@ class ProducerSwarm(ClientSwarmBase):
         # due to leadership transfers which occur in a burst some time between 0 and 5
         # minutes after the topic is created.
         timeout_s = 30 + 3 * ceil(self._producers * self.CLIENT_SPAWN_WAIT_MS / 1000)
+        timeout_s = int(timeout_s * timeout_scale)
 
         def started_count():
             started = self.get_metrics_summary().clients_started

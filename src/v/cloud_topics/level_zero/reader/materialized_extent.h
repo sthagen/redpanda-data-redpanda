@@ -10,9 +10,9 @@
 
 #pragma once
 
+#include "cloud_io/admission_control_types.h"
 #include "cloud_io/basic_cache_service_api.h"
 #include "cloud_io/remote.h"
-#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
 #include "model/fundamental.h"
 #include "model/record.h"

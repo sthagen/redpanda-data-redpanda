@@ -52,7 +52,7 @@ struct simple_raft_fixture {
             [this]() { return default_log_cfg(); },
             std::ref(_feature_table))
           .get();
-        _storage.invoke_on_all(&storage::api::start).get();
+        _storage.invoke_on_all([](storage::api& a) { return a.start(); }).get();
         _as.start().get();
         _connections.start(std::ref(_as)).get();
         _recovery_throttle

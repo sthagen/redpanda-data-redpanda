@@ -39,8 +39,10 @@ var Comments = map[string]string{
 	"redpanda.core.admin.v2.ConsumerOffsetSyncOptions.paused": `Allows user to pause the consumer offset sync task.  If paused, then
  the task will enter the 'paused' state and not sync consumer offsets from
  the source cluster`,
-	"redpanda.core.admin.v2.CreateShadowLinkRequest":              "Create a new shadow link",
-	"redpanda.core.admin.v2.CreateShadowLinkRequest.shadow_link":  "The shadow link to create",
+	"redpanda.core.admin.v2.CreateShadowLinkRequest":             "Create a new shadow link",
+	"redpanda.core.admin.v2.CreateShadowLinkRequest.shadow_link": "The shadow link to create",
+	"redpanda.core.admin.v2.CreateShadowLinkRequest.validate_only": `If true, validate connection parameters without creating the link.
+ Returns an empty response on success or an error if validation fails.`,
 	"redpanda.core.admin.v2.CreateShadowLinkResponse":             "Response to creating a shadow link",
 	"redpanda.core.admin.v2.CreateShadowLinkResponse.shadow_link": "The shadow link that was created",
 	"redpanda.core.admin.v2.DeleteShadowLinkRequest":              "Request to delete a shadow link",
@@ -92,7 +94,15 @@ var Comments = map[string]string{
 	"redpanda.core.admin.v2.PlainConfig.password_set": "Indicates that the password has been set",
 	"redpanda.core.admin.v2.PlainConfig.password_set_at": `Timestamp of when the password was last set - only valid if password_set
  is true`,
-	"redpanda.core.admin.v2.PlainConfig.username":                      "PLAIN username",
+	"redpanda.core.admin.v2.PlainConfig.username":               "PLAIN username",
+	"redpanda.core.admin.v2.RoleSyncOptions":                    "Options for syncing RBAC roles",
+	"redpanda.core.admin.v2.RoleSyncOptions.effective_interval": "The effective interval for the task",
+	"redpanda.core.admin.v2.RoleSyncOptions.interval": `Sync interval
+ If 0 provided, defaults to 30 seconds`,
+	"redpanda.core.admin.v2.RoleSyncOptions.paused": `Allows user to pause the role sync task.  If paused, then the task will
+ enter the 'paused' state and will not sync roles from the source cluster`,
+	"redpanda.core.admin.v2.RoleSyncOptions.role_name_filters": `Filters selecting which roles to shadow by name.  Defaults to empty: no
+ roles are synced until at least one include filter is added`,
 	"redpanda.core.admin.v2.SCHEMA_REGISTRY_SYNC_TYPE_FULL":            "A full source scan is running.",
 	"redpanda.core.admin.v2.SCHEMA_REGISTRY_SYNC_TYPE_TAIL":            "An incremental tail sync is running.",
 	"redpanda.core.admin.v2.SCHEMA_REGISTRY_SYNC_TYPE_UNSPECIFIED":     "The Schema Registry sync type is not specified.",
@@ -265,6 +275,7 @@ var Comments = map[string]string{
 	"redpanda.core.admin.v2.ShadowLinkConfigurations":                              "ShadowLink options",
 	"redpanda.core.admin.v2.ShadowLinkConfigurations.client_options":               "Configuration for the internal kafka client",
 	"redpanda.core.admin.v2.ShadowLinkConfigurations.consumer_offset_sync_options": "Consumer offset sync options",
+	"redpanda.core.admin.v2.ShadowLinkConfigurations.role_sync_options":            "Role sync options",
 	"redpanda.core.admin.v2.ShadowLinkConfigurations.schema_registry_sync_options": "Schema Registry sync options",
 	"redpanda.core.admin.v2.ShadowLinkConfigurations.security_sync_options":        "Security settings sync options",
 	"redpanda.core.admin.v2.ShadowLinkConfigurations.topic_metadata_sync_options":  "Topic metadata sync options",

@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "cloud_io/scheduler_types.h"
+#include "cloud_io/admission_control_types.h"
 #include "cloud_topics/level_zero/read_merge/read_merge.h"
 #include "cloud_topics/types.h"
 #include "model/fundamental.h"

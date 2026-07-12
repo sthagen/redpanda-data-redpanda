@@ -36,7 +36,6 @@ storage_resources::storage_resources(
   , _global_target_replay_bytes(target_replay_bytes)
   , _max_concurrent_replay(max_concurrent_replay)
   , _compaction_index_mem_limit(compaction_index_memory)
-  , _append_chunk_size(internal::chunks().chunk_size())
   , _offset_translator_dirty_bytes(
       _global_target_replay_bytes() / ss::this_smp_shard_count())
   , _configuration_manager_dirty_bytes(
@@ -130,6 +129,7 @@ size_t storage_resources::calc_falloc_step() {
 
     // At most, use the configured fallocation step.
     size_t step = _segment_fallocation_step();
+    size_t append_chunk_size = _chunk_cache.chunk_size();
 
     if (_partition_count == 0) {
         // Called before log_manager, this is an internal kvstore, give it a
@@ -152,13 +152,13 @@ size_t storage_resources::calc_falloc_step() {
     step = std::min(space_per_partition, step);
 
     // Round down to nearest append chunk size
-    auto remainder = step % _append_chunk_size;
+    auto remainder = step % append_chunk_size;
     step = step - remainder;
 
     // At the minimum, falloc one chunk's worth of space.
     if (step < min_falloc_step) {
         // If we have less than the minimum step, don't both falloc'ing at all.
-        step = _append_chunk_size;
+        step = append_chunk_size;
     }
 
     vlog(
@@ -186,7 +186,8 @@ storage_resources::get_falloc_step(std::optional<uint64_t> segment_size_hint) {
     if (segment_size_hint) {
         // Don't falloc more than the segment size, plus a little extra because
         // we don't roll segments until they overshoot the size.
-        step = std::min(step, segment_size_hint.value() + _append_chunk_size);
+        step = std::min(
+          step, segment_size_hint.value() + _chunk_cache.chunk_size());
     }
     return step;
 }

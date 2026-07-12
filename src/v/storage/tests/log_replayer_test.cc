@@ -33,9 +33,9 @@ namespace storage {
 class log_replayer_fixture {
 public:
     ss::sharded<features::feature_table> _feature_table;
+    storage::storage_resources resources;
     ss::lw_shared_ptr<segment> _seg;
     std::optional<log_replayer> replayer_opt;
-    storage::storage_resources resources;
     ss::sstring base_name = "test."
                             + random_generators::gen_alphanum_string(20);
 
@@ -45,6 +45,7 @@ public:
           .invoke_on_all(
             [](features::feature_table& f) { f.testing_activate_all(); })
           .get();
+        resources.start().get();
 
         auto fd = ss::open_file_dma(
                     base_name, ss::open_flags::create | ss::open_flags::rw)
@@ -88,6 +89,7 @@ public:
 
     ~log_replayer_fixture() {
         _seg->close().get();
+        resources.stop().get();
         _feature_table.stop().get();
     }
 

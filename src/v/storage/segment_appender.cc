@@ -58,7 +58,7 @@ segment_appender::segment_appender(ss::file f, options opts)
   , _concurrent_flushes(ss::semaphore::max_counter(), "s/append-flush")
   , _prev_head_write(ss::make_lw_shared<ssx::semaphore>(1, head_sem_name))
   , _inactive_timer([this] { handle_inactive_timer(); })
-  , _chunk_size(internal::chunks().chunk_size()) {
+  , _chunk_size(_opts.resources.chunks().chunk_size()) {
     if (!_opts.shared_stats) {
         _opts.shared_stats = ss::make_lw_shared<stats>();
     }
@@ -82,7 +82,7 @@ segment_appender::~segment_appender() noexcept {
       "Active flush operations on appender destroy {}",
       *this);
     if (_head) {
-        internal::chunks().add(std::exchange(_head, nullptr));
+        _opts.resources.chunks().add(std::exchange(_head, nullptr));
     }
 }
 
@@ -155,7 +155,7 @@ ss::future<> segment_appender::do_append(const char* buf, size_t n) {
          * idle and its chunk was reclaimed into the chunk cache.
          */
         if (unlikely(!_head && _committed_offset > 0)) {
-            _head = co_await internal::chunks().get();
+            _head = co_await _opts.resources.chunks().get();
             co_await hydrate_last_half_page();
             continue;
         }
@@ -187,7 +187,7 @@ ss::future<> segment_appender::do_append(const char* buf, size_t n) {
              * we MUST NOT release the semaphore here.
              */
 
-            auto new_head = co_await internal::chunks().get();
+            auto new_head = co_await _opts.resources.chunks().get();
 
             const auto remainder_sz = old_head->size()
                                       - old_head->pending_aligned_begin();
@@ -211,7 +211,7 @@ ss::future<> segment_appender::do_append(const char* buf, size_t n) {
                 // chunk was already written and it is done, we can release
                 // it right away
                 old_head->reset();
-                internal::chunks().add(old_head);
+                _opts.resources.chunks().add(old_head);
             }
         }
 
@@ -235,7 +235,7 @@ ss::future<> segment_appender::do_append(const char* buf, size_t n) {
         auto units = co_await ss::get_units(_concurrent_flushes, 1);
         units.return_all();
 
-        auto chunk = co_await internal::chunks().get();
+        auto chunk = co_await _opts.resources.chunks().get();
         vassert(!_head, "cannot overwrite existing chunk");
         _head = std::move(chunk);
     }
@@ -268,7 +268,7 @@ void segment_appender::handle_inactive_timer() {
      */
     if (_concurrent_flushes.try_wait(ss::semaphore::max_counter())) {
         if (_head && !_head->bytes_pending()) {
-            internal::chunks().add(std::exchange(_head, nullptr));
+            _opts.resources.chunks().add(std::exchange(_head, nullptr));
             vlog(
               stlog.debug, "reclaiming inactive chunk from appender {}", *this);
         }
@@ -371,7 +371,7 @@ ss::future<> segment_appender::truncate(size_t n) {
               _head->reset();
           } else {
               // https://github.com/redpanda-data/redpanda/issues/43
-              f = internal::chunks().get().then(
+              f = _opts.resources.chunks().get().then(
                 [this](ss::lw_shared_ptr<chunk> chunk) {
                     _head = std::move(chunk);
                 });
@@ -658,7 +658,7 @@ void segment_appender::dispatch_background_head_write() {
                        */
                       if (w->last_write_to_current_chunk) {
                           w->chunk->reset();
-                          internal::chunks().add(w->chunk);
+                          _opts.resources.chunks().add(w->chunk);
                       }
 
                       // release our reference to the chunk since this

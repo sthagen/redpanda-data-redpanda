@@ -182,7 +182,9 @@ void disk_log_builder::add_closed_segment_bytes(ssize_t bytes) {
 
 ss::future<> disk_log_builder::stop() {
     _log->stm_hookset()->stop();
-    return _storage.stop().then([this]() { return _feature_table.stop(); });
+    co_await _storage.stop();
+    _storage.reset();
+    co_await _feature_table.stop();
 }
 
 // Low lever interface access

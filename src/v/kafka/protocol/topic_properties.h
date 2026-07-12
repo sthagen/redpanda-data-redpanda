@@ -79,4 +79,11 @@ inline constexpr std::string_view topic_property_leaders_preference
 inline constexpr std::string_view topic_property_redpanda_storage_mode
   = "redpanda.storage.mode";
 
+// Read-only companion of redpanda.storage.mode: the resolved variant
+// (tiered_v1/tiered_v2) of a topic in the tiered storage mode. Accepted on
+// topic creation (only together with redpanda.storage.mode=tiered) to pick a
+// non-default variant; not alterable.
+inline constexpr std::string_view topic_property_redpanda_storage_mode_impl
+  = "redpanda.storage.mode.impl";
+
 } // namespace kafka

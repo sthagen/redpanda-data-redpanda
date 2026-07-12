@@ -1,6 +1,21 @@
 load("//bazel:build.bzl", "redpanda_cc_library")
 
 redpanda_cc_library(
+    name = "sr_context_mapping",
+    srcs = [
+        "sr_context_mapping.cc",
+    ],
+    hdrs = [
+        "sr_context_mapping.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":model",
+        "//src/v/pandaproxy/schema_registry:types",
+    ],
+)
+
+redpanda_cc_library(
     name = "model",
     srcs = [
         "filter_utils.cc",
@@ -19,6 +34,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/cluster_link:errc",
         "//src/v/container:chunked_hash_map",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/protocol",
         "//src/v/model",
         "//src/v/serde",

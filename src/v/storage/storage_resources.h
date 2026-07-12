@@ -14,6 +14,7 @@
 #include "base/units.h"
 #include "config/property.h"
 #include "ssx/semaphore.h"
+#include "storage/chunk_cache.h"
 #include "utils/adjustable_semaphore.h"
 
 #include <cstdint>
@@ -46,6 +47,13 @@ public:
       config::binding<uint64_t>,
       config::binding<uint64_t>);
     storage_resources(const storage_resources&) = delete;
+
+    ss::future<> start(
+      internal::chunk_cache::prealloc do_prealloc
+      = internal::chunk_cache::prealloc::no) {
+        return _chunk_cache.start(do_prealloc);
+    }
+    ss::future<> stop() { return _chunk_cache.stop(); }
 
     /**
      * Call this when the storage::node_api state is updated
@@ -104,6 +112,8 @@ public:
      */
     void update_min_checkpoint_bytes();
 
+    internal::chunk_cache& chunks() { return _chunk_cache; }
+
 private:
     uint64_t _space_allowance_free{0};
 
@@ -112,7 +122,9 @@ private:
     config::binding<uint64_t> _global_target_replay_bytes;
     config::binding<uint64_t> _max_concurrent_replay;
     config::binding<uint64_t> _compaction_index_mem_limit;
-    size_t _append_chunk_size;
+
+    // Per-shard pool of segment appender chunks. See chunks().
+    internal::chunk_cache _chunk_cache;
 
     // A lower bound on how many units a caller must have to be
     // eligible for flush, to prevent pathological case where on caller

@@ -121,24 +121,45 @@ ss::future<std::expected<std::monostate, ctp_stm_api_errc>>
 ctp_stm_api::advance_reconciled_offset(
   kafka::offset lro,
   model::timeout_clock::time_point deadline,
-  ss::abort_source& as) {
-    if (lro <= get_last_reconciled_offset()) {
+  ss::abort_source& as,
+  std::optional<kafka::offset> min_allowed_local_threshold) {
+    // The floor is monotonic: drop targets the state already covers.
+    if (
+      min_allowed_local_threshold.has_value()
+      && *min_allowed_local_threshold <= get_min_allowed_local_threshold()) {
+        min_allowed_local_threshold.reset();
+    }
+    const bool advances_lro = lro > get_last_reconciled_offset();
+    if (!advances_lro && !min_allowed_local_threshold.has_value()) {
         co_return std::monostate{};
     }
 
-    auto lrlo = _stm->_raft->log()->to_log_offset(kafka::offset_cast(lro));
-
-    vlog(
-      _log.debug,
-      "Replicating ctp_stm_cmd::advance_reconciled_offset{{lro:{} lrlo:{}}}",
-      lro,
-      lrlo);
-
     storage::record_batch_builder builder(
       model::record_batch_type::ctp_stm_command, model::offset(0));
-    builder.add_raw_kv(
-      serde::to_iobuf(advance_reconciled_offset_cmd::key),
-      serde::to_iobuf(advance_reconciled_offset_cmd(lro, lrlo)));
+
+    if (advances_lro) {
+        auto lrlo = _stm->_raft->log()->to_log_offset(kafka::offset_cast(lro));
+        vlog(
+          _log.debug,
+          "Replicating ctp_stm_cmd::advance_reconciled_offset{{lro:{} "
+          "lrlo:{}}}",
+          lro,
+          lrlo);
+        builder.add_raw_kv(
+          serde::to_iobuf(advance_reconciled_offset_cmd::key),
+          serde::to_iobuf(advance_reconciled_offset_cmd(lro, lrlo)));
+    }
+    if (min_allowed_local_threshold.has_value()) {
+        vlog(
+          _log.debug,
+          "Replicating ctp_stm_cmd::set_min_allowed_local_threshold{{{}}} "
+          "alongside the LRO advance",
+          *min_allowed_local_threshold);
+        builder.add_raw_kv(
+          serde::to_iobuf(set_min_allowed_local_threshold_cmd::key),
+          serde::to_iobuf(
+            set_min_allowed_local_threshold_cmd(*min_allowed_local_threshold)));
+    }
 
     auto batch = std::move(builder).build();
     auto apply_result = co_await replicated_apply(

@@ -7,7 +7,7 @@ redpanda_cc_gtest(
         "read_pipeline_test.cc",
     ],
     deps = [
-        "//src/v/cloud_io:scheduler_types",
+        "//src/v/cloud_io:admission_control_types",
         "//src/v/cloud_topics/level_zero/pipeline:read_pipeline",
         "//src/v/model",
         "//src/v/test_utils:gtest",
@@ -111,7 +111,7 @@ redpanda_cc_bench(
     ],
     deps = [
         "//src/v/base",
-        "//src/v/cloud_io:scheduler_types",
+        "//src/v/cloud_io:admission_control_types",
         "//src/v/cloud_topics/level_zero/pipeline:event_filter",
         "//src/v/cloud_topics/level_zero/pipeline:read_pipeline",
         "//src/v/cloud_topics/level_zero/pipeline:write_pipeline",

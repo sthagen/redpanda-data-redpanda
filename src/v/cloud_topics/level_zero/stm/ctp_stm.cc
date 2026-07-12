@@ -116,8 +116,9 @@ ss::future<> ctp_stm::prefix_truncate_bg() {
         // trims aggressively (the local log only holds placeholders);
         // storage.mode=tiered_cloud honors local retention plus the compaction
         // floor and so keeps more data locally.
+        const bool is_tiered = _raft->log()->config().is_tiered_cloud();
         model::offset target;
-        if (_raft->log()->config().is_tiered_cloud()) {
+        if (is_tiered) {
             target = co_await compute_local_retention_offset();
         } else {
             // storage.mode=cloud keeps only placeholders locally; the
@@ -133,10 +134,12 @@ ss::future<> ctp_stm::prefix_truncate_bg() {
           _raft->last_snapshot_index());
         try {
             if (
-              _raft->last_snapshot_index() >= target
-              && _active_readers.empty()) {
+              _raft->last_snapshot_index() >= target && _active_readers.empty()
+              && !is_tiered) {
                 // Only wait without a timeout if there are no active readers
-                // that could be holding us back.
+                // that could be holding us back. tiered_cloud always polls
+                // because its space-management offset is set without signalling
+                // _lro_advanced.
                 co_await _lro_advanced.wait();
             } else {
                 co_await _lro_advanced.wait(retry_backoff_time);

@@ -1,6 +1,32 @@
 load("//bazel:test.bzl", "redpanda_cc_gtest")
 
 redpanda_cc_gtest(
+    name = "chunked_remote_file_reader_test",
+    timeout = "short",
+    srcs = [
+        "chunked_remote_file_reader_test.cc",
+    ],
+    deps = [
+        "//src/v/bytes:iobuf",
+        "//src/v/cloud_io:cache",
+        "//src/v/cloud_io:io_result",
+        "//src/v/cloud_io:remote",
+        "//src/v/cloud_io/tests:cloud_io_cache_fixture",
+        "//src/v/cloud_io/tests:db_s3_imposter",
+        "//src/v/cloud_io/tests:scoped_remote",
+        "//src/v/cloud_storage_clients",
+        "//src/v/container:chunked_vector",
+        "//src/v/lsm/io:chunked_remote_file_reader",
+        "//src/v/lsm/io:memory_persistence",
+        "//src/v/random:generators",
+        "//src/v/test_utils:gtest",
+        "//src/v/utils:retry_chain_node",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "readahead_file_reader_test",
     timeout = "short",
     srcs = [

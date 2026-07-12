@@ -7,13 +7,13 @@ require (
 	buf.build/gen/go/redpandadata/cloud/connectrpc/go v1.19.1-20260409133226-cd0bdc42a0f9.2
 	buf.build/gen/go/redpandadata/cloud/protocolbuffers/go v1.36.11-20260409133226-cd0bdc42a0f9.1
 	buf.build/gen/go/redpandadata/common/protocolbuffers/go v1.36.11-20260323171043-6e06f84ad823.1
-	buf.build/gen/go/redpandadata/core/protocolbuffers/go v1.36.11-20260608080241-5b0ab84ea082.1
+	buf.build/gen/go/redpandadata/core/protocolbuffers/go v1.36.11-20260623153049-288047c1b16f.1
 	buf.build/gen/go/redpandadata/dataplane/connectrpc/go v1.19.1-20260409091301-5e03d1b04513.2
 	buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go v1.36.11-20260409091301-5e03d1b04513.1
 	buf.build/gen/go/redpandadata/gatekeeper/connectrpc/go v1.19.1-20251022210437-a5dd600d04b6.2
 	buf.build/gen/go/redpandadata/gatekeeper/protocolbuffers/go v1.36.11-20251022210437-a5dd600d04b6.1
 	cloud.google.com/go/compute/metadata v0.9.0
-	connectrpc.com/connect v1.19.1
+	connectrpc.com/connect v1.19.2
 	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/Ladicle/tabwriter v1.0.0
 	github.com/avast/retry-go v3.0.0+incompatible
@@ -46,7 +46,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.67.5
 	github.com/redpanda-data/common-go/proto v0.0.0-20260223115805-73fb9bd9c2c0
-	github.com/redpanda-data/common-go/rpadmin v0.2.6
+	github.com/redpanda-data/common-go/rpadmin v0.2.8
 	github.com/redpanda-data/common-go/rpsr v0.1.4
 	github.com/redpanda-data/protoc-gen-go-mcp v0.0.0-20250930092048-a98b94b5957a
 	github.com/rs/xid v1.6.0
@@ -60,21 +60,21 @@ require (
 	github.com/tidwall/sjson v1.2.5
 	github.com/tklauser/go-sysconf v0.3.16
 	github.com/twmb/avro v1.3.4
-	github.com/twmb/franz-go v1.20.5
-	github.com/twmb/franz-go/pkg/kadm v1.17.2
+	github.com/twmb/franz-go v1.21.2
+	github.com/twmb/franz-go/pkg/kadm v1.18.0
 	github.com/twmb/franz-go/pkg/kfake v0.0.0-20251024215757-aea970d4d0d2
 	github.com/twmb/franz-go/pkg/kmsg v1.13.1
 	github.com/twmb/franz-go/pkg/sr v1.7.0
 	github.com/twmb/franz-go/plugin/kzap v1.1.2
 	github.com/twmb/tlscfg v1.3.0
 	github.com/twmb/types v1.2.0
-	go.uber.org/zap v1.27.1
+	go.uber.org/zap v1.28.0
 	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.45.0
 	golang.org/x/term v0.43.0
-	google.golang.org/genproto/googleapis/api v0.0.0-20260406210006-6f92a3bedf2d
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260406210006-6f92a3bedf2d
+	google.golang.org/genproto/googleapis/api v0.0.0-20260511170946-3700d4141b60
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260504160031-60b97b32f348
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -87,7 +87,7 @@ require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260209202127-80ab13bee0bf.1 // indirect
 	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.36.11-20260102203250-6467306b4f62.1 // indirect
 	buf.build/gen/go/redpandadata/ai-gateway/protocolbuffers/go v1.36.11-20260203101113-1c7702ddb57a.1 // indirect
-	buf.build/gen/go/redpandadata/core/connectrpc/go v1.19.1-20260409143030-36db7bac51c2.2 // indirect
+	buf.build/gen/go/redpandadata/core/connectrpc/go v1.19.2-20260608080241-5b0ab84ea082.1 // indirect
 	buf.build/gen/go/redpandadata/otel/protocolbuffers/go v1.36.11-20260323171043-3635d3966b23.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
@@ -106,7 +106,6 @@ require (
 	github.com/aws/smithy-go v1.24.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
-	github.com/containerd/log v0.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
@@ -136,7 +135,7 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.18.5 // indirect
+	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.4 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
 	github.com/lestrrat-go/httprc v1.0.6 // indirect
@@ -177,12 +176,12 @@ require (
 	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20260312153236-7ab1446f8b90 // indirect
 	golang.org/x/lint v0.0.0-20241112194109-818c5a804067 // indirect
-	golang.org/x/mod v0.35.0 // indirect
+	golang.org/x/mod v0.36.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	golang.org/x/tools v0.44.0 // indirect
+	golang.org/x/tools v0.45.0 // indirect
 	google.golang.org/genproto v0.0.0-20260406210006-6f92a3bedf2d // indirect
 	google.golang.org/grpc v1.80.0 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect

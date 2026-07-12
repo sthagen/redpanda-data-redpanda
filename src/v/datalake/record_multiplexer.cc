@@ -76,7 +76,8 @@ record_multiplexer::record_multiplexer(
   model::revision_id topic_revision,
   std::unique_ptr<parquet_file_writer_factory> writer_factory,
   schema_manager& schema_mgr,
-  type_resolver& type_resolver,
+  type_resolver& val_type_resolver,
+  type_resolver& key_type_resolver,
   record_translator& record_translator,
   table_creator& table_creator,
   model::iceberg_invalid_record_action invalid_record_action,
@@ -89,7 +90,8 @@ record_multiplexer::record_multiplexer(
   , _topic_revision(topic_revision)
   , _writer_factory{std::move(writer_factory)}
   , _schema_mgr(schema_mgr)
-  , _type_resolver(type_resolver)
+  , _val_type_resolver(val_type_resolver)
+  , _key_type_resolver(key_type_resolver)
   , _record_translator(record_translator)
   , _table_creator(table_creator)
   , _invalid_record_action(invalid_record_action)
@@ -143,7 +145,6 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
             co_return ss::stop_iteration::yes;
         }
         auto record = it.next();
-        auto key = record.share_key_opt();
         auto val = record.share_value_opt();
         auto timestamp = is_broker_time
                            ? max_timestamp
@@ -154,16 +155,53 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
         if (offset < start_offset) {
             continue;
         }
-        int64_t estimated_size = (key ? key->size_bytes() : 0)
-                                 + (val ? val->size_bytes() : 0);
+        int64_t estimated_size = std::max<int32_t>(record.key_size(), 0)
+                                 + std::max<int32_t>(record.value_size(), 0);
 
-        auto val_type_res = co_await _type_resolver.resolve_buf_type(
+        auto val_type_res = co_await _val_type_resolver.resolve_buf_type(
           std::move(val));
         if (val_type_res.has_error()) {
             auto err = val_type_res.error();
             vlog(
               _log.warn,
-              "Error resolving type for record at offset {}, batch: {}: {}",
+              "Error resolving value type for record at offset {}, batch: "
+              "{}: {}",
+              offset,
+              batch_header,
+              err);
+            switch (err) {
+            case type_resolver::errc::registry_error:
+            case type_resolver::errc::invalid_config:
+                _error = writer_error::retryable_type_resolution_error;
+                co_return ss::stop_iteration::yes;
+            case type_resolver::errc::bad_input:
+            case type_resolver::errc::translation_error:
+                auto invalid_res = co_await handle_invalid_record(
+                  translation_probe::invalid_record_cause::
+                    failed_kafka_schema_resolution,
+                  offset,
+                  record.share_key(),
+                  record.share_value(),
+                  timestamp,
+                  timestamp_type,
+                  record.headers(),
+                  as);
+                if (invalid_res.has_error()) {
+                    _error = invalid_res.error();
+                    co_return ss::stop_iteration::yes;
+                }
+                continue;
+            }
+        }
+
+        auto key_type_res = co_await _key_type_resolver.resolve_buf_type(
+          record.share_key_opt());
+        if (key_type_res.has_error()) {
+            auto err = key_type_res.error();
+            vlog(
+              _log.warn,
+              "Error resolving key type for record at offset {}, batch: "
+              "{}: {}",
               offset,
               batch_header,
               err);
@@ -195,7 +233,8 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
         auto record_data_res = co_await _record_translator.translate_data(
           _ntp.tp.partition,
           offset,
-          std::move(key),
+          key_type_res.value().type,
+          std::move(key_type_res.value().parsable_buf),
           val_type_res.value().type,
           std::move(val_type_res.value().parsable_buf),
           timestamp,
@@ -229,9 +268,12 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
                 continue;
             }
         }
+        auto& key_type = key_type_res.value().type;
         auto& val_type = val_type_res.value().type;
         record_schema_components comps{
-          .key_identifier = std::nullopt,
+          .key_identifier = key_type.has_value()
+                              ? std::make_optional((*key_type)->id)
+                              : std::nullopt,
           .val_identifier = val_type.has_value()
                               ? std::make_optional((*val_type)->id)
                               : std::nullopt,
@@ -239,9 +281,9 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
         auto writer_iter = _writers.find(comps);
         if (writer_iter == _writers.end()) {
             auto record_type = _record_translator.build_type(
-              std::move(val_type));
+              std::move(key_type), std::move(val_type));
             auto ensure_res = co_await _table_creator.ensure_table(
-              _ntp.tp.topic, _topic_revision, record_type.comps);
+              _ntp.tp.topic, _topic_revision, record_type);
             if (ensure_res.has_error()) {
                 auto e = ensure_res.error();
                 switch (e) {
@@ -555,7 +597,8 @@ record_multiplexer::handle_invalid_record(
                 }
             }
 
-            auto record_type = key_value_translator{}.build_type(std::nullopt);
+            auto record_type = record_translator{}.build_type(
+              std::nullopt, std::nullopt);
             if (!load_res.value().fill_registered_ids(
                   record_type.type, _norm)) {
                 // This shouldn't happen because we ensured the schema with the
@@ -595,9 +638,10 @@ record_multiplexer::handle_invalid_record(
         auto resolved_buf_type = co_await invalid_record_type_resolver
                                    .resolve_buf_type(std::move(val));
 
-        auto record_data_res = co_await key_value_translator{}.translate_data(
+        auto record_data_res = co_await record_translator{}.translate_data(
           _ntp.tp.partition,
           offset,
+          std::nullopt,
           std::move(key),
           resolved_buf_type.value().type,
           std::move(resolved_buf_type.value().parsable_buf),

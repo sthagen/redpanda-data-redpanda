@@ -205,8 +205,11 @@ public:
     }
 
     ss::future<std::expected<ss::input_stream<char>, errc>> read_object(
-      object_extent ext, ss::abort_source* as, cloud_io::group_id g) override {
-        return underlying_->read_object(ext, as, g);
+      object_extent ext,
+      ss::abort_source* as,
+      cloud_io::group_id g,
+      bool skip_cache) override {
+        return underlying_->read_object(ext, as, g, skip_cache);
     }
 
     ss::future<std::expected<void, errc>>

@@ -124,7 +124,7 @@ class EndToEndCloudTopicsIcebergCompactionTest(EndToEndCloudTopicsIcebergTestBas
         cloud_storage_type=supported_storage_types(),
         storage_mode=[
             TopicSpec.STORAGE_MODE_CLOUD,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
         ],
     )
     def test_compaction_preserves_all_offsets_in_iceberg(
@@ -142,7 +142,7 @@ class EndToEndCloudTopicsIcebergCompactionTest(EndToEndCloudTopicsIcebergTestBas
             include_query_engines=[QueryEngineType.SPARK],
             catalog_type=CatalogType.REST_JDBC,
         ) as dl:
-            if storage_mode == TopicSpec.STORAGE_MODE_TIERED_CLOUD:
+            if storage_mode == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2:
                 self.redpanda.set_feature_active(
                     "tiered_cloud_topics", True, timeout_sec=30
                 )
@@ -150,7 +150,7 @@ class EndToEndCloudTopicsIcebergCompactionTest(EndToEndCloudTopicsIcebergTestBas
                 self.topic_name,
                 iceberg_mode="key_value",
                 config={
-                    TopicSpec.PROPERTY_STORAGE_MODE: storage_mode,
+                    **TopicSpec.storage_mode_config(storage_mode),
                     "cleanup.policy": TopicSpec.CLEANUP_COMPACT,
                 },
             )
@@ -230,7 +230,7 @@ class EndToEndCloudTopicsIcebergDeletionTest(EndToEndCloudTopicsIcebergTestBase)
         cloud_storage_type=supported_storage_types(),
         storage_mode=[
             TopicSpec.STORAGE_MODE_CLOUD,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
         ],
     )
     def test_deletion_blocked_until_translated(
@@ -248,7 +248,7 @@ class EndToEndCloudTopicsIcebergDeletionTest(EndToEndCloudTopicsIcebergTestBase)
             include_query_engines=[QueryEngineType.SPARK],
             catalog_type=CatalogType.REST_JDBC,
         ) as dl:
-            if storage_mode == TopicSpec.STORAGE_MODE_TIERED_CLOUD:
+            if storage_mode == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2:
                 self.redpanda.set_feature_active(
                     "tiered_cloud_topics", True, timeout_sec=30
                 )
@@ -256,7 +256,7 @@ class EndToEndCloudTopicsIcebergDeletionTest(EndToEndCloudTopicsIcebergTestBase)
                 self.topic_name,
                 iceberg_mode="key_value",
                 config={
-                    TopicSpec.PROPERTY_STORAGE_MODE: storage_mode,
+                    **TopicSpec.storage_mode_config(storage_mode),
                     "retention.ms": 500,
                     "retention.bytes": 1024,
                 },

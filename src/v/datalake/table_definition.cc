@@ -70,21 +70,18 @@ std::optional<iceberg::value> build_headers_value(
 std::unique_ptr<iceberg::struct_value> build_rp_struct(
   model::partition_id pid,
   kafka::offset o,
-  std::optional<iobuf> key,
+  std::optional<iceberg::value> key,
   model::timestamp ts,
   model::timestamp_type ts_t,
   const chunked_vector<model::record_header>& headers,
   model::iceberg_mode::headers_config cfg) {
     auto headers_val = build_headers_value(headers, cfg);
-    auto key_val = key ? std::make_optional<iceberg::value>(
-                           iceberg::binary_value{std::move(*key)})
-                       : std::nullopt;
     return rp_desc::build_value(
       val<"partition">(iceberg::int_value(pid)),
       val<"offset">(iceberg::long_value(o)),
       val<"timestamp">(iceberg::timestamptz_value(ts.value() * 1000)),
       val<"headers">(std::move(headers_val)),
-      val<"key">(std::move(key_val)),
+      val<"key">(std::move(key)),
       val<"timestamp_type">(iceberg::int_value{static_cast<int32_t>(ts_t)}));
 }
 

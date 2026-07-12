@@ -196,6 +196,7 @@ ss::future<> l1_object_sink::flush(kafka::offset object_last_offset) {
     }
 
     ++_output_objects;
+    _output_bytes += object_info.size_bytes;
 }
 
 ss::future<> l1_object_sink::prepare_iteration(kafka::offset next_extent_base) {

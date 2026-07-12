@@ -794,7 +794,8 @@ FIXTURE_TEST(
       "max.compaction.lag.ms",
       "message.timestamp.before.max.ms",
       "message.timestamp.after.max.ms",
-      "redpanda.storage.mode"};
+      "redpanda.storage.mode",
+      "redpanda.storage.mode.impl"};
 
     // All properties_request
     auto all_describe_resp = describe_configs(test_tp);
@@ -1407,9 +1408,13 @@ FIXTURE_TEST(test_iceberg_property, alter_config_test_fixture) {
                  "value:mode=schema_latest,subject=foo",
                  "value_schema_latest:subject=foo"},
                new_fmt_case{
-                 "key:mode=schema_id_prefix", "key:mode=schema_id_prefix"},
+                 "key:mode=schema_id_prefix",
+                 "key:mode=schema_id_prefix;value:mode=binary,layout=flat;"
+                 "headers:value_type=binary"},
                new_fmt_case{
-                 "headers:value_type=string", "headers:value_type=string"},
+                 "headers:value_type=string",
+                 "key:mode=binary;value:mode=binary,layout=flat;"
+                 "headers:value_type=string"},
              }) {
             absl::flat_hash_map<ss::sstring, ss::sstring> properties;
             properties.emplace("redpanda.iceberg.mode", input);

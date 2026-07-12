@@ -75,6 +75,7 @@ class IcebergTogglingTest(RedpandaTest):
                 "bootstrap.servers": self.redpanda.brokers(),
                 "key.serializer": StringSerializer("utf_8"),
                 "value.serializer": value_serializer,
+                "enable.idempotence": True,
             }
         )
 

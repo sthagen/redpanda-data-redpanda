@@ -94,8 +94,24 @@ public:
 
     bool ready_to_snapshot() const;
 
-    /// Compose a mini-snapshot for joining nodes: this is a specialized
-    /// peer of the more general maybe_make_snapshot
+    /// Compose a mini-snapshot for joining or restarting nodes: this is
+    /// a specialized peer of the more general maybe_make_snapshot.
+    ///
+    /// The Backends template pack selects which controller_stm sub-stms
+    /// contribute to the snapshot via fill_snapshot. The unselected
+    /// sub-stms' corresponding fields on controller_join_snapshot are
+    /// left default-constructed (the receiver applies whatever's
+    /// present and ignores the rest).
+    ///
+    /// Typical specializations:
+    ///   - <bootstrap_backend, feature_backend, config_manager> for the
+    ///     join_node response (newly-registering nodes need the
+    ///     cluster_uuid, the feature table, and the cluster config).
+    ///   - <feature_backend, config_manager> for the
+    ///     fetch_controller_snapshot RPC, used by restarting nodes to
+    ///     refresh shard_local_cfg and the feature table from the
+    ///     controller leader before downstream services come up.
+    template<typename... Backends>
     ss::future<std::optional<iobuf>> maybe_make_join_snapshot();
 
     /**
@@ -124,5 +140,49 @@ private:
 };
 
 inline constexpr ss::shard_id controller_stm_shard = 0;
+
+template<typename... Backends>
+ss::future<std::optional<iobuf>> controller_stm::maybe_make_join_snapshot() {
+    // We do **not** check the controller_snapshots feature flag here:
+    // even if snapshotting in general is turned off, it is still safe
+    // to send snapshots to joining nodes: they will just ignore
+    // it if they don't want it.
+    //
+    // Hold the gate + write_snapshot_mtx for the same reason
+    // mux_state_stm::maybe_write_snapshot does — guarantee a coherent
+    // point-in-time view across backends.
+    auto gate_holder = _gate.hold();
+    auto write_snapshot_mtx_holder = co_await _write_snapshot_mtx.get_units();
+
+    if (!ready_to_snapshot()) {
+        vlog(clusterlog.debug, "skipping join snapshotting, not ready");
+        co_return std::nullopt;
+    }
+
+    controller_snapshot snapshot;
+
+    auto apply_mtx_holder = co_await _apply_mtx.get_units();
+    model::offset last_applied = get_last_applied_offset();
+
+    // Build a sequential future chain calling fill_snapshot on each
+    // selected backend. Sequential because fill_snapshot mutations on
+    // the shared controller_snapshot must not race.
+    ss::future<> fill_fut = ss::now();
+    auto call_fill = [&snapshot, &fill_fut](auto& backend) {
+        fill_fut = fill_fut.then(
+          [&backend, &snapshot] { return backend.fill_snapshot(snapshot); });
+    };
+    (call_fill(std::get<Backends&>(_state)), ...);
+    co_await std::move(fill_fut);
+
+    apply_mtx_holder.return_all();
+
+    co_return serde::to_iobuf(
+      controller_join_snapshot{
+        .last_applied = last_applied,
+        .bootstrap = std::move(snapshot.bootstrap),
+        .features = std::move(snapshot.features),
+        .config = std::move(snapshot.config)});
+}
 
 } // namespace cluster

@@ -56,6 +56,7 @@ ss::future<std::expected<
 replicated_database::open(
   model::term_id expected_term,
   stm* s,
+  ss::lw_shared_ptr<raft::consensus> raft,
   cloud_io::cache* cache,
   cloud_io::remote* remote,
   const cloud_storage_clients::bucket_name& bucket,
@@ -115,7 +116,12 @@ replicated_database::open(
 
     auto data_persist_fut = co_await ss::coroutine::as_future(
       lsm::io::open_cloud_cache_data_persistence(
-        cache, remote, bucket, domain_prefix, cloud_io::group_id::metastore));
+        cache,
+        remote,
+        bucket,
+        domain_prefix,
+        config::shard_local_cfg().cloud_topics_metastore_sst_chunk_size.bind(),
+        cloud_io::group_id::metastore));
     if (data_persist_fut.failed()) {
         co_return std::unexpected(wrap_failed_future(
           data_persist_fut.get_exception(), "Failed to open data persistence"));
@@ -196,8 +202,8 @@ replicated_database::open(
             }
         }
     }
-    auto ret = std::unique_ptr<replicated_database>(
-      new replicated_database(term, domain_uuid, s, std::move(db), as, sg));
+    auto ret = std::unique_ptr<replicated_database>(new replicated_database(
+      term, domain_uuid, s, std::move(raft), std::move(db), as, sg));
     ret->start();
     co_return std::move(ret);
 }
@@ -223,7 +229,7 @@ replicated_database::close() {
 }
 
 bool replicated_database::needs_reopen() const {
-    return !stm_->raft()->is_leader() || term_ != stm_->raft()->confirmed_term()
+    return !raft_->is_leader() || term_ != raft_->confirmed_term()
            || get_domain_uuid() != expected_domain_uuid_;
 }
 

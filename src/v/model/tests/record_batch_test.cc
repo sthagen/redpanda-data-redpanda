@@ -226,6 +226,33 @@ TEST_F(RecordBatchTest, RecordSizeBytesWithNullHeaderValues) {
     check_serialization_size(r);
 }
 
+TEST_F(RecordBatchTest, SetTimestampDeltaKeepsSizeBytesAccurate) {
+    auto r = model::record(
+      model::record_attributes(0),
+      0,
+      0,
+      iobuf::from("key"),
+      iobuf::from("value"),
+      {});
+    check_serialization_size(r);
+
+    // Cross vint width boundaries in both directions (zigzag: -64..63 fits in
+    // one byte), including negative and multi-day deltas.
+    for (int64_t delta :
+         {int64_t{63},
+          int64_t{64},
+          int64_t{1209600000}, // 14 days in ms
+          int64_t{-1},
+          int64_t{-64},
+          int64_t{-65},
+          int64_t{-1209600000},
+          int64_t{0}}) {
+        r.set_timestamp_delta(delta);
+        EXPECT_EQ(r.timestamp_delta(), delta);
+        check_serialization_size(r);
+    }
+}
+
 class RecordBatchCompressionTest
   : public ::testing::TestWithParam<model::compression> {};
 

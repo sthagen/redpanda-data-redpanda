@@ -18,6 +18,7 @@
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_ptr.hh>
+#include <seastar/util/bool_class.hh>
 
 namespace storage::internal {
 
@@ -26,6 +27,10 @@ class chunk_cache {
     using chunk_ptr = ss::lw_shared_ptr<chunk>;
 
 public:
+    // Whether chunk_cache::start() should eagerly pre-allocate the full chunk
+    // pool.
+    using prealloc = ss::bool_class<struct chunk_cache_prealloc_tag>;
+
     /**
      * The chunk cache serves all segment files, which individually may have
      * different alignment requirements (e.g. different file systems or
@@ -42,7 +47,7 @@ public:
     chunk_cache& operator=(const chunk_cache&) = delete;
     ~chunk_cache() noexcept = default;
 
-    ss::future<> start();
+    ss::future<> start(prealloc do_prealloc = prealloc::no);
     ss::future<> stop();
 
     void add(const chunk_ptr& chunk);
@@ -57,20 +62,23 @@ private:
     ss::future<chunk_cache::chunk_ptr> wait_and_get();
 
     chunk_ptr pop_or_allocate();
+    void assert_started();
+    // Allocates up to `_size_target` chunks pre-emptively.
+    ss::future<> preallocate();
 
     ss::chunked_fifo<chunk_ptr> _chunks;
     ssx::semaphore _sem{0, "s/chunk-cache"};
     size_t _size_available{0};
     size_t _size_total{0};
-    const size_t _size_target;
-    const size_t _size_limit;
+    size_t _size_target{0};
+    size_t _size_limit{0};
 
     const size_t _chunk_size{0};
 
     size_t _wait_for_chunk_count{0};
     metrics::internal_metric_groups _metrics;
-};
 
-chunk_cache& chunks();
+    bool _started{false};
+};
 
 } // namespace storage::internal

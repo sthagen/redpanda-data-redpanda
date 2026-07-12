@@ -242,7 +242,8 @@ translation_task::translation_task(
   cloud_data_io& cloud_io,
   features::feature_table* features,
   schema_manager& schema_mgr,
-  type_resolver& type_resolver,
+  type_resolver& val_type_resolver,
+  type_resolver& key_type_resolver,
   record_translator& record_translator,
   table_creator& table_creator,
   model::iceberg_invalid_record_action invalid_record_action,
@@ -252,7 +253,8 @@ translation_task::translation_task(
   : _log(datalake_log, fmt::format("{}", ntp))
   , _cloud_io(&cloud_io)
   , _schema_mgr(&schema_mgr)
-  , _type_resolver(&type_resolver)
+  , _val_type_resolver(&val_type_resolver)
+  , _key_type_resolver(&key_type_resolver)
   , _record_translator(&record_translator)
   , _table_creator(&table_creator)
   , _invalid_record_action(invalid_record_action)
@@ -263,7 +265,8 @@ translation_task::translation_task(
       topic_revision,
       std::move(writer_factory),
       *_schema_mgr,
-      *_type_resolver,
+      *_val_type_resolver,
+      *_key_type_resolver,
       *_record_translator,
       *_table_creator,
       _invalid_record_action,

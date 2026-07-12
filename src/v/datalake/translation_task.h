@@ -41,7 +41,8 @@ public:
       cloud_data_io& uploader,
       features::feature_table* features,
       schema_manager& schema_mgr,
-      type_resolver& type_resolver,
+      type_resolver& val_type_resolver,
+      type_resolver& key_type_resolver,
       record_translator& record_translator,
       table_creator&,
       model::iceberg_invalid_record_action,
@@ -142,7 +143,8 @@ private:
     prefix_logger _log;
     cloud_data_io* _cloud_io;
     schema_manager* _schema_mgr;
-    type_resolver* _type_resolver;
+    type_resolver* _val_type_resolver;
+    type_resolver* _key_type_resolver;
     record_translator* _record_translator;
     table_creator* _table_creator;
     model::iceberg_invalid_record_action _invalid_record_action;

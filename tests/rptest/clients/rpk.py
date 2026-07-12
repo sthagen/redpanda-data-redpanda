@@ -1033,7 +1033,7 @@ class RpkTool:
             cmd += ["--allow-new-topics"]
         self._run_group(cmd)
 
-    def group_describe(self, group, summary=False, tolerant=False):
+    def group_describe(self, group: str, summary: bool = False, tolerant: bool = False):
         def parse_field(field_name, string):
             pattern = re.compile(f" *{field_name} +(?P<value>.+)")
             m = pattern.match(string)

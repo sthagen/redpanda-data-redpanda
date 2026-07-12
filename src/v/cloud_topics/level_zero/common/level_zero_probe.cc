@@ -157,7 +157,9 @@ void pipeline_probe::setup_internal_metrics(bool disable, ss::sstring name) {
           [this] { return _request_probe.cloud_write_bytes; },
           sm::description("Number of bytes uploaded to the cloud storage."),
           labels),
-      });
+      },
+      {},
+      {sm::shard_label});
 }
 
 void pipeline_probe::setup_public_metrics(bool disable, ss::sstring name) {
@@ -265,7 +267,9 @@ void write_request_scheduler_probe::setup_internal_metrics(bool disable) {
          sm::description(
            "Bytes buffered in the next pipeline stage, used for "
            "group split/merge decisions."),
-         labels)});
+         labels)},
+      {},
+      {sm::shard_label});
 }
 read_merge_probe::read_merge_probe(bool disable) {
     setup_internal_metrics(disable);
@@ -310,7 +314,9 @@ void read_merge_probe::setup_internal_metrics(bool disable) {
             "Total bytes of proxy requests forwarded to the next pipeline "
             "stage."),
           labels),
-      });
+      },
+      {},
+      {sm::shard_label});
 }
 
 batcher_probe::batcher_probe(bool disable) { setup_internal_metrics(disable); }
@@ -358,7 +364,9 @@ void batcher_probe::setup_internal_metrics(bool disable) {
           [this] { return _upload_size_hist.seastar_histogram_logform(); },
           sm::description("Level zero object size histogram in bytes."),
           labels),
-      });
+      },
+      {},
+      {sm::shard_label});
 }
 
 } // namespace cloud_topics::l0

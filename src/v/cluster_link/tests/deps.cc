@@ -58,6 +58,9 @@ ss::future<> cluster_link_manager_test_fixture::wire_up_and_start(
     _ftpc = ftpc.get();
 
     _lf = lf.get();
+    co_await _feature_table.start();
+    co_await _feature_table.invoke_on_all(
+      [](features::feature_table& ft) { ft.testing_activate_all(); });
     co_await _manager.start_single(
       _self,
       ss::sharded_parameter([&fplc]() { return std::move(fplc); }),
@@ -101,6 +104,11 @@ ss::future<> cluster_link_manager_test_fixture::wire_up_and_start(
           _fmtp = fmtp.get();
           return fmtp;
       }),
+      ss::sharded_parameter([this]() {
+          return sr_preflight_checker::make_default(
+            _fake_schema_registry, std::make_unique<fake_source_sr_prober>());
+      }),
+      &_feature_table,
       1s,
       _default_topic_replication.bind(),
       ss::default_scheduling_group());
@@ -119,6 +127,7 @@ ss::future<> cluster_link_manager_test_fixture::reset() {
     _notification_cleanups.clear();
     _lf = nullptr;
     co_await _manager.stop();
+    co_await _feature_table.stop();
     _fss = nullptr;
     _tmc = nullptr;
     _fpm = nullptr;

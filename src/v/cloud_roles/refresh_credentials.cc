@@ -356,30 +356,31 @@ ss::future<> refresh_credentials::impl::sleep_until_expiry() const {
     }
 }
 
-ss::future<http::client> refresh_credentials::impl::make_api_client(
+ss::future<std::unique_ptr<http::client>>
+refresh_credentials::impl::make_api_client(
   ss::sstring name, client_tls_enabled enable_tls) {
     if (enable_tls == client_tls_enabled::yes) {
         if (_tls_certs == nullptr) {
             co_await init_tls_certs(std::move(name));
         }
 
-        co_return http::client{
+        co_return std::make_unique<http::client>(
           net::base_transport::configuration{
             .server_addr = _address,
             .credentials = _tls_certs,
             // TODO (abhijat) toggle metrics
             .disable_metrics = net::metrics_disabled::yes,
             .tls_sni_hostname = _address.host()},
-          _as};
+          _as);
     }
 
-    co_return http::client{
+    co_return std::make_unique<http::client>(
       net::base_transport::configuration{
         .server_addr = _address,
         .credentials = {},
         .disable_metrics = net::metrics_disabled::yes,
         .tls_sni_hostname = std::nullopt},
-      _as};
+      _as);
 }
 
 ss::future<> refresh_credentials::impl::init_tls_certs(ss::sstring name) {

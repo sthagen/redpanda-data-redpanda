@@ -46,6 +46,7 @@ public:
             | ss::open_flags::truncate,
           ss::file_open_options{});
 
+        resources.start().get();
         storage::segment_appender::options opts(std::nullopt, resources, stats);
         appender = std::make_unique<storage::segment_appender>(
           std::move(file), opts);

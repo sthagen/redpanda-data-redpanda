@@ -11,6 +11,7 @@
 #include "bytes/iobuf.h"
 #include "bytes/iobuf_parser.h"
 #include "container/chunked_vector.h"
+#include "datalake/record_translator.h"
 #include "datalake/table_definition.h"
 #include "iceberg/datatypes.h"
 #include "iceberg/values.h"
@@ -197,6 +198,241 @@ TEST(StringHeaderSanitization, ValidUtf8PassesThrough) {
 TEST(StringHeaderSanitization, InvalidBytesReplaced) {
     // bare continuation byte → U+FFFD
     EXPECT_EQ(build_string_header_value("\x80"), "\xEF\xBF\xBD");
+}
+
+// ---- record_translator::build_type with string mode -------------------------
+
+using sm = model::iceberg_mode::schema_mode;
+using key_config = model::iceberg_mode::key_config;
+using value_config = model::iceberg_mode::value_config;
+
+// Helper to check whether a field_type is a specific primitive type.
+template<typename PrimitiveT>
+bool is_primitive(const iceberg::field_type& ft) {
+    if (!std::holds_alternative<iceberg::primitive_type>(ft)) {
+        return false;
+    }
+    return std::holds_alternative<PrimitiveT>(
+      std::get<iceberg::primitive_type>(ft));
+}
+
+TEST(RecordTranslatorBuildType, BinaryKeyProducesBinaryKeyFieldType) {
+    record_translator t;
+    auto rt = t.build_type(std::nullopt, std::nullopt);
+    auto& key_field = type_field<rp_desc, "key">(rp_struct_type(rt.type));
+    EXPECT_TRUE(is_primitive<iceberg::binary_type>(key_field.type));
+}
+
+TEST(RecordTranslatorBuildType, StringKeyProducesStringKeyFieldType) {
+    record_translator t({.mode = sm::string}, {}, {});
+    auto rt = t.build_type(std::nullopt, std::nullopt);
+    auto& key_field = type_field<rp_desc, "key">(rp_struct_type(rt.type));
+    EXPECT_TRUE(is_primitive<iceberg::string_type>(key_field.type));
+}
+
+TEST(RecordTranslatorBuildType, BinaryValueProducesBinaryValueColumn) {
+    record_translator t;
+    auto rt = t.build_type(std::nullopt, std::nullopt);
+    // The value column is the second top-level field (after "redpanda").
+    ASSERT_GE(rt.type.fields.size(), 2);
+    EXPECT_TRUE(is_primitive<iceberg::binary_type>(rt.type.fields[1]->type));
+}
+
+TEST(RecordTranslatorBuildType, StringValueProducesStringValueColumn) {
+    record_translator t({}, {.mode = sm::string}, {});
+    auto rt = t.build_type(std::nullopt, std::nullopt);
+    ASSERT_GE(rt.type.fields.size(), 2);
+    EXPECT_TRUE(is_primitive<iceberg::string_type>(rt.type.fields[1]->type));
+}
+
+TEST(RecordTranslatorBuildType, StringKeyAndStringValue) {
+    record_translator t({.mode = sm::string}, {.mode = sm::string}, {});
+    auto rt = t.build_type(std::nullopt, std::nullopt);
+    auto& key_field = type_field<rp_desc, "key">(rp_struct_type(rt.type));
+    EXPECT_TRUE(is_primitive<iceberg::string_type>(key_field.type));
+    ASSERT_GE(rt.type.fields.size(), 2);
+    EXPECT_TRUE(is_primitive<iceberg::string_type>(rt.type.fields[1]->type));
+}
+
+// ---- record_translator::translate_data with string mode ---------------------
+// translate_data returns ss::future but for non-schema modes the future
+// resolves immediately (no I/O). The test runner starts a seastar reactor.
+
+iobuf make_iobuf(std::string_view s) {
+    iobuf buf;
+    buf.append(s.data(), s.size());
+    return buf;
+}
+
+std::string iobuf_to_string(const iobuf& buf) {
+    iobuf_parser p(buf.copy());
+    return p.read_string(p.bytes_left());
+}
+
+TEST(RecordTranslatorTranslateData, StringKeyValidUtf8) {
+    record_translator t({.mode = sm::string}, {}, {});
+    chunked_vector<model::record_header> headers;
+    auto result = t.translate_data(
+                     model::partition_id{0},
+                     kafka::offset{0},
+                     std::nullopt,
+                     make_iobuf("hello"),
+                     std::nullopt,
+                     make_iobuf("val"),
+                     model::timestamp{0},
+                     model::timestamp_type::create_time,
+                     headers)
+                    .get();
+    ASSERT_TRUE(result.has_value());
+    // Key is in the redpanda system struct at index 4.
+    auto& rp = rp_struct_value(result.value());
+    ASSERT_TRUE(rp.fields[4].has_value());
+    auto& sv = std::get<iceberg::string_value>(
+      std::get<iceberg::primitive_value>(*rp.fields[4]));
+    EXPECT_EQ(iobuf_to_string(sv.val), "hello");
+}
+
+TEST(RecordTranslatorTranslateData, StringKeyInvalidUtf8Sanitized) {
+    record_translator t({.mode = sm::string}, {}, {});
+    chunked_vector<model::record_header> headers;
+    auto result = t.translate_data(
+                     model::partition_id{0},
+                     kafka::offset{0},
+                     std::nullopt,
+                     make_iobuf("\x80"),
+                     std::nullopt,
+                     make_iobuf("val"),
+                     model::timestamp{0},
+                     model::timestamp_type::create_time,
+                     headers)
+                    .get();
+    ASSERT_TRUE(result.has_value());
+    auto& rp = rp_struct_value(result.value());
+    ASSERT_TRUE(rp.fields[4].has_value());
+    auto& sv = std::get<iceberg::string_value>(
+      std::get<iceberg::primitive_value>(*rp.fields[4]));
+    EXPECT_EQ(iobuf_to_string(sv.val), "\xEF\xBF\xBD");
+}
+
+TEST(RecordTranslatorTranslateData, StringKeyNullProducesNullopt) {
+    record_translator t({.mode = sm::string}, {}, {});
+    chunked_vector<model::record_header> headers;
+    auto result = t.translate_data(
+                     model::partition_id{0},
+                     kafka::offset{0},
+                     std::nullopt,
+                     std::nullopt,
+                     std::nullopt,
+                     make_iobuf("val"),
+                     model::timestamp{0},
+                     model::timestamp_type::create_time,
+                     headers)
+                    .get();
+    ASSERT_TRUE(result.has_value());
+    auto& rp = rp_struct_value(result.value());
+    EXPECT_FALSE(rp.fields[4].has_value());
+}
+
+TEST(RecordTranslatorTranslateData, StringValueValidUtf8) {
+    record_translator t({}, {.mode = sm::string}, {});
+    chunked_vector<model::record_header> headers;
+    auto result = t.translate_data(
+                     model::partition_id{0},
+                     kafka::offset{0},
+                     std::nullopt,
+                     make_iobuf("key"),
+                     std::nullopt,
+                     make_iobuf("hello"),
+                     model::timestamp{0},
+                     model::timestamp_type::create_time,
+                     headers)
+                    .get();
+    ASSERT_TRUE(result.has_value());
+    // Value column is the second top-level field (index 1).
+    ASSERT_TRUE(result.value().fields[1].has_value());
+    auto& sv = std::get<iceberg::string_value>(
+      std::get<iceberg::primitive_value>(*result.value().fields[1]));
+    EXPECT_EQ(iobuf_to_string(sv.val), "hello");
+}
+
+TEST(RecordTranslatorTranslateData, StringValueInvalidUtf8Sanitized) {
+    record_translator t({}, {.mode = sm::string}, {});
+    chunked_vector<model::record_header> headers;
+    auto result = t.translate_data(
+                     model::partition_id{0},
+                     kafka::offset{0},
+                     std::nullopt,
+                     make_iobuf("key"),
+                     std::nullopt,
+                     make_iobuf("\x80"),
+                     model::timestamp{0},
+                     model::timestamp_type::create_time,
+                     headers)
+                    .get();
+    ASSERT_TRUE(result.has_value());
+    ASSERT_TRUE(result.value().fields[1].has_value());
+    auto& sv = std::get<iceberg::string_value>(
+      std::get<iceberg::primitive_value>(*result.value().fields[1]));
+    EXPECT_EQ(iobuf_to_string(sv.val), "\xEF\xBF\xBD");
+}
+
+TEST(RecordTranslatorTranslateData, StringValueNullProducesNullopt) {
+    record_translator t({}, {.mode = sm::string}, {});
+    chunked_vector<model::record_header> headers;
+    auto result = t.translate_data(
+                     model::partition_id{0},
+                     kafka::offset{0},
+                     std::nullopt,
+                     make_iobuf("key"),
+                     std::nullopt,
+                     std::nullopt,
+                     model::timestamp{0},
+                     model::timestamp_type::create_time,
+                     headers)
+                    .get();
+    ASSERT_TRUE(result.has_value());
+    EXPECT_FALSE(result.value().fields[1].has_value());
+}
+
+TEST(RecordTranslatorTranslateData, AllStringModesCombined) {
+    record_translator t(
+      {.mode = sm::string}, {.mode = sm::string}, {.value_type = hsm::string});
+    chunked_vector<model::record_header> headers;
+    headers.push_back(make_header("hk", "hv"));
+    auto result = t.translate_data(
+                     model::partition_id{0},
+                     kafka::offset{0},
+                     std::nullopt,
+                     make_iobuf("mykey"),
+                     std::nullopt,
+                     make_iobuf("myval"),
+                     model::timestamp{0},
+                     model::timestamp_type::create_time,
+                     headers)
+                    .get();
+    ASSERT_TRUE(result.has_value());
+
+    // Key is string.
+    auto& rp = rp_struct_value(result.value());
+    ASSERT_TRUE(rp.fields[4].has_value());
+    auto& key_sv = std::get<iceberg::string_value>(
+      std::get<iceberg::primitive_value>(*rp.fields[4]));
+    EXPECT_EQ(iobuf_to_string(key_sv.val), "mykey");
+
+    // Value is string.
+    ASSERT_TRUE(result.value().fields[1].has_value());
+    auto& val_sv = std::get<iceberg::string_value>(
+      std::get<iceberg::primitive_value>(*result.value().fields[1]));
+    EXPECT_EQ(iobuf_to_string(val_sv.val), "myval");
+
+    // Header value is string.
+    const auto& hdr_list = get_headers_list(rp);
+    ASSERT_EQ(hdr_list.elements.size(), 1);
+    const auto& kv = get_kv_struct(hdr_list, 0);
+    ASSERT_TRUE(kv.fields[1].has_value());
+    EXPECT_TRUE(
+      std::holds_alternative<iceberg::string_value>(
+        std::get<iceberg::primitive_value>(*kv.fields[1])));
 }
 
 } // namespace

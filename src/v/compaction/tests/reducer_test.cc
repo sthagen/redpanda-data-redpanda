@@ -13,8 +13,13 @@
 #include "compaction/reducer.h"
 #include "compaction/tests/simple_reducer.h"
 #include "container/chunked_circular_buffer.h"
+#include "container/chunked_vector.h"
+#include "model/batch_builder.h"
 #include "model/batch_compression.h"
 #include "model/fundamental.h"
+#include "model/record.h"
+#include "model/record_batch_types.h"
+#include "model/timestamp.h"
 #include "reflection/adl.h"
 #include "storage/record_batch_builder.h"
 #include "storage/tests/batch_generators.h"
@@ -86,6 +91,17 @@ model::record_batch make_int_key_batch(int num_records) {
         builder.add_raw_kv(reflection::to_iobuf(i), reflection::to_iobuf(i));
     }
     return std::move(builder).build();
+}
+
+model::record
+ts_record(int32_t offset_delta, int64_t timestamp_delta, int key) {
+    return model::record(
+      model::record_attributes{},
+      timestamp_delta,
+      offset_delta,
+      reflection::to_iobuf(key),
+      reflection::to_iobuf(key),
+      chunked_vector<model::record_header>{});
 }
 } // namespace
 
@@ -163,4 +179,71 @@ TEST(CompactionReducerTest, FilterReusesCompressedBatchWhenUnchanged) {
     EXPECT_EQ(stats.compressed_batches_reused, 1);
     ASSERT_EQ(output.size(), 1);
     EXPECT_TRUE(output.front().compressed());
+}
+
+// do_filter_batch re-encodes a batch when it drops records. Dropping the
+// delta-0 base record of an out-of-order batch must not shift the surviving
+// records' timestamps: like Kafka, first_timestamp advances to the first
+// survivor and the per-record deltas are re-based onto it, so absolute
+// timestamps are unchanged. Regression for compaction minting future timestamps
+// from strictly-past input.
+TEST(CompactionReducerTest, FilterPreservesTimestampsWhenBaseRecordDropped) {
+    const int64_t base = 1'700'000'000'000;                 // in the past
+    const int64_t delta_b = int64_t{30} * 24 * 3600 * 1000; // +30 days
+    const int64_t delta_c = 100;                            // +100 ms
+
+    // Offsets [0,1,2], first_timestamp=base: key 0 delta 0 (base record,
+    // dropped below); key 1 delta +30d (first survivor, big delta); key 2 delta
+    // +100 (out of order vs key 1).
+    model::batch_builder bb;
+    bb.set_batch_type(model::record_batch_type::raft_data);
+    bb.set_term(model::term_id{0});
+    bb.set_batch_timestamp(
+      model::timestamp_type::create_time, model::timestamp(base));
+    bb.set_base_offset(model::offset{0});
+    bb.add_record(ts_record(0, 0, 0));
+    bb.add_record(ts_record(1, delta_b, 1));
+    bb.add_record(ts_record(2, delta_c, 2));
+
+    // Supersede key 0 (index it above its offset) so the base record is dropped
+    // and the batch has to be re-encoded.
+    compaction::simple_key_offset_map map{};
+    map
+      .put(
+        compaction::compaction_key{iobuf_to_bytes(reflection::to_iobuf(0))},
+        model::offset(std::numeric_limits<int>::max()))
+      .get();
+
+    chunked_circular_buffer<model::record_batch> output;
+    compaction::simple_sink sink(output);
+    compaction::simple_map_filter filter(sink, map, test_ntp);
+    filter(bb.build_sync()).get();
+
+    ASSERT_EQ(output.size(), 1);
+    auto& batch = output.front();
+    ASSERT_FALSE(batch.compressed());
+    EXPECT_EQ(batch.record_count(), 2);
+    const int64_t first_ts = batch.header().first_timestamp.value();
+    // Kafka-style re-encode: first_timestamp advances to the first survivor
+    // (key 1); max_timestamp is the greatest surviving timestamp.
+    EXPECT_EQ(first_ts, base + delta_b);
+    EXPECT_EQ(batch.header().max_timestamp.value(), base + delta_b);
+
+    bool saw_b = false;
+    bool saw_c = false;
+    batch.for_each_record([&](model::record r) {
+        const int64_t abs_ts = first_ts + r.timestamp_delta();
+        const int key = reflection::from_iobuf<int>(r.key().copy());
+        if (key == 1) {
+            EXPECT_EQ(abs_ts, base + delta_b) << "key 1 shifted";
+            saw_b = true;
+        } else if (key == 2) {
+            EXPECT_EQ(abs_ts, base + delta_c) << "key 2 shifted";
+            saw_c = true;
+        }
+        EXPECT_LE(abs_ts, base + delta_b)
+          << "record timestamp shifted forward by compaction";
+    });
+    EXPECT_TRUE(saw_b);
+    EXPECT_TRUE(saw_c);
 }

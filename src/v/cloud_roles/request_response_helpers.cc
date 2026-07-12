@@ -131,7 +131,7 @@ ss::future<api_response> make_request_with_payload(
 } // namespace
 
 ss::future<api_response> make_request(
-  http::client client,
+  std::unique_ptr<http::client> client,
   http::client::request_header req,
   std::optional<std::chrono::milliseconds> timeout) {
     auto tout = timeout.value_or(
@@ -199,7 +199,7 @@ parse_json_response_and_validate(std::string_view schema, iobuf resp) {
 }
 
 ss::future<api_response> request_with_payload(
-  http::client client,
+  std::unique_ptr<http::client> client,
   http::client::request_header req,
   iobuf content,
   std::optional<std::chrono::milliseconds> timeout) {
@@ -220,7 +220,7 @@ ss::future<api_response> request_with_payload(
 }
 
 ss::future<api_response> request_with_payload(
-  http::client client,
+  std::unique_ptr<http::client> client,
   http::client::request_header req,
   seastar::sstring content,
   std::optional<std::chrono::milliseconds> timeout) {

@@ -9,7 +9,7 @@ redpanda_cc_gtest(
     cpu = 4,
     deps = [
         "//src/v/base",
-        "//src/v/cloud_io:scheduler_types",
+        "//src/v/cloud_io:admission_control_types",
         "//src/v/cloud_topics:types",
         "//src/v/cloud_topics/level_zero/pipeline:event_filter",
         "//src/v/cloud_topics/level_zero/pipeline:pipeline_stage",

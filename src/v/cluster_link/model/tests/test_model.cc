@@ -96,6 +96,7 @@ TEST(test_model, schema_registry_sync_config_round_trips_api_mode) {
     api.destination = schema_registry_sync_config::identity_context_mapping{};
     api.feature_policy
       = schema_registry_sync_config::unsupported_feature_policy::remove;
+    api.is_enabled = enabled_t::no;
 
     schema_registry_sync_config cfg;
     cfg.sync_mode = api.copy();
@@ -131,6 +132,7 @@ TEST(test_model, schema_registry_sync_config_round_trips_api_mode) {
     EXPECT_EQ(
       roundtrip_api.feature_policy,
       schema_registry_sync_config::unsupported_feature_policy::remove);
+    EXPECT_EQ(roundtrip_api.is_enabled, enabled_t::no);
 }
 
 TEST(test_model, schema_registry_sync_config_round_trips_topic_mode) {
@@ -142,6 +144,26 @@ TEST(test_model, schema_registry_sync_config_round_trips_topic_mode) {
 
     EXPECT_TRUE(roundtrip.is_topic_mode());
     EXPECT_EQ(roundtrip.api_mode(), nullptr);
+}
+
+TEST(test_model, schema_registry_sync_config_is_enabled_copy_and_round_trip) {
+    schema_registry_sync_config::shadow_schema_registry_api api;
+    api.source_url = "https://schema-registry.example.com";
+    api.is_enabled = enabled_t::no;
+
+    schema_registry_sync_config cfg;
+    cfg.sync_mode = std::move(api);
+
+    EXPECT_EQ(cfg.copy().api_mode()->is_enabled, enabled_t::no);
+    EXPECT_EQ(
+      serde_to<schema_registry_sync_config>(cfg).api_mode()->is_enabled,
+      enabled_t::no);
+
+    cfg.api_mode()->is_enabled = enabled_t::yes;
+    EXPECT_EQ(cfg.copy().api_mode()->is_enabled, enabled_t::yes);
+    EXPECT_EQ(
+      serde_to<schema_registry_sync_config>(cfg).api_mode()->is_enabled,
+      enabled_t::yes);
 }
 
 // Mid-upgrade safety: a freshly-upgraded node writes the existing topic-mode

@@ -399,6 +399,54 @@ func TestMapConsumerOffsetSyncOptions(t *testing.T) {
 	}
 }
 
+func TestMapRoleSyncOptions(t *testing.T) {
+	tests := []struct {
+		name string
+		opts *RoleSyncOptions
+		want *adminv2.RoleSyncOptions
+	}{
+		{
+			name: "nil options returns nil",
+			opts: nil,
+			want: nil,
+		},
+		{
+			name: "paused with zero interval",
+			opts: &RoleSyncOptions{
+				Paused:   true,
+				Interval: 0,
+			},
+			want: &adminv2.RoleSyncOptions{
+				Paused: true,
+			},
+		},
+		{
+			name: "not paused with filters",
+			opts: &RoleSyncOptions{
+				Paused:   false,
+				Interval: 45 * time.Second,
+				RoleNameFilters: []*NameFilter{
+					{PatternType: PatternTypePrefix, FilterType: FilterTypeInclude, Name: "team-"},
+				},
+			},
+			want: &adminv2.RoleSyncOptions{
+				Paused:   false,
+				Interval: durationpb.New(45 * time.Second),
+				RoleNameFilters: []*adminv2.NameFilter{
+					{PatternType: adminv2.PatternType_PATTERN_TYPE_PREFIX, FilterType: adminv2.FilterType_FILTER_TYPE_INCLUDE, Name: "team-"},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mapRoleSyncOptions(tt.opts)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestMapSecuritySyncOptions(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1109,6 +1157,55 @@ func TestAdminConsumerOffsetSyncToCfg(t *testing.T) {
 	}
 }
 
+func TestAdminRoleSyncToCfg(t *testing.T) {
+	tests := []struct {
+		name string
+		opts *adminv2.RoleSyncOptions
+		want *RoleSyncOptions
+	}{
+		{
+			name: "nil options returns nil",
+			opts: nil,
+			want: nil,
+		},
+		{
+			name: "paused with nil interval",
+			opts: &adminv2.RoleSyncOptions{
+				Paused:   true,
+				Interval: nil,
+			},
+			want: &RoleSyncOptions{
+				Paused:   true,
+				Interval: 0,
+			},
+		},
+		{
+			name: "not paused with filters",
+			opts: &adminv2.RoleSyncOptions{
+				Paused:   false,
+				Interval: durationpb.New(45 * time.Second),
+				RoleNameFilters: []*adminv2.NameFilter{
+					{PatternType: adminv2.PatternType_PATTERN_TYPE_PREFIX, FilterType: adminv2.FilterType_FILTER_TYPE_INCLUDE, Name: "team-"},
+				},
+			},
+			want: &RoleSyncOptions{
+				Paused:   false,
+				Interval: 45 * time.Second,
+				RoleNameFilters: []*NameFilter{
+					{PatternType: PatternTypePrefix, FilterType: FilterTypeInclude, Name: "team-"},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := adminRoleSyncToCfg(tt.opts)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestAdminSecuritySyncToCfg(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1545,6 +1642,22 @@ func TestRoundTrip(t *testing.T) {
 						PermissionType: ACLPermissionTypeAllow,
 						Host:           "*",
 					},
+				},
+			},
+		},
+		RoleSyncOptions: &RoleSyncOptions{
+			Paused:   true,
+			Interval: 75 * time.Second,
+			RoleNameFilters: []*NameFilter{
+				{
+					PatternType: PatternTypePrefix,
+					FilterType:  FilterTypeInclude,
+					Name:        "team-",
+				},
+				{
+					PatternType: PatternTypeLiteral,
+					FilterType:  FilterTypeExclude,
+					Name:        "admin",
 				},
 			},
 		},

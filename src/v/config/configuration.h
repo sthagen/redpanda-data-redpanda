@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include "cloud_io/scheduler_types.h"
+#include "cloud_io/admission_control_types.h"
 #include "config/bounded_property.h"
 #include "config/broker_endpoint.h"
 #include "config/config_store.h"
@@ -383,6 +383,8 @@ struct configuration final : public config_store {
     property<bool> cloud_storage_enable_remote_read;
     property<bool> cloud_storage_enable_remote_write;
     enum_property<model::redpanda_storage_mode> default_redpanda_storage_mode;
+    enum_property<model::redpanda_storage_mode_tiered_impl>
+      default_redpanda_storage_mode_tiered_impl;
     property<bool> cloud_storage_disable_archiver_manager;
     property<std::optional<ss::sstring>> cloud_storage_access_key;
     property<std::optional<ss::sstring>> cloud_storage_secret_key;
@@ -401,8 +403,8 @@ struct configuration final : public config_store {
     property<std::chrono::milliseconds>
       cloud_storage_upload_loop_max_backoff_ms;
     property<int16_t> cloud_storage_max_connections;
-    enum_property<cloud_io::policy_type> cloud_io_scheduler_policy;
-    property<std::vector<ss::sstring>> cloud_io_scheduler_reservation;
+    enum_property<cloud_io::policy_type> cloud_io_admission_control_policy;
+    property<std::vector<ss::sstring>> cloud_io_admission_control_reservation;
     property<bool> cloud_storage_disable_tls;
     property<int16_t> cloud_storage_api_endpoint_port;
     property<std::optional<ss::sstring>> cloud_storage_trust_file;
@@ -682,6 +684,8 @@ struct configuration final : public config_store {
     property<bool> schema_registry_always_normalize;
     deprecated_property schema_registry_avro_use_named_references;
     property<bool> schema_registry_enable_qualified_subjects;
+    bounded_property<size_t> schema_registry_sync_memory_bytes;
+    bounded_property<size_t> schema_registry_sync_parallelism;
     property<std::optional<uint32_t>> pp_sr_smp_max_non_local_requests;
     bounded_property<size_t> max_in_flight_schema_registry_requests_per_shard;
     bounded_property<size_t> max_in_flight_pandaproxy_requests_per_shard;
@@ -771,6 +775,8 @@ struct configuration final : public config_store {
       iceberg_schema_case_insensitive;
     bounded_property<std::chrono::milliseconds> iceberg_target_lag_ms;
     property<bool> iceberg_disable_snapshot_tagging;
+    bounded_property<size_t> datalake_coordinator_max_files_per_commit;
+    bounded_property<size_t> datalake_coordinator_max_pending_files;
     property<bool> iceberg_disable_automatic_snapshot_expiry;
     property<std::optional<ss::sstring>> iceberg_topic_name_dot_replacement;
     property<ss::sstring> iceberg_dlq_table_suffix;
@@ -828,6 +834,7 @@ public:
     property<bool> cloud_topics_compaction_disabled;
     property<bool> cloud_topics_leveling_disabled;
     bounded_property<uint64_t> cloud_topics_compaction_key_map_memory;
+    bounded_property<size_t> cloud_topics_l1_streaming_read_chunk_size;
     property<std::chrono::milliseconds>
       cloud_topics_long_term_garbage_collection_interval;
     property<std::chrono::milliseconds> cloud_topics_long_term_flush_interval;
@@ -849,6 +856,8 @@ public:
       cloud_topics_metastore_replication_timeout_ms;
     property<std::chrono::milliseconds>
       cloud_topics_metastore_lsm_apply_timeout_ms;
+    property<std::chrono::milliseconds> cloud_topics_metastore_rpc_timeout_ms;
+    property<std::chrono::milliseconds> cloud_topics_metastore_retry_timeout_ms;
     bounded_property<size_t> cloud_topics_metastore_block_cache_size;
     bounded_property<size_t> cloud_topics_metastore_write_buffer_size;
     bounded_property<uint32_t> cloud_topics_metastore_max_pre_open_fibers;
@@ -862,6 +871,7 @@ public:
     property<std::chrono::milliseconds>
       cloud_topics_long_term_file_deletion_delay;
     bounded_property<int32_t> cloud_topics_num_metastore_partitions;
+    bounded_property<size_t> cloud_topics_metastore_sst_chunk_size;
 
     bounded_property<size_t> cloud_topics_produce_write_inflight_limit;
     bounded_property<size_t> cloud_topics_produce_no_pid_concurrency;

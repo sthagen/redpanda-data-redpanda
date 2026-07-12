@@ -18,6 +18,7 @@
 #include "model/namespace.h"
 #include "reflection/adl.h"
 #include "ssx/async_algorithm.h"
+#include "ssx/future-util.h"
 #include "storage/parser.h"
 #include "storage/record_batch_builder.h"
 #include "storage/segment.h"
@@ -92,36 +93,35 @@ ss::future<> kvstore::start() {
           });
     }
 
-    return recover()
-      .then([this] {
-          _started = true;
+    if (!_recovered) {
+        co_await recover();
+    }
 
-          // Flushing background fiber
-          ssx::spawn_with_gate(_gate, [this] {
-              return ss::do_until(
-                [this] { return _gate.is_closed(); },
-                [this] {
-                    // semaphore used here instead of condition variable so that
-                    // we don't lose wake-ups if they occur while flushing.
-                    // consume at least one unit to avoid spinning on wait(0).
-                    auto units = std::max(_sem.current(), size_t(1));
-                    return _sem.wait(units).then([this] {
-                        if (_gate.is_closed()) {
-                            return ss::now();
-                        }
-                        return roll().then(
-                          [this] { return flush_and_apply_ops(); });
-                    });
-                });
+    _started = true;
+
+    // Flushing background fiber
+    ssx::spawn_with_gate(_gate, [this] {
+        return ss::do_until(
+          [this] { return _gate.is_closed(); },
+          [this] {
+              // semaphore used here instead of condition variable so that
+              // we don't lose wake-ups if they occur while flushing.
+              // consume at least one unit to avoid spinning on wait(0).
+              auto units = std::max(_sem.current(), size_t(1));
+              return _sem.wait(units).then([this] {
+                  if (_gate.is_closed()) {
+                      return ss::now();
+                  }
+                  return roll().then([this] { return flush_and_apply_ops(); });
+              });
           });
-      })
-      .handle_exception_type([](const ss::gate_closed_exception&) {
-          lg.trace("Shutdown requested during recovery");
-      });
+    });
 }
 
 ss::future<> kvstore::stop() {
     vlog(lg.info, "Stopping kvstore: dir {}", _ntpc.work_directory());
+
+    _probe.metrics.clear();
 
     _as.request_abort();
 
@@ -164,7 +164,7 @@ static inline bytes make_spaced_key(kvstore::key_space ks, bytes_view key) {
 
 std::optional<iobuf> kvstore::get(key_space ks, bytes_view key) {
     _probe.entry_fetched();
-    vassert(_started, "kvstore has not been started");
+    vassert(_recovered, "kvstore::get called before recover()");
 
     // do not re-assign to string_view -> temporary
     auto kkey = make_spaced_key(ks, key);
@@ -203,7 +203,7 @@ ss::future<> kvstore::put(key_space ks, bytes key, std::optional<iobuf> value) {
 ss::future<> kvstore::for_each(
   key_space ks,
   ss::noncopyable_function<void(bytes_view, const iobuf&)> visitor) {
-    vassert(_started, "kvstore has not been started");
+    vassert(_recovered, "kvstore::for_each called before recover()");
     auto gh = _gate.hold();
     auto units = co_await _db_mut.get_units();
 
@@ -414,25 +414,45 @@ ss::future<> kvstore::save_snapshot() {
 }
 
 ss::future<> kvstore::recover() {
-    /*
-     * after loading _next_offset will be set to either zero if no snapshot
-     * is found, or the offset immediately following the snapshot offset.
-     */
-    co_await load_snapshot();
+    vassert(
+      !_recovered,
+      "kvstore::recover called twice for dir {}",
+      _ntpc.work_directory());
 
-    auto segments = co_await recover_segments(
-      partition_path(_ntpc),
-      _ntpc.is_locally_compacted(),
-      [] { return std::nullopt; },
-      _as,
-      config::shard_local_cfg().storage_read_buffer_size(),
-      config::shard_local_cfg().storage_read_readahead_count(),
-      std::nullopt,
-      _resources,
-      _feature_table,
-      _ntp_sanitizer_config);
+    try {
+        /*
+         * after loading _next_offset will be set to either zero if no snapshot
+         * is found, or the offset immediately following the snapshot offset.
+         */
+        co_await load_snapshot();
 
-    co_await replay_segments(std::move(segments));
+        auto segments = co_await recover_segments(
+          partition_path(_ntpc),
+          /*is_compaction_enabled=*/false,
+          [] { return std::nullopt; },
+          _as,
+          config::shard_local_cfg().storage_read_buffer_size(),
+          config::shard_local_cfg().storage_read_readahead_count(),
+          std::nullopt,
+          _resources,
+          _feature_table,
+          _ntp_sanitizer_config);
+
+        co_await replay_segments(std::move(segments));
+
+        _recovered = true;
+    } catch (...) {
+        auto ex = std::current_exception();
+        auto is_shutdown = ssx::is_shutdown_exception(ex);
+        vlogl(
+          lg,
+          is_shutdown ? ss::log_level::trace : ss::log_level::error,
+          "Caught exception during kvstore recovery: {}",
+          ex);
+        if (!is_shutdown) {
+            std::rethrow_exception(ex);
+        }
+    }
 }
 
 ss::future<> kvstore::load_snapshot() {

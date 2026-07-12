@@ -11,7 +11,7 @@
 #pragma once
 
 #include "base/outcome.h"
-#include "cloud_io/scheduler_types.h"
+#include "cloud_io/admission_control_types.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
 #include "cloud_topics/types.h"
 #include "container/chunked_vector.h"

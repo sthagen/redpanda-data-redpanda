@@ -16,6 +16,7 @@
 #include "cluster/metadata_cache.h"
 #include "cluster/partition_leaders_table.h"
 #include "cluster/shard_table.h"
+#include "config/configuration.h"
 #include "hashing/murmur.h"
 #include "model/namespace.h"
 #include "resource_mgmt/cpu_scheduling.h"
@@ -250,13 +251,16 @@ requires requires(
 ss::future<typename req_t::resp_t>
 leader_router::remote_dispatch(req_t request, model::node_id leader_id) {
     using resp_t = req_t::resp_t;
+    auto rpc_timeout
+      = config::shard_local_cfg().cloud_topics_metastore_rpc_timeout_ms();
     auto res = co_await _connection_cache->local()
                  .with_node_client<proto_t>(
                    _self,
                    ss::this_shard_id(),
                    leader_id,
                    rpc_timeout,
-                   [request = std::move(request)](proto_t proto) mutable {
+                   [request = std::move(request),
+                    rpc_timeout](proto_t proto) mutable {
                        return (proto.*Func)(
                          std::move(request),
                          ::rpc::client_opts{

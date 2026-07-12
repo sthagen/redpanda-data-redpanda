@@ -277,6 +277,11 @@ class ShadowLinkingRandomOpsTest(ShadowLinkTestBase):
                 ),
                 extra_rp_conf={
                     "group_new_member_join_timeout": 3000,
+                    # The flipping workload alters redpanda.storage.mode
+                    # between 'cloud' and 'tiered'; the alter path resolves
+                    # 'tiered' through default_redpanda_storage_mode_tiered_impl, so pin
+                    # tiered_v2 to flip to the cloud-architecture variant.
+                    "default_redpanda_storage_mode_tiered_impl": "tiered_v2",
                 },
             ),
             extra_rp_conf={
@@ -388,7 +393,9 @@ class ShadowLinkingRandomOpsTest(ShadowLinkTestBase):
             ClusterLinkingWorkloadSpec(
                 topic="tiered-cloud-topic",
                 topic_properties={
-                    TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+                    **TopicSpec.storage_mode_config(
+                        TopicSpec.STORAGE_MODE_IMPL_TIERED_V2
+                    ),
                     "segment.bytes": f"{1024 * 1024}",
                 },
                 partition_count=self.partition_count,
@@ -410,7 +417,7 @@ class ShadowLinkingRandomOpsTest(ShadowLinkTestBase):
                 msg_size=self.msg_size,
                 flip_storage_modes=[
                     TopicSpec.STORAGE_MODE_CLOUD,
-                    TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+                    TopicSpec.STORAGE_MODE_TIERED,
                 ],
                 flip_interval_seconds=3.0,
             ),
@@ -420,13 +427,13 @@ class ShadowLinkingRandomOpsTest(ShadowLinkTestBase):
         specs: list[ClusterLinkingWorkloadSpec] = []
         for mode, mode_label in (
             (TopicSpec.STORAGE_MODE_CLOUD, "cloud"),
-            (TopicSpec.STORAGE_MODE_TIERED_CLOUD, "tiered-cloud"),
+            (TopicSpec.STORAGE_MODE_IMPL_TIERED_V2, "tiered-cloud"),
         ):
             specs.append(
                 ClusterLinkingWorkloadSpec(
                     topic=f"{mode_label}-compacted-topic",
                     topic_properties={
-                        TopicSpec.PROPERTY_STORAGE_MODE: mode,
+                        **TopicSpec.storage_mode_config(mode),
                         "cleanup.policy": "compact",
                         "segment.bytes": f"{1024 * 1024}",
                     },
@@ -447,7 +454,7 @@ class ShadowLinkingRandomOpsTest(ShadowLinkTestBase):
                 ClusterLinkingWorkloadSpec(
                     topic=f"{mode_label}-topic-txns",
                     topic_properties={
-                        TopicSpec.PROPERTY_STORAGE_MODE: mode,
+                        **TopicSpec.storage_mode_config(mode),
                     },
                     msg_count=math.floor(self.msg_count / 10),
                     msg_size=self.msg_size,
@@ -475,9 +482,9 @@ class ShadowLinkingRandomOpsTest(ShadowLinkTestBase):
     def test_node_operations(self, failures: bool, workload_set: str):
         self.setup_scale()
 
-        # tiered_cloud_topics is an explicit-only feature and must be
-        # enabled on both clusters before any tiered_cloud topic can be
-        # created.
+        # tiered_cloud_topics must be active on both clusters before any
+        # tiered_cloud topic can be created (it auto-activates once the
+        # cluster is fully on v26.2; this is a no-op then).
         self.source_cluster.service.set_feature_active(
             "tiered_cloud_topics", True, timeout_sec=30
         )

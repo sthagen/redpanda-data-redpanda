@@ -33,6 +33,7 @@ func shadowLinkConfigToProto(slCfg *ShadowLinkConfig) *adminv2.ShadowLink {
 		ConsumerOffsetSyncOptions: mapConsumerOffsetSyncOptions(slCfg.ConsumerOffsetSyncOptions),
 		SecuritySyncOptions:       mapSecuritySyncOptions(slCfg.SecuritySyncOptions),
 		SchemaRegistrySyncOptions: mapSchemaRegistrySyncOptions(slCfg.SchemaRegistrySyncOptions),
+		RoleSyncOptions:           mapRoleSyncOptions(slCfg.RoleSyncOptions),
 	}
 	return shadowLink
 }
@@ -288,6 +289,26 @@ func mapSecuritySyncOptions(opts *SecuritySettingsSyncOptions) *adminv2.Security
 
 	for _, filter := range opts.ACLFilters {
 		pbOpts.AclFilters = append(pbOpts.AclFilters, mapACLFilter(filter))
+	}
+
+	return pbOpts
+}
+
+func mapRoleSyncOptions(opts *RoleSyncOptions) *adminv2.RoleSyncOptions {
+	if opts == nil {
+		return nil
+	}
+
+	pbOpts := &adminv2.RoleSyncOptions{
+		Paused: opts.Paused,
+	}
+
+	if opts.Interval > 0 {
+		pbOpts.Interval = durationpb.New(opts.Interval)
+	}
+
+	for _, filter := range opts.RoleNameFilters {
+		pbOpts.RoleNameFilters = append(pbOpts.RoleNameFilters, mapNameFilter(filter))
 	}
 
 	return pbOpts
@@ -587,6 +608,7 @@ func shadowLinkToConfig(sl *adminv2.ShadowLink) *ShadowLinkConfig {
 		cfg.ConsumerOffsetSyncOptions = adminConsumerOffsetSyncToCfg(sl.GetConfigurations().GetConsumerOffsetSyncOptions())
 		cfg.SecuritySyncOptions = adminSecuritySyncToCfg(sl.GetConfigurations().GetSecuritySyncOptions())
 		cfg.SchemaRegistrySyncOptions = adminSchemaRegistrySyncToCfg(sl.GetConfigurations().GetSchemaRegistrySyncOptions())
+		cfg.RoleSyncOptions = adminRoleSyncToCfg(sl.GetConfigurations().GetRoleSyncOptions())
 	}
 
 	return cfg
@@ -766,6 +788,26 @@ func adminSecuritySyncToCfg(opts *adminv2.SecuritySettingsSyncOptions) *Security
 
 	for _, filter := range opts.GetAclFilters() {
 		cfg.ACLFilters = append(cfg.ACLFilters, adminACLFilterToCfg(filter))
+	}
+
+	return cfg
+}
+
+func adminRoleSyncToCfg(opts *adminv2.RoleSyncOptions) *RoleSyncOptions {
+	if opts == nil {
+		return nil
+	}
+
+	cfg := &RoleSyncOptions{
+		Paused: opts.GetPaused(),
+	}
+
+	if opts.GetInterval() != nil {
+		cfg.Interval = opts.GetInterval().AsDuration()
+	}
+
+	for _, filter := range opts.GetRoleNameFilters() {
+		cfg.RoleNameFilters = append(cfg.RoleNameFilters, adminMapFilterToCfg(filter))
 	}
 
 	return cfg

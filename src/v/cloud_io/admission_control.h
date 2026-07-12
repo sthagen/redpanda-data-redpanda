@@ -10,7 +10,7 @@
 #pragma once
 
 #include "base/seastarx.h"
-#include "cloud_io/scheduler_types.h"
+#include "cloud_io/admission_control_types.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/future.hh>
@@ -19,31 +19,31 @@
 
 namespace cloud_io {
 
-class scheduler_policy;
+class admission_control_policy;
 
 /// Per-shard admission gate for cloud_io operations.
 ///
-/// The scheduler sits inside cloud_storage_clients::client_pool and is
+/// The admission_control sits inside cloud_storage_clients::client_pool and is
 /// consulted on every lease acquisition. Each pool shard owns one
-/// scheduler instance and one policy, chosen at construction from the
-/// cloud_io_scheduler_policy cluster property.
+/// admission_control instance and one policy, chosen at construction from the
+/// cloud_io_admission_control_policy cluster property.
 ///
-///   scheduler ─owns→ unique_ptr<scheduler_policy>
+///   admission_control ─owns→ unique_ptr<admission_control_policy>
 ///                       │
 ///                       └─ passthrough_policy │ ...
 ///
 /// admit/release/observability calls are forwarded to the active
 /// policy. Admission state lives in the policy (per-group counters,
 /// waiters, etc.). The caller is responsible for pairing each `admit`
-/// with a `release` on the same scheduler instance.
-class scheduler {
+/// with a `release` on the same admission_control instance.
+class admission_control {
 public:
-    scheduler(size_t capacity, scheduler_config = {});
-    scheduler(const scheduler&) = delete;
-    scheduler& operator=(const scheduler&) = delete;
-    scheduler(scheduler&&) = delete;
-    scheduler& operator=(scheduler&&) = delete;
-    ~scheduler() noexcept;
+    admission_control(size_t capacity, admission_control_config = {});
+    admission_control(const admission_control&) = delete;
+    admission_control& operator=(const admission_control&) = delete;
+    admission_control(admission_control&&) = delete;
+    admission_control& operator=(admission_control&&) = delete;
+    ~admission_control() noexcept;
 
     /// Drains waiters, stops the policy.
     ss::future<> stop();
@@ -66,10 +66,10 @@ public:
     bool has_waiters() const;
 
 private:
-    static std::unique_ptr<scheduler_policy>
-    make_policy(size_t capacity, scheduler_config);
+    static std::unique_ptr<admission_control_policy>
+    make_policy(size_t capacity, admission_control_config);
 
-    std::unique_ptr<scheduler_policy> _policy;
+    std::unique_ptr<admission_control_policy> _policy;
     bool _draining = false;
 };
 

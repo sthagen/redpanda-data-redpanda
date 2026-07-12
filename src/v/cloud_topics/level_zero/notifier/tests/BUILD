@@ -13,6 +13,7 @@ redpanda_cc_gtest(
         "//src/v/cloud_topics/level_zero/stm:ctp_stm_api",
         "//src/v/cloud_topics/level_zero/stm:ctp_stm_factory",
         "//src/v/cluster:state_machine_registry",
+        "//src/v/features",
         "//src/v/model",
         "//src/v/raft/tests:raft_fixture",
         "//src/v/rpc",

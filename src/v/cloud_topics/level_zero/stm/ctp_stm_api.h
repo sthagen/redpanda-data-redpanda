@@ -70,11 +70,20 @@ public:
     /// Get threshold offset for local readers
     kafka::offset get_min_allowed_local_threshold() const;
 
+    /// Replicate an advance_reconciled_offset_cmd, optionally combined with
+    /// a set_min_allowed_local_threshold_cmd in the same record batch so
+    /// both advance atomically. The min_allowed_local_threshold is used by
+    /// the reconciler to move the local-read floor over placeholder-backed
+    /// ranges it has reconciled into L1: once the floor passes them, reads
+    /// are served from L1 and the placeholders' L0 objects may be safely
+    /// garbage-collected. Values that do not advance the current floor are
+    /// ignored.
     ss::future<std::expected<std::monostate, ctp_stm_api_errc>>
     advance_reconciled_offset(
       kafka::offset last_reconciled_offset,
       model::timeout_clock::time_point deadline,
-      ss::abort_source& as);
+      ss::abort_source& as,
+      std::optional<kafka::offset> min_allowed_local_threshold = std::nullopt);
 
     ss::future<std::expected<std::monostate, ctp_stm_api_errc>>
     set_start_offset(

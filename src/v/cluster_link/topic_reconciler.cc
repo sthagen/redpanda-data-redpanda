@@ -16,6 +16,7 @@
 #include "cluster_link/logger.h"
 #include "cluster_link/model/types.h"
 #include "cluster_link/utils/topic_properties_utils.h"
+#include "features/feature_table.h"
 #include "model/fundamental.h"
 #include "ssx/future-util.h"
 
@@ -30,12 +31,14 @@ topic_reconciler::topic_reconciler(
   kafka::data::rpc::topic_creator* topic_creator,
   kafka::data::rpc::topic_metadata_cache* topic_metadata_cache,
   link_registry* link_registry,
+  ss::sharded<features::feature_table>* feature_table,
   ss::lowres_clock::duration run_interval,
   config::binding<int16_t> default_topic_replication,
   ss::scheduling_group scheduling_group)
   : _topic_creator(topic_creator)
   , _topic_metadata_cache(topic_metadata_cache)
   , _link_registry(link_registry)
+  , _feature_table(feature_table)
   , _run_interval(run_interval)
   , _default_topic_replication(std::move(default_topic_replication))
   , _scheduling_group(scheduling_group) {}
@@ -261,6 +264,24 @@ ss::future<> topic_reconciler::maybe_create_mirror_topic(
         _default_topic_replication()),
       topic_configs);
 
+    // This path bypasses the kafka create validators, so it must enforce
+    // the same upgrade gate: no tiered_v2 topic may come into existence
+    // while the cluster is not fully upgraded to v26.2. Skipping is safe -
+    // the reconciler retries and creates the mirror topic once the feature
+    // activates.
+    if (
+      cfg.properties.storage_mode
+        == ::model::redpanda_storage_mode::tiered_cloud
+      && !_feature_table->local().is_active(
+        features::feature::tiered_cloud_topics)) {
+        vlog(
+          cllog.warn,
+          "Not creating mirror topic {}: cannot use the tiered_v2 storage "
+          "mode until the cluster is fully upgraded to at least v26.2.1",
+          topic);
+        co_return;
+    }
+
     auto res = co_await _topic_creator->create_topic(
       {::model::kafka_namespace, topic},
       mirror_topic_config.partition_count,
@@ -302,8 +323,46 @@ topic_reconciler::maybe_create_update_mirror_topic(
         config_updated = true;
     }
 
+    // The storage mode is applied from the (mode, version) pair: the mode
+    // value alone is ambiguous because both tiered variants describe as
+    // 'tiered'.
+    auto find_config = [&mirror_topic_config](
+                         std::string_view name) -> std::optional<ss::sstring> {
+        auto it = mirror_topic_config.topic_configs.find(ss::sstring(name));
+        if (it == mirror_topic_config.topic_configs.end()) {
+            return std::nullopt;
+        }
+        return it->second;
+    };
+    try {
+        if (
+          utils::maybe_append_storage_mode_update(
+            update,
+            find_config(kafka::topic_property_redpanda_storage_mode),
+            find_config(kafka::topic_property_redpanda_storage_mode_impl),
+            local_topic_config,
+            _feature_table->local())) {
+            config_updated = true;
+        }
+    } catch (const std::exception& e) {
+        vlog(
+          cllog.warn,
+          "Failed updating topic property {} for topic {}: {}",
+          kafka::topic_property_redpanda_storage_mode,
+          topic_name,
+          e);
+    }
+
     for (const auto& [source_topic_config_name, source_topic_config_value] :
          mirror_topic_config.topic_configs) {
+        if (
+          source_topic_config_name
+            == kafka::topic_property_redpanda_storage_mode
+          || source_topic_config_name
+               == kafka::topic_property_redpanda_storage_mode_impl) {
+            // Handled jointly above.
+            continue;
+        }
         // Need to check the current value of the local topic config
         // against that stored in the table, so I need to go from
         // string name to actual type

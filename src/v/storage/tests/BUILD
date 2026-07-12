@@ -945,6 +945,7 @@ redpanda_cc_gtest(
     ],
     cpu = 1,
     deps = [
+        ":disk_log_builder",
         "//src/v/base",
         "//src/v/cluster",
         "//src/v/cluster:client_quota_backend",
@@ -962,6 +963,7 @@ redpanda_cc_gtest(
         "//src/v/features",
         "//src/v/kafka/server/tests:kafka_test_utils",
         "//src/v/model",
+        "//src/v/model:batch_builder",
         "//src/v/model:batch_compression",
         "//src/v/random:generators",
         "//src/v/redpanda/tests:fixture",

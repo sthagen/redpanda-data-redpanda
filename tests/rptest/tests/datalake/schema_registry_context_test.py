@@ -94,6 +94,7 @@ class DatalakeSchemaRegistryContextTest(RedpandaTest):
             {
                 "bootstrap.servers": self.redpanda.brokers(),
                 "value.serializer": avro_serializer,
+                "enable.idempotence": True,
             }
         )
         for record in records:

@@ -25,6 +25,8 @@ from rptest.services.kgo_verifier_services import (
     KgoVerifierSeqConsumer,
 )
 from rptest.services.redpanda import (
+    LoggingConfig,
+    RESTART_LOG_ALLOW_LIST,
     SISettings,
     make_redpanda_service,
     MetricsEndpoint,
@@ -100,13 +102,13 @@ class EndToEndCloudTopicsBase(EndToEndTest):
         storage_mode = (self.test_context.injected_args or {}).get(
             "storage_mode", TopicSpec.STORAGE_MODE_CLOUD
         )
-        if storage_mode == TopicSpec.STORAGE_MODE_TIERED_CLOUD:
+        if storage_mode == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2:
             self.redpanda.set_feature_active(
                 "tiered_cloud_topics", True, timeout_sec=30
             )
         for topic in self.topics:
             config = {
-                TopicSpec.PROPERTY_STORAGE_MODE: storage_mode,
+                **TopicSpec.storage_mode_config(storage_mode),
                 "cleanup.policy": topic.cleanup_policy,
             }
             if topic.min_cleanable_dirty_ratio is not None:
@@ -120,7 +122,7 @@ class EndToEndCloudTopicsBase(EndToEndTest):
                 config=config,
             )
 
-    def wait_until_reconciled(self, topic: str, partition: int):
+    def wait_until_reconciled(self, topic: str, partition: int, timeout_sec: int = 60):
         def get_offsets():
             last_record: int | None = None
             output = self.rpk.consume(
@@ -153,7 +155,7 @@ class EndToEndCloudTopicsBase(EndToEndTest):
 
         wait_until(
             condition=is_reconciled,
-            timeout_sec=60,
+            timeout_sec=timeout_sec,
             backoff_sec=5,
             err_msg=message,
             retry_on_exc=True,
@@ -308,6 +310,65 @@ class EndToEndCloudTopicsBase(EndToEndTest):
             timeout_sec,
         )
 
+    def assert_extents_well_sized(
+        self,
+        topic: str,
+        max_target_size: int,
+        min_extent_ratio: float,
+        max_size_tolerance: float = 2.0,
+    ):
+        """Assert that, after leveling, `topic`'s L1 extents reflect the
+        consolidation leveling is responsible for:
+        * no extent is grossly larger than `max_target_size` (a soft cap).
+        * no partition retains two *adjacent* extents that leveling could have
+          folded into one, i.e. a consecutive pair (in `base_offset` order)
+          that are both undersized (below `min_extent_ratio * max_target_size`,
+          the leveling-eligibility threshold) yet whose combined size still
+          fits under `max_target_size`. Such a pair is direct evidence leveling
+          left work undone.
+
+        Note we deliberately do *not* assert that every extent is well-sized:
+        a workload that fragments faster than the target can fill (e.g. a
+        trickle spread across many partitions) leaves isolated undersized
+        extents that have no foldable neighbour — a lone small extent between
+        two ~`max_target_size` extents cannot be merged without exceeding the
+        cap. Those are an expected, irreducible outcome, not a leveling defect.
+        """
+        by_partition = ct_utils.get_l1_extent_lengths_by_partition(
+            self.admin, topic=topic
+        )
+        assert by_partition, "expected at least one L1 extent to inspect"
+
+        min_healthy = int(min_extent_ratio * max_target_size)
+        max_allowed = int(max_target_size * max_size_tolerance)
+
+        for partition, lengths in sorted(by_partition.items()):
+            undersized = [length for length in lengths if length < min_healthy]
+            self.logger.info(
+                f"L1 extent sizes after leveling for partition {partition}: "
+                f"count={len(lengths)}, total={sum(lengths)}, "
+                f"undersized={len(undersized)}, lengths={lengths}"
+            )
+
+            oversized = [length for length in lengths if length > max_allowed]
+            assert not oversized, (
+                f"partition {partition}: found {len(oversized)} extents larger "
+                f"than {max_allowed}B ({max_size_tolerance}x the "
+                f"{max_target_size}B soft cap): {oversized}"
+            )
+
+            for i in range(len(lengths) - 1):
+                a, b = lengths[i], lengths[i + 1]
+                foldable = (
+                    a < min_healthy and b < min_healthy and a + b <= max_target_size
+                )
+                assert not foldable, (
+                    f"partition {partition}: adjacent undersized extents at "
+                    f"index {i} ({a}B) and {i + 1} ({b}B) sum to {a + b}B "
+                    f"(<= the {max_target_size}B target) — leveling should have "
+                    f"folded them into one well-sized extent"
+                )
+
 
 class EndToEndCloudTopicsTest(EndToEndCloudTopicsBase):
     def __init__(self, test_context, extra_rp_conf=None, env=None):
@@ -324,7 +385,7 @@ class EndToEndCloudTopicsTest(EndToEndCloudTopicsBase):
     @matrix(
         storage_mode=[
             TopicSpec.STORAGE_MODE_CLOUD,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
         ],
     )
     def test_write(self, storage_mode: str):
@@ -341,7 +402,7 @@ class EndToEndCloudTopicsTest(EndToEndCloudTopicsBase):
     @matrix(
         storage_mode=[
             TopicSpec.STORAGE_MODE_CLOUD,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
         ],
     )
     def test_delete_records(self, storage_mode: str):
@@ -371,7 +432,7 @@ class EndToEndCloudTopicsTest(EndToEndCloudTopicsBase):
     @matrix(
         storage_mode=[
             TopicSpec.STORAGE_MODE_CLOUD,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
         ],
     )
     def test_get_size(self, storage_mode: str):
@@ -412,10 +473,43 @@ class EndToEndCloudTopicsTest(EndToEndCloudTopicsBase):
         )
 
 
+L0_DATA_PREFIX = "level_zero/data/"
+
+# When the read path tries to materialize a placeholder whose L0 object was
+# garbage-collected there is no L1 fallback; the reader fails the fetch.
+MODE_TOGGLE_LOG_ALLOW_LIST = RESTART_LOG_ALLOW_LIST + [
+    "Failed to materialize batches from the cloud storage",
+    # Downstream fallout of the failed materialization in the fetch path.
+    "cloud_topics.*runtime_error",
+    "kafka.*Failed to materialize",
+]
+
+
 class EndToEndCloudTopicsStorageModeToggleTest(EndToEndCloudTopicsBase):
-    """Exercise toggling a topic between 'cloud' and 'tiered_cloud' storage
-    modes while a rate-limited producer is running, then validate the
-    resulting log with a sequential consumer."""
+    """Exercise toggling a topic between 'cloud' and 'tiered' storage modes
+    (the latter resolves to tiered_v2 via the cluster default) while a
+    rate-limited producer is running, then validate that the whole log stays
+    readable once the L0 objects behind the already-reconciled region are
+    garbage-collected.
+
+    The final read exercises the mode-flip / L0-GC interaction: after a
+    cloud -> tiered_v2 flip the tiered read branch serves everything at or
+    above the local log's start offset from the local log, ignoring the
+    last-reconciled offset. The local log still holds placeholders for the
+    already-reconciled region, and L0 GC is allowed to delete the objects
+    those placeholders reference (their epoch is inactive and they are past
+    the minimum age). Reading that region then has to materialize
+    placeholders against deleted objects, which fails with no L1 fallback,
+    even though L1 holds a complete copy of the data. The flip also freezes
+    local prefix-truncation (tiered_v2 honors full topic retention, which is
+    effectively infinite here), so the log never self-heals by trimming the
+    placeholder region.
+
+    With the default 12h cloud_topics_short_term_gc_minimum_object_age the
+    window is practically unreachable; the test shrinks it (plus the epoch
+    rotation and housekeeping intervals that gate GC eligibility) to make
+    the sequence take seconds.
+    """
 
     topics = (
         TopicSpec(
@@ -426,19 +520,58 @@ class EndToEndCloudTopicsStorageModeToggleTest(EndToEndCloudTopicsBase):
     )
 
     def __init__(self, test_context, extra_rp_conf=None, env=None):
+        extra_rp_conf = dict(extra_rp_conf or {})
+        extra_rp_conf.update(
+            {
+                # L0 objects become GC-eligible after 30s instead of 12h.
+                "cloud_topics_short_term_gc_minimum_object_age": 30_000,
+                "cloud_topics_short_term_gc_interval": 5_000,
+                "cloud_topics_short_term_gc_backoff_interval": 5_000,
+                # GC eligibility requires the partition's inactive-epoch
+                # estimate to advance past the epoch the data was written
+                # under. That takes housekeeper epoch bumps, and each bump
+                # needs the controller to have minted a fresh cluster epoch
+                # (default mint interval: 10min) and the local cache to have
+                # picked it up. Do not shrink max_same_epoch_duration below
+                # the mint interval: epoch fetches fail outright while the
+                # cached epoch is older than it.
+                "cloud_storage_housekeeping_interval_ms": 5_000,
+                "cloud_topics_epoch_service_epoch_increment_interval": 5_000,
+                "cloud_topics_epoch_service_local_epoch_cache_duration": 5_000,
+                # Reads must materialize from object storage rather than be
+                # served by the write-through batch cache, which would mask
+                # the deleted objects.
+                "disable_batch_cache": True,
+                # Many small L0 objects.
+                "cloud_topics_produce_batching_size_threshold": 65536,
+            }
+        )
         super(EndToEndCloudTopicsStorageModeToggleTest, self).__init__(
             test_context, extra_rp_conf, env
         )
         self.msg_size = 16 * 1024
         # Size the workload so the producer is still sending when the
         # toggle window ends: at ~10 MB/s with 16 KiB messages this is
-        # ~400s of traffic, vs. a 5-minute toggle window.
-        self.msg_count = 250_000
+        # ~33s of traffic, vs. a 30-second toggle window.
+        self.msg_count = 20_000
         self.rate_limit_bps = 10 * 1024 * 1024  # 10 MB/s
-        self.toggle_duration_sec = 5 * 60
+        self.toggle_duration_sec = 30
         self.toggle_interval_sec = 5
+        # The GC gates (epoch eligibility, safety monitor, age) all log at
+        # debug; without this the reason GC skips an object is invisible.
+        assert self.redpanda
+        self.redpanda._log_config = LoggingConfig("info", {"cloud_topics": "debug"})
 
-    @cluster(num_nodes=5)
+    def _l0_object_count(self) -> int:
+        assert self.redpanda
+        return sum(
+            1
+            for _ in self.redpanda.cloud_storage_client.list_objects(
+                self.s3_bucket_name, prefix=L0_DATA_PREFIX
+            )
+        )
+
+    @cluster(num_nodes=4, log_allow_list=MODE_TOGGLE_LOG_ALLOW_LIST)
     def test_toggle_storage_mode(self):
         assert self.redpanda is not None
         assert self.topic is not None
@@ -455,14 +588,13 @@ class EndToEndCloudTopicsStorageModeToggleTest(EndToEndCloudTopicsBase):
             rate_limit_bps=self.rate_limit_bps,
             tolerate_failed_produce=True,
         )
-        consumer = KgoVerifierSeqConsumer(
-            self.test_context,
-            self.redpanda,
-            self.topic,
-            self.msg_size,
-            loop=False,
-            producer=producer,
+        # The toggle flips through the 'tiered' alias; point it at the
+        # cloud-architecture variant (the default is tiered_v1, under which
+        # cloud -> tiered is a forbidden transition).
+        self.rpk.cluster_config_set(
+            "default_redpanda_storage_mode_tiered_impl", "tiered_v2"
         )
+
         try:
             producer.start()
 
@@ -471,7 +603,7 @@ class EndToEndCloudTopicsStorageModeToggleTest(EndToEndCloudTopicsBase):
             while time.time() - start < self.toggle_duration_sec:
                 time.sleep(self.toggle_interval_sec)
                 mode = (
-                    TopicSpec.STORAGE_MODE_TIERED_CLOUD
+                    TopicSpec.STORAGE_MODE_TIERED
                     if mode == TopicSpec.STORAGE_MODE_CLOUD
                     else TopicSpec.STORAGE_MODE_CLOUD
                 )
@@ -483,26 +615,91 @@ class EndToEndCloudTopicsStorageModeToggleTest(EndToEndCloudTopicsBase):
                     f"(acked={producer.produce_status.acked})"
                 )
 
-            # Let the producer run to completion so the consumer has a
-            # natural stopping point.
+            # Let the producer run to completion so the read-back has a
+            # known record count.
             producer.wait(timeout_sec=10 * 60)
+            acked = producer.produce_status.acked
             self.logger.info(
-                f"producer finished with acked={producer.produce_status.acked}, "
+                f"producer finished with acked={acked}, "
                 f"bad_offsets={producer.produce_status.bad_offsets}"
             )
-
-            # Passing the producer to the consumer makes wait() block
-            # until the consumer has read every produced offset and
-            # validates reads internally.
-            consumer.start(clean=False)
-            consumer.wait(timeout_sec=10 * 60)
-
-            self.wait_until_all_reconciled()
         finally:
             producer.stop()
-            consumer.stop()
             producer.free()
-            consumer.free()
+
+        # End the toggling in tiered_v2 mode: the local log keeps the
+        # placeholders for whatever was reconciled while in cloud mode.
+        self.rpk.alter_topic_config(
+            self.topic, TopicSpec.PROPERTY_STORAGE_MODE, TopicSpec.STORAGE_MODE_TIERED
+        )
+        self.wait_until_all_reconciled()
+
+        l0_before = self._l0_object_count()
+        self.logger.info(f"L0 objects after reconciliation: {l0_before}")
+        assert l0_before > 0, "expected reconciled data to have L0 objects"
+
+        # Trickle produce keeps the reconciler advancing the last-reconciled
+        # offset past the housekeeper's epoch-bump command batches; the
+        # inactive-epoch estimate (and with it GC eligibility) only moves
+        # when the LRO does. The trickled records take the tiered (raft)
+        # write path and land above the placeholder region under test.
+        trickled = 0
+
+        topic = self.topic
+
+        def l0_gone() -> bool:
+            nonlocal trickled
+            count = self._l0_object_count()
+            self.logger.info(f"L0 objects remaining: {count}")
+            if count > 0:
+                self.kafka_tools.produce(topic, 50, self.msg_size, acks=-1)
+                trickled += 50
+            return count == 0
+
+        wait_until(
+            l0_gone,
+            timeout_sec=240,
+            backoff_sec=10,
+            err_msg="L0 GC did not delete the reconciled objects",
+        )
+
+        # The reconciler downloaded the L0 objects to build L1, leaving them
+        # in the cloud-storage disk cache, which the fetch path consults
+        # before object storage and which survives the objects' deletion.
+        # Wipe it (and any in-memory state) so the read has to go to object
+        # storage, as it would once the cache entries are evicted.
+        for node in self.redpanda.nodes:
+            self.redpanda.stop_node(node)
+        for node in self.redpanda.nodes:
+            node.account.ssh(f"rm -rf {self.redpanda.cache_dir}")
+        for node in self.redpanda.nodes:
+            self.redpanda.start_node(node)
+        redpanda = self.redpanda
+        wait_until(
+            lambda: redpanda.healthy(),
+            timeout_sec=60,
+            backoff_sec=2,
+            err_msg="cluster did not become healthy after cache wipe",
+        )
+
+        # Read the whole log back: every acked record (plus the trickled
+        # ones) must be consumable; the reconciled region is expected to be
+        # served from L1 once its L0 objects are gone.
+        expected = acked + trickled
+        out = self.rpk.consume(
+            self.topic,
+            offset="start",
+            n=expected,
+            format="%o\n",
+            quiet=True,
+            timeout=120,
+        )
+        consumed = len(out.splitlines())
+        assert consumed == expected, (
+            f"consumed {consumed}/{expected} records after storage-mode "
+            f"toggling and L0 GC; the reconciled region is expected to be "
+            f"readable from L1"
+        )
 
 
 class EndToEndCloudTopicsTxTest(EndToEndCloudTopicsBase):
@@ -565,7 +762,7 @@ class EndToEndCloudTopicsTxTest(EndToEndCloudTopicsBase):
     @matrix(
         storage_mode=[
             TopicSpec.STORAGE_MODE_CLOUD,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
         ],
     )
     def test_write(self, storage_mode: str):
@@ -809,6 +1006,14 @@ class EndToEndCloudTopicsLevelingTest(EndToEndCloudTopicsBase):
 
         # Wait for leveling to fully converge before verifying data integrity.
         self.wait_for_leveling_quiesce()
+
+        # Assert that extents are now well sized post leveling.
+        assert self.topic
+        self.assert_extents_well_sized(
+            topic=self.topic,
+            max_target_size=self.RECONCILIATION_MAX_OBJECT_SIZE,
+            min_extent_ratio=self.MIN_EXTENT_RATIO,
+        )
 
         # Read all records back to verify data integrity.
         self.consume()

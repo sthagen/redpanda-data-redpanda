@@ -89,6 +89,12 @@ TEST_F(FeatureTableTest, feature_table_strings) {
     ASSERT_EQ(to_string_view(feature::audit_logging), "audit_logging");
 }
 
+TEST(feature_table_string_test, shadow_link_role_sync) {
+    EXPECT_EQ(
+      features::to_string_view(features::feature::shadow_link_role_sync),
+      std::string_view{"shadow_link_role_sync"});
+}
+
 /**
  * Check that the test feature shows up when environment variable
  * is set (via the fixture, in this case)

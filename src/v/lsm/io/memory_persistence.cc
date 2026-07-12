@@ -133,7 +133,8 @@ public:
       : _controller(controller) {}
 
     ss::future<optional_pointer<random_access_file_reader>>
-    open_random_access_reader(internal::file_handle h) override {
+    open_random_access_reader(
+      internal::file_handle h, uint64_t /*file_size*/) override {
         if (_controller && _controller->should_fail) {
             co_await ss::coroutine::return_exception(
               io_error_exception("injected error"));

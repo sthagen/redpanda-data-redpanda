@@ -241,6 +241,9 @@ class RandomNodeOperationsBase(PreallocNodesTest):
                     # Set both compaction intervals for cloud topics compaction tests
                     "log_compaction_interval_ms": 5000,
                     "cloud_topics_compaction_interval_ms": 5000,
+                    # Tune down the leveling interval so leveling actually runs
+                    # (and is exercised by node operations) within the test.
+                    "cloud_topics_leveling_interval_ms": 5000,
                 },
             )
 
@@ -765,7 +768,9 @@ class RandomNodeOperationsBase(PreallocNodesTest):
                     "cleanup.policy": "delete",
                     "redpanda.remote.read": "false",
                     "redpanda.remote.write": "false",
-                    TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+                    **TopicSpec.storage_mode_config(
+                        TopicSpec.STORAGE_MODE_IMPL_TIERED_V2
+                    ),
                 },
             )
             self.maybe_enable_iceberg_for_topic(
@@ -782,7 +787,9 @@ class RandomNodeOperationsBase(PreallocNodesTest):
                     "cleanup.policy": "compact",
                     "redpanda.remote.read": "false",
                     "redpanda.remote.write": "false",
-                    TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+                    **TopicSpec.storage_mode_config(
+                        TopicSpec.STORAGE_MODE_IMPL_TIERED_V2
+                    ),
                 },
             )
             self.maybe_enable_iceberg_for_topic(

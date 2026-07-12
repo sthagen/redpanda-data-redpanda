@@ -99,8 +99,9 @@ public:
     }
 
     ss::future<lsm::io::optional_pointer<lsm::io::random_access_file_reader>>
-    open_random_access_reader(lsm::internal::file_handle h) override {
-        return _inner->open_random_access_reader(h);
+    open_random_access_reader(
+      lsm::internal::file_handle h, uint64_t file_size) override {
+        return _inner->open_random_access_reader(h, file_size);
     }
 
     ss::future<std::unique_ptr<lsm::io::sequential_file_writer>>

@@ -29,14 +29,14 @@ from rptest.utils.scale_parameters import ScaleParameters
 
 class CloudTopicsColdReadScaleTest(PreallocNodesTest):
     """Scale gate + A/B: produce-latency sensitivity to cold-read load, under
-    each cloud_io scheduler policy.
+    each cloud_io admission-control policy.
 
     A producer writes a cloud topic at a modest, constant rate; its data exceeds
     the cloud cache, so reads miss and fetch L1 cold, contending the per-shard S3
     pool against the produce path's L0 uploads. With the shipped reservation,
     producer_upload keeps a floor of 2 of the pool's 8 connections.
 
-    Each scheduler-policy arm runs two cold-read stages on the same cluster and
+    Each admission-control-policy arm runs two cold-read stages on the same cluster and
     backlog -- a low-load reference (N_LOW readers, below saturation) and a heavy
     load that saturates the pool (N_HIGH) -- and gates the produce-p99 ratio
     between them. The reservation floor should hold produce p99 nearly flat
@@ -53,7 +53,7 @@ class CloudTopicsColdReadScaleTest(PreallocNodesTest):
 
     Scope: a coarse CDT gate. The precise reservation-vs-passthrough latency A/B
     lives in the bench-runner tier-9 configs; the floor is unit-tested in
-    cloud_io/tests/scheduler_test.cc.
+    cloud_io/tests/admission_control_test.cc.
     """
 
     topics = ()
@@ -108,11 +108,11 @@ class CloudTopicsColdReadScaleTest(PreallocNodesTest):
     MIN_STAGE2_WAITERS = 500
 
     def __init__(self, test_context: TestContext):
-        # Scheduler policy is parametrized (@matrix); read it here so the cluster
-        # starts under the right policy (cloud_io_scheduler_policy is
+        # Admission-control policy is parametrized (@matrix); read it here so the cluster
+        # starts under the right policy (cloud_io_admission_control_policy is
         # restart-only, so it can't be flipped mid-test).
-        self._scheduler_policy = (test_context.injected_args or {}).get(
-            "scheduler_policy", "reservation"
+        self._admission_control_policy = (test_context.injected_args or {}).get(
+            "admission_control_policy", "reservation"
         )
         si_settings = SISettings(
             test_context,
@@ -129,11 +129,11 @@ class CloudTopicsColdReadScaleTest(PreallocNodesTest):
         extra_rp_conf = {
             "enable_cluster_metadata_upload_loop": False,
             # The reservation arm reads an internal (vectorized_) metric, the
-            # cloud_io scheduler waiter gauge, so internal metrics must be on.
+            # cloud_io admission-control waiter gauge, so internal metrics must be on.
             "disable_metrics": False,
             # Per @matrix arm: 'reservation' (the floor under test) vs
-            # 'passthrough' (control -- no floor, scheduler bypassed).
-            "cloud_io_scheduler_policy": self._scheduler_policy,
+            # 'passthrough' (control -- no floor, admission control bypassed).
+            "cloud_io_admission_control_policy": self._admission_control_policy,
         }
         super().__init__(
             test_context,
@@ -157,21 +157,21 @@ class CloudTopicsColdReadScaleTest(PreallocNodesTest):
         # the binding resource somewhere, i.e. cold reads are contending it.
         # Registered only by the reservation policy -- absent under passthrough.
         return self.redpanda.metric_sum(
-            "vectorized_cloud_io_scheduler_total_waiters",
+            "vectorized_cloud_io_admission_control_total_waiters",
             metrics_endpoint=MetricsEndpoint.METRICS,
             expect_metric=True,
         )
 
     @cluster(num_nodes=11)
     @skip_debug_mode
-    @matrix(scheduler_policy=["reservation", "passthrough"])
-    def test_produce_under_cold_reads(self, scheduler_policy: str):
+    @matrix(admission_control_policy=["reservation", "passthrough"])
+    def test_produce_under_cold_reads(self, admission_control_policy: str):
         # __init__ configured the cluster from injected_args; the method branches
         # on the @matrix param. Assert they match so a non-matrix invocation can't
         # configure one policy while the assertions use the other.
-        assert scheduler_policy == self._scheduler_policy, (
-            f"scheduler_policy param {scheduler_policy!r} != configured "
-            f"{self._scheduler_policy!r}"
+        assert admission_control_policy == self._admission_control_policy, (
+            f"admission_control_policy param {admission_control_policy!r} != configured "
+            f"{self._admission_control_policy!r}"
         )
         scale = ScaleParameters(self.redpanda, replication_factor=3)
         partitions = min(self.MAX_PARTITIONS, max(1, scale.partition_limit))
@@ -224,13 +224,13 @@ class CloudTopicsColdReadScaleTest(PreallocNodesTest):
                     time.sleep(self.SAMPLE_INTERVAL_SEC)
                     elapsed = time.time() - stage_start
                     p99_us = producer.produce_status.latency["p99"]
-                    if scheduler_policy == "reservation":
+                    if admission_control_policy == "reservation":
                         peak = max(peak, self._total_pool_waiters())
                     settled = elapsed >= self.STAGE_SETTLE_SEC
                     if settled:
                         p99s.append(p99_us)
                     self.logger.info(
-                        f"[{scheduler_policy}] stage n={n_readers} t={elapsed:.0f}s "
+                        f"[{admission_control_policy}] stage n={n_readers} t={elapsed:.0f}s "
                         f"{'steady' if settled else 'settle'}: "
                         f"produce_p99={p99_us / 1000:.0f}ms, "
                         f"reads={reader.consumer_status.validator.valid_reads}, "
@@ -271,12 +271,12 @@ class CloudTopicsColdReadScaleTest(PreallocNodesTest):
             # rolling window. Capture the uncontended baseline before any readers.
             baseline_p99_us = producer.produce_status.latency["p99"]
             self.logger.info(
-                f"[{scheduler_policy}] baseline produce p99 = "
+                f"[{admission_control_policy}] baseline produce p99 = "
                 f"{baseline_p99_us / 1000:.0f} ms; stage 1 (low load) n={self.N_LOW}"
             )
             s1_median, s1_worst, s1_reads, _ = run_stage(self.N_LOW)
             self.logger.info(
-                f"[{scheduler_policy}] stage 2 (heavy load) n={self.N_HIGH}"
+                f"[{admission_control_policy}] stage 2 (heavy load) n={self.N_HIGH}"
             )
             s2_median, s2_worst, s2_reads, s2_waiters = run_stage(self.N_HIGH)
         finally:
@@ -287,7 +287,7 @@ class CloudTopicsColdReadScaleTest(PreallocNodesTest):
         s1_read_bytes = s1_reads * self.MSG_SIZE
         s2_read_bytes = s2_reads * self.MSG_SIZE
         self.logger.info(
-            f"[{scheduler_policy}] produce p99 vs cold-read load: "
+            f"[{admission_control_policy}] produce p99 vs cold-read load: "
             f"n={self.N_LOW} median/worst={s1_median / 1000:.0f}/{s1_worst / 1000:.0f}ms, "
             f"n={self.N_HIGH} median/worst={s2_median / 1000:.0f}/{s2_worst / 1000:.0f}ms; "
             f"load-sensitivity ratio (stage2/stage1) median={ratio_median:.2f}x "
@@ -314,7 +314,7 @@ class CloudTopicsColdReadScaleTest(PreallocNodesTest):
                 f"stage2 median={s2_median}) -- no meaningful latency measured"
             )
 
-            if scheduler_policy == "reservation":
+            if admission_control_policy == "reservation":
                 # Stage 2 must have saturated the pool, else the ratio is trivial
                 # (produce is fast when nothing competes).
                 assert s2_waiters >= self.MIN_STAGE2_WAITERS, (
@@ -344,7 +344,9 @@ class CloudTopicsColdReadScaleTest(PreallocNodesTest):
                 backoff_sec=5,
                 err_msg="Cluster has unavailable partitions after the test",
             )
-            self.logger.info(f"Cluster healthy -- {scheduler_policy} arm passed")
+            self.logger.info(
+                f"Cluster healthy -- {admission_control_policy} arm passed"
+            )
         finally:
             # SIGKILL rather than block on the reconciler-wedge hang (CORE-16648,
             # see the class docstring); the verdict is already decided above.

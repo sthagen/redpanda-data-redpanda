@@ -21,29 +21,19 @@ namespace raft {
 
 replication_monitor::replication_monitor(consensus* r)
   : _raft(r) {
-    ssx::repeat_until_gate_closed(_gate, [this] {
-        return do_notify_replicated().handle_exception(
-          [this](const std::exception_ptr& e) {
-              if (!ssx::is_shutdown_exception(e)) {
-                  vlog(
-                    _raft->_ctxlog.error,
-                    "Exception running replication monitor, ignoring: {}",
-                    e);
-              }
-          });
-    });
+    auto exception_handler = [this](const std::exception_ptr& e) {
+        if (!ssx::is_shutdown_exception(e)) {
+            vlog(
+              _raft->_ctxlog.error,
+              "Exception running replication monitor, ignoring: {}",
+              e);
+        }
+    };
+    ssx::repeat_until_gate_closed(
+      _gate, [this] { return do_notify_replicated(); }, exception_handler);
 
-    ssx::repeat_until_gate_closed(_gate, [this] {
-        return do_notify_committed().handle_exception(
-          [this](const std::exception_ptr& e) {
-              if (!ssx::is_shutdown_exception(e)) {
-                  vlog(
-                    _raft->_ctxlog.error,
-                    "Exception running replication monitor, ignoring: {}",
-                    e);
-              }
-          });
-    });
+    ssx::repeat_until_gate_closed(
+      _gate, [this] { return do_notify_committed(); }, exception_handler);
 }
 
 fmt::iterator replication_monitor::format_to(fmt::iterator it) const {
@@ -211,14 +201,14 @@ ss::future<> replication_monitor::do_notify_committed() {
 }
 
 void replication_monitor::notify_replicated() {
-    if (_gate.is_closed()) {
+    if (_gate.is_closed() || _pending_majority_replication_waiters == 0) {
         return;
     }
     _replicated_event_cv.signal();
 }
 
 void replication_monitor::notify_committed() {
-    if (_gate.is_closed()) {
+    if (_gate.is_closed() || _waiters.empty()) {
         return;
     }
     _committed_event_cv.signal();

@@ -70,7 +70,8 @@ public:
       model::revision_id topic_revision,
       std::unique_ptr<parquet_file_writer_factory> writer,
       schema_manager& schema_mgr,
-      type_resolver& type_resolver,
+      type_resolver& val_type_resolver,
+      type_resolver& key_type_resolver,
       record_translator& record_translator,
       table_creator&,
       model::iceberg_invalid_record_action,
@@ -145,7 +146,8 @@ private:
     model::revision_id _topic_revision;
     std::unique_ptr<parquet_file_writer_factory> _writer_factory;
     schema_manager& _schema_mgr;
-    type_resolver& _type_resolver;
+    type_resolver& _val_type_resolver;
+    type_resolver& _key_type_resolver;
     record_translator& _record_translator;
     table_creator& _table_creator;
     model::iceberg_invalid_record_action _invalid_record_action;

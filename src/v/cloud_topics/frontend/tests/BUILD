@@ -8,7 +8,7 @@ redpanda_cc_gtest(
     ],
     cpu = 1,
     deps = [
-        "//src/v/cloud_io:scheduler_types",
+        "//src/v/cloud_io:admission_control_types",
         "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_topics:app",
         "//src/v/cloud_topics:data_plane_api",

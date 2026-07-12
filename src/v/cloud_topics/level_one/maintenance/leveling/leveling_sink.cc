@@ -103,6 +103,8 @@ ss::future<> leveling_sink::finalize(bool success) {
                            ? _input_extents - _output_objects
                            : size_t{0};
         _probe.add_leveling_extents_reclaimed(reclaimed);
+        _probe.add_leveling_objects_committed(_output_objects);
+        _probe.add_leveling_bytes_committed(_output_bytes);
         vlog(
           _ctxlog.info,
           "Finalized leveling with {} extents reclaimed ({}->{})",
@@ -110,6 +112,8 @@ ss::future<> leveling_sink::finalize(bool success) {
           _input_extents,
           _output_objects);
     } else {
+        _probe.add_leveling_objects_rejected(_output_objects);
+        _probe.add_leveling_bytes_rejected(_output_bytes);
         vlog(
           _ctxlog.warn,
           "Could not commit object replacement during leveling: {}.",

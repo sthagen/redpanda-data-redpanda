@@ -11,12 +11,16 @@ import json
 import time
 
 from connectrpc.errors import ConnectError, ConnectErrorCode
+import google.protobuf.duration_pb2 as duration_pb2
 from ducktape.errors import TimeoutError as DucktapeTimeoutError
 from ducktape.mark import parametrize
 from ducktape.utils.util import wait_until
 from requests.exceptions import HTTPError
 
-from rptest.clients.admin.proto.redpanda.core.admin.v2 import features_pb2
+from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
+    features_pb2,
+    shadow_link_pb2,
+)
 from rptest.clients.admin.v2 import Admin as AdminV2
 from rptest.clients.kafka_cli_tools import KafkaCliTools
 from rptest.clients.rpk import RpkException, RpkTool
@@ -1205,7 +1209,7 @@ PERTURB_RECORD_SIZE = 128
 # exercise or an explicit acknowledgement. Add a feature's name here when you
 # cover it or knowingly skip it; entries for features no longer gated by the
 # current upgrade are harmless extras, so no per-major pruning is needed.
-PERTURB_EXERCISED_FEATURES = frozenset({"tiered_cloud_topics"})
+PERTURB_EXERCISED_FEATURES = frozenset({"tiered_cloud_topics", "shadow_link_role_sync"})
 PERTURB_ACKNOWLEDGED_FEATURES = frozenset(
     {
         # Cluster-linking features, out of scope for this single-cluster test.
@@ -1214,6 +1218,12 @@ PERTURB_ACKNOWLEDGED_FEATURES = frozenset(
         # Iceberg extended-mode topic-config gate; exercising it needs Iceberg
         # topic setup orthogonal to the finalization behavior under test.
         "iceberg_extended_mode_config",
+        # Bootstrap-time internal RPC: while gated, a restarting node simply
+        # skips the controller-snapshot fetch and falls back to its local
+        # config cache (indistinguishable from prior behavior, with no
+        # distinctive signal to assert here). Its active-state
+        # behavior is covered by ClusterConfigMultiNodeBootstrapTest.
+        "fetch_controller_snapshot_rpc",
     }
 )
 
@@ -1238,6 +1248,12 @@ class ManualFinalizationUpgradeTest(FeaturesTestBase):
     is set on the old binary (which also exercises the backported knob) and the
     status/finalize RPCs are only invoked once every node is on HEAD.
     """
+
+    # DescribeRedpandaRoles occupies the reserved Redpanda Kafka API key range
+    # (>= 15000); api_versions.cc strips it from ApiVersions until the
+    # shadow_link_role_sync feature is active.
+    DESCRIBE_REDPANDA_ROLES_API_KEY = 15000
+    _ROLE_SYNC_GATE_MESSAGE = "Role sync cannot be configured"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, num_brokers=3, **kwargs)
@@ -1438,14 +1454,16 @@ class ManualFinalizationUpgradeTest(FeaturesTestBase):
         if "upgraded" not in phase:
             return
         self._exercise_tiered_cloud_topics()
+        self._exercise_shadow_link_role_sync()
         # The other two v26.2-gated features are not exercised by this
         # single-cluster perturbation: shadow_link_sr_api_sync and
         # batch_mirror_topic_status are both cluster-linking features
         # (batch_mirror_topic_status additionally needs a second cluster).
 
     def _exercise_tiered_cloud_topics(self):
-        """tiered_cloud_topics gate: creating a topic with storage mode
-        `tiered_cloud` is refused until the feature is active. Drive that
+        """tiered_cloud_topics gate: creating a topic with the tiered_v2
+        (cloud-architecture) storage mode is refused until the feature is
+        active. Drive that
         validator path while unfinalized and confirm the feature is unavailable
         and the create is rejected. The topic is never created, so exercising
         the gate cannot leave state that would block a downgrade."""
@@ -1456,9 +1474,9 @@ class ManualFinalizationUpgradeTest(FeaturesTestBase):
             RpkTool(self.redpanda).create_topic(
                 "perturb-tiered-cloud",
                 partitions=1,
-                config={
-                    TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_TIERED_CLOUD
-                },
+                config=TopicSpec.storage_mode_config(
+                    TopicSpec.STORAGE_MODE_IMPL_TIERED_V2
+                ),
             )
         except RpkException as e:
             # Confirm the create failed via the storage-mode gate, not an
@@ -1475,31 +1493,104 @@ class ManualFinalizationUpgradeTest(FeaturesTestBase):
                 "creating a tiered_cloud topic should be gated while unfinalized"
             )
 
+    def _validate_role_sync_config(self):
+        """Issue a validate-only CreateShadowLink with role sync configured to
+        exercise the config gate (check_role_sync_supported in shadow_link.cc).
+        role_name_filters must be non-empty -- it's the field the gate keys on;
+        callers interpret the gated vs ungated result."""
+        client = self.admin_v2.shadow_link()
+        req = shadow_link_pb2.CreateShadowLinkRequest(validate_only=True)
+        req.shadow_link.name = "perturb-role-sync"
+        req.shadow_link.configurations.client_options.bootstrap_servers.extend(
+            self.redpanda.brokers().split(",")
+        )
+        req.shadow_link.configurations.role_sync_options.CopyFrom(
+            shadow_link_pb2.RoleSyncOptions(
+                interval=duration_pb2.Duration(seconds=1),
+                role_name_filters=[
+                    shadow_link_pb2.NameFilter(
+                        pattern_type=shadow_link_pb2.PATTERN_TYPE_PREFIX,
+                        filter_type=shadow_link_pb2.FILTER_TYPE_INCLUDE,
+                        name="synced-",
+                    )
+                ],
+            )
+        )
+        self._call_with_leader_retry(lambda: client.create_shadow_link(req=req))
+
+    def _exercise_shadow_link_role_sync(self):
+        """shadow_link_role_sync gates two surfaces while the upgrade is
+        unfinalized: the DescribeRedpandaRoles Kafka API is not advertised in
+        ApiVersions, and configuring role sync on a shadow link is refused.
+        Exercise both."""
+        assert self._feature_state("shadow_link_role_sync") == "unavailable", (
+            "shadow_link_role_sync should be unavailable while unfinalized"
+        )
+        # Wire gate: "(<key>)" appears only when the broker advertises the key,
+        # which the client renders as UNKNOWN(<key>); its absence means it's gated.
+        api_versions = KafkaCliTools(self.redpanda).get_api_versions()
+        assert f"({self.DESCRIBE_REDPANDA_ROLES_API_KEY})" not in api_versions, (
+            "DescribeRedpandaRoles should not be advertised while unfinalized:\n"
+            f"{api_versions}"
+        )
+        # Config gate: confirm it's the role-sync gate and not an unrelated
+        # precondition failure by checking both the error code and the message.
+        try:
+            self._validate_role_sync_config()
+        except ConnectError as e:
+            assert e.code == ConnectErrorCode.FAILED_PRECONDITION, (
+                f"role-sync config should be gated by a precondition, got {e}"
+            )
+            assert self._ROLE_SYNC_GATE_MESSAGE in str(e), (
+                f"role-sync config rejected, but not via the feature gate: {e}"
+            )
+        else:
+            raise AssertionError(
+                "configuring role sync should be gated while unfinalized"
+            )
+
     def _verify_tiered_cloud_topics_working(self):
         """After finalize the active version has advanced past the feature's
-        require_version, so the gate opens: the feature moves from unavailable to
-        available (it is explicit_only, so it does not auto-activate) and can
-        then be enabled to active -- the simple signal that it now works.
+        require_version, so the gate opens: the feature auto-activates (it is
+        available_policy::always) -- the simple signal that it now works.
         (Creating an actual tiered_cloud topic additionally needs cloud storage,
         which this test does not configure.)"""
-        wait_until(
-            lambda: self._feature_state("tiered_cloud_topics") == "available",
-            timeout_sec=30,
-            backoff_sec=1,
-            err_msg="tiered_cloud_topics did not become available after finalize",
-        )
-        self.admin.put_feature("tiered_cloud_topics", {"state": "active"})
         wait_until(
             lambda: self._feature_state("tiered_cloud_topics") == "active",
             timeout_sec=30,
             backoff_sec=1,
-            err_msg="tiered_cloud_topics did not activate after being enabled",
+            err_msg="tiered_cloud_topics did not auto-activate after finalize",
         )
+
+    def _verify_shadow_link_role_sync_working(self):
+        """After finalize both gates open: shadow_link_role_sync auto-activates
+        (available_policy::always, so no explicit enable), DescribeRedpandaRoles is
+        advertised, and the role-sync config gate no longer rejects. Any
+        non-gate outcome of the validate call is acceptable -- the connection test
+        may pass or fail, but it must not be the feature precondition."""
+        wait_until(
+            lambda: self._feature_state("shadow_link_role_sync") == "active",
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="shadow_link_role_sync did not activate after finalize",
+        )
+        api_versions = KafkaCliTools(self.redpanda).get_api_versions()
+        assert f"({self.DESCRIBE_REDPANDA_ROLES_API_KEY})" in api_versions, (
+            "DescribeRedpandaRoles should be advertised after finalize:\n"
+            f"{api_versions}"
+        )
+        try:
+            self._validate_role_sync_config()
+        except ConnectError as e:
+            assert self._ROLE_SYNC_GATE_MESSAGE not in str(e), (
+                f"role-sync config still gated after finalize: {e}"
+            )
 
     def _verify_v26_2_features_working(self):
         """After the upgrade is finalized, confirm each v26.2 feature's gate has
         opened and the feature actually works (simple per-feature predicates)."""
         self._verify_tiered_cloud_topics_working()
+        self._verify_shadow_link_role_sync_working()
 
     def _feature_state(self, name):
         for f in self.admin.get_features()["features"]:
@@ -1812,10 +1903,15 @@ class ManualFinalizationUpgradeTest(FeaturesTestBase):
         + [
             # The old binary aborts via vassert when it detects the cluster
             # advanced past the version it supports. Allow the rejection message
-            # plus the generic crash artifacts the intentional abort emits.
+            # plus the generic crash artifacts the intentional abort emits. Both
+            # crash-file variants are allowed: vassert records the crash, then
+            # the SIGILL handler from __builtin_trap() finds the writer already
+            # consumed and skips -- a benign double-tap on a single shard, not a
+            # real second crash.
             "Incompatible downgrade detected",
             "assert - Backtrace:",
             "Recorded crash reason to crash file",
+            "Skipping recording crash reason to crash file",
         ],
     )
     def test_downgrade_rejected_after_finalize(self):
@@ -1844,7 +1940,24 @@ class ManualFinalizationUpgradeTest(FeaturesTestBase):
         victim = self.redpanda.nodes[-1]
         self.redpanda.stop_node(victim)
         self.installer.install([victim], old_release)
-        self.redpanda.start_node(victim, expect_fail=True)
+
+        # The abort runs through vassert -> __builtin_trap() -> SIGILL, whose
+        # default disposition writes a core dump. Flushing a full core of a
+        # multi-GB process can take longer than the expect_fail termination
+        # timeout on a loaded CI host, leaving the process alive past the
+        # deadline and flaking the test (CORE-16744). Two mitigations, because
+        # whether a core dump can be suppressed depends on the CI host's
+        # core_pattern (file vs pipe): disable core dumps for this start (a
+        # deliberately aborted node needs no core -- the reason is already in the
+        # log and the crash file), and double the termination timeout as an
+        # environment-independent backstop. The HEAD rejoin below runs outside
+        # the block and still dumps core if it crashes unexpectedly.
+        with self.redpanda.core_dumps_disabled():
+            self.redpanda.start_node(
+                victim,
+                expect_fail=True,
+                timeout=2 * self.redpanda.node_ready_timeout_s,
+            )
         assert self.redpanda.search_log_node(
             victim, "Incompatible downgrade detected"
         ), "old binary should refuse to start after finalization"

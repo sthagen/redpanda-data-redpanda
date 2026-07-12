@@ -44,7 +44,7 @@ TEST_P(SSTTest, CanCreateAndReadFile) {
         builder.close().get();
         file_size = builder.file_size();
     }
-    auto file = _persistence->open_random_access_reader({}).get();
+    auto file = _persistence->open_random_access_reader({}, file_size).get();
     auto reader = lsm::sst::reader::open(
                     std::move(*file),
                     lsm::internal::file_id{0},

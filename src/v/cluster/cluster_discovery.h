@@ -20,11 +20,6 @@
 #include <optional>
 #include <vector>
 
-namespace storage {
-class kvstore;
-class api;
-} // namespace storage
-
 namespace cluster {
 struct cluster_bootstrap_info_reply;
 
@@ -80,7 +75,9 @@ public:
     };
 
     cluster_discovery(
-      const model::node_uuid& node_uuid, storage::api&, ss::abort_source&);
+      const model::node_uuid& node_uuid,
+      std::optional<model::cluster_uuid> cluster_uuid,
+      ss::abort_source&);
 
     // Register with the cluster:
     // - If we are a fresh cluster founder, broadcast to other founders
@@ -124,6 +121,22 @@ public:
     // \pre get_node_ids_by_uuid() has never been called
     node_ids_by_uuid& get_node_ids_by_uuid();
 
+    // Fetch a fresh controller_join_snapshot from a peer. Used by
+    // restarting nodes (those that already have a node_id and are not
+    // going through register_with_cluster) so that bootstrap can apply
+    // the current cluster-config view to shard_local_cfg before any
+    // downstream service reads it.
+    //
+    // Iterates `peers` in order, returning the first valid response.
+    // The responder forwards to the controller leader if it is not the
+    // leader itself, so the result is leader-authoritative regardless
+    // of which peer answered. Returns nullopt if every peer fails or
+    // none have a snapshot ready; the caller falls through to whatever
+    // shard_local_cfg view was loaded from the local cache.
+    static ss::future<std::optional<iobuf>>
+    fetch_controller_snapshot_from_leader(
+      const std::vector<model::broker>& peers);
+
 private:
     // Sends requests to each seed server to register the local node UUID
     // until one succeeds. Returns nullopt if registration did not succeed.
@@ -147,11 +160,11 @@ private:
     ss::future<> discover_founding_brokers();
 
     const model::node_uuid _node_uuid;
+    const std::optional<model::cluster_uuid> _cluster_uuid;
     simple_time_jitter<model::timeout_clock> _join_retry_jitter;
     const std::chrono::milliseconds _join_timeout;
 
     std::optional<bool> _is_cluster_founder;
-    storage::api& _storage;
     ss::abort_source& _as;
     brokers _founding_brokers;
     node_ids_by_uuid _node_ids_by_uuid;

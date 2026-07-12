@@ -802,7 +802,10 @@ class PathMatcher:
 
 
 def quiesce_uploads(
-    redpanda, topic_names: list[str], timeout_sec, target_label: Optional[str] = None
+    redpanda: RedpandaService,
+    topic_names: list[str],
+    timeout_sec: int,
+    target_label: Optional[str] = None,
 ):
     """
     Wait until all local data for all topics in `topic_names` has been uploaded

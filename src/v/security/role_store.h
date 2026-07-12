@@ -18,6 +18,7 @@
 #include "security/role.h"
 #include "security/types.h"
 
+#include <seastar/core/future.hh>
 #include <seastar/util/noncopyable_function.hh>
 
 #include <boost/range/iterator_range.hpp>
@@ -144,6 +145,19 @@ public:
     // an empty member set).
     chunked_vector<role_with_members>
     roles_with_members(const std::function<bool(const role_name&)>& pred) const;
+
+    // IMPORTANT: intended solely for security_manager::fill_snapshot. This
+    // suspends mid-iteration, which is safe ONLY while the caller holds
+    // mux_state_machine's _apply_mtx: that mutex serializes against command
+    // application, so _roles/_members_store can't mutate across a yield. A
+    // caller without that lock risks iterating a container that changes
+    // underfoot.
+    //
+    // Like roles_with_members, but enumerates every role with its members in a
+    // single pass and yields periodically, so snapshotting a very large role
+    // store doesn't stall the reactor.
+    ss::future<chunked_vector<role_with_members>>
+    all_roles_with_members() const;
 
     static constexpr auto name_prefix_filter =
       [](const role_accessor& e, std::string_view filter) {

@@ -21,6 +21,7 @@
 #include "cluster/partition_leaders_table.h"
 #include "cluster/partition_manager.h"
 #include "cluster/shard_table.h"
+#include "features/feature_table.h"
 #include "model/timeout_clock.h"
 #include "rpc/connection_cache.h"
 #include "ssx/future-util.h"
@@ -51,6 +52,7 @@ level_zero_notifier::level_zero_notifier(
   ss::sharded<cluster::shard_table>* shard_table,
   ss::sharded<cluster::partition_manager>* partition_manager,
   ss::sharded<rpc::connection_cache>* connections,
+  ss::sharded<features::feature_table>* features,
   std::chrono::milliseconds retry_backoff)
   : _self(self)
   , _leaders(leaders)
@@ -58,7 +60,14 @@ level_zero_notifier::level_zero_notifier(
   , _shard_table(shard_table)
   , _partition_manager(partition_manager)
   , _connections(connections)
+  , _features(features)
   , _retry_backoff(retry_backoff) {}
+
+bool level_zero_notifier::notifications_enabled() const {
+    return _features != nullptr
+           && _features->local().is_active(
+             features::feature::tiered_cloud_topics);
+}
 
 std::optional<model::ntp>
 level_zero_notifier::resolve_ntp(const model::topic_id_partition& tidp) const {
@@ -78,6 +87,15 @@ ss::future<> level_zero_notifier::stop() {
 ss::future<std::expected<void, ctp_stm_api_errc>>
 level_zero_notifier::set_min_allowed_local_threshold(
   model::topic_id_partition tidp, kafka::offset new_floor) {
+    if (!notifications_enabled()) {
+        vlog(
+          cd_log.debug,
+          "{} set_min_allowed_local_threshold: skipping notification, the "
+          "tiered_cloud_topics feature is not active yet, new floor {}",
+          tidp,
+          new_floor);
+        co_return std::expected<void, ctp_stm_api_errc>{};
+    }
     auto ntp = resolve_ntp(tidp);
     if (!ntp.has_value()) {
         vlog(
@@ -104,6 +122,15 @@ level_zero_notifier::set_min_allowed_local_threshold(
 ss::future<std::expected<void, ctp_stm_api_errc>>
 level_zero_notifier::set_min_allowed_local_threshold_locally(
   model::topic_id_partition tidp, kafka::offset new_floor) {
+    if (!notifications_enabled()) {
+        vlog(
+          cd_log.debug,
+          "{} set_min_allowed_local_threshold_locally: skipping notification, "
+          "the tiered_cloud_topics feature is not active yet, new floor {}",
+          tidp,
+          new_floor);
+        co_return std::expected<void, ctp_stm_api_errc>{};
+    }
     auto ntp = resolve_ntp(tidp);
     if (!ntp.has_value()) {
         vlog(

@@ -543,13 +543,14 @@ struct service::impl {
               *proxy_url);
         }
 
-        http::client client{net::base_transport::configuration{
-          .server_addr = {url.host, url.port},
-          .credentials = is_https ? _creds : nullptr,
-          .tls_sni_hostname = tls_host,
-          .wait_for_tls_server_eof = false,
-          .proxy = std::move(proxy_cfg),
-        }};
+        auto client = std::make_unique<http::client>(
+          net::base_transport::configuration{
+            .server_addr = {url.host, url.port},
+            .credentials = is_https ? _creds : nullptr,
+            .tls_sni_hostname = tls_host,
+            .wait_for_tls_server_eof = false,
+            .proxy = std::move(proxy_cfg),
+          });
 
         http::client::request_header req_hdr;
         req_hdr.method(boost::beast::http::verb::get);

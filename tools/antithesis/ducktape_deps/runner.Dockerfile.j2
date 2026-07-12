@@ -2,6 +2,7 @@ FROM {{ node_image }}
 COPY cluster.json /root/.ducktape/cluster.json
 COPY globals.json /root/.ducktape/globals.json
 COPY --from=deps ducktape_singleton_driver.sh /opt/antithesis/test/v1/ducktape/singleton_driver_ducktape.sh
+COPY --from=deps select_single_test.py /opt/antithesis-helpers/select_single_test.py
 COPY --from=deps ducktape_entrypoint.sh /usr/bin/antithesis_entrypoint.sh
 COPY --from=rptest . /root/tests/rptest/
 # Install the Antithesis Python SDK and symlink test code into the catalog

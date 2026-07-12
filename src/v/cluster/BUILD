@@ -2441,6 +2441,7 @@ redpanda_cc_library(
         "//src/v/cloud_topics/level_zero/stm:ctp_stm",
         "//src/v/cloud_topics/level_zero/stm:ctp_stm_api",
         "//src/v/cluster_link/model",
+        "//src/v/cluster_link/model:sr_context_mapping",
         "//src/v/config",
         "//src/v/container:chunked_hash_map",
         "//src/v/container:chunked_vector",

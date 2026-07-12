@@ -12,6 +12,7 @@
 #pragma once
 
 #include "base/seastarx.h"
+#include "cluster_link/model/types.h"
 #include "container/chunked_vector.h"
 #include "pandaproxy/schema_registry/types.h"
 
@@ -21,6 +22,7 @@
 
 #include <cstdint>
 #include <expected>
+#include <optional>
 
 namespace cluster_link::schema_registry_sync {
 
@@ -34,6 +36,8 @@ enum class source_error_kind : uint8_t {
     /// The source Schema Registry is unreachable; the whole sync should back
     /// off.
     source_unavailable,
+    /// The subject does not exist in the source (HTTP 404).
+    subject_not_found,
 };
 
 struct source_error {
@@ -59,16 +63,41 @@ public:
     source_reader& operator=(source_reader&&) = delete;
     virtual ~source_reader() = default;
 
+    virtual ss::future<source_result<chunked_vector<ppsr::context>>>
+    list_contexts(ss::abort_source&) = 0;
+
     virtual ss::future<source_result<chunked_vector<ppsr::context_subject>>>
     list_subjects(ppsr::context, ss::abort_source&) = 0;
 
     virtual ss::future<source_result<chunked_vector<ppsr::schema_version>>>
-    list_subject_versions(ppsr::context_subject, ss::abort_source&) = 0;
+    list_subject_versions(
+      ppsr::context_subject, ppsr::include_deleted, ss::abort_source&) = 0;
 
-    /// Reads a specific subject version's schema. Not used yet (the apply path
-    /// is not implemented); kept here so the reader seam is stable.
-    virtual ss::future<source_result<ppsr::stored_schema>> read_subject_version(
+    /// Reads a specific subject version's schema. The reconcile engine's
+    /// schema-body fetch path: called for every node it discovers and imports.
+    /// Returns the schema projected into Redpanda's supported model plus any
+    /// unsupported fields the source carried but Redpanda cannot store, for the
+    /// caller to apply its unsupported-feature policy.
+    virtual ss::future<source_result<ppsr::source_schema_read>>
+    read_subject_version(
       ppsr::context_subject, ppsr::schema_version, ss::abort_source&) = 0;
+
+    /// Reads the source's own (non-inherited) mode override for a subject or
+    /// context: nullopt for no explicit override (subject_mode_not_found), a
+    /// value to mirror, or an operation_failed error for a mode Redpanda cannot
+    /// represent (e.g. FORWARD), which the caller counts rather than treating
+    /// as nullopt.
+    virtual ss::future<source_result<std::optional<ppsr::mode>>>
+    read_mode(ppsr::context_subject, ss::abort_source&) = 0;
+
+    /// As read_mode, for the compatibility-level override.
+    virtual ss::future<source_result<std::optional<ppsr::compatibility_level>>>
+    read_config(ppsr::context_subject, ss::abort_source&) = 0;
+
+    /// Releases any resources the reader holds (e.g. an HTTP transport). Called
+    /// once before the reader is destroyed; the default is a no-op for readers
+    /// that hold nothing. After stop() no other method may be called.
+    virtual ss::future<> stop() { return ss::make_ready_future<>(); }
 };
 
 /// \brief Creates one `source_reader` per link.
@@ -81,7 +110,13 @@ public:
     source_reader_factory& operator=(source_reader_factory&&) = delete;
     virtual ~source_reader_factory() = default;
 
-    virtual std::unique_ptr<source_reader> create() = 0;
+    /// \param api_cfg the link's Schema-Registry-API shadowing config, or
+    ///        nullptr when the link is not in SR-API mode. The HTTP-backed
+    ///        reader builds its transport (source URL, auth, TLS) from it;
+    ///        readers that do not talk to a remote source ignore it.
+    virtual std::unique_ptr<source_reader> create(
+      const model::schema_registry_sync_config::shadow_schema_registry_api*
+        api_cfg) = 0;
 };
 
 } // namespace cluster_link::schema_registry_sync

@@ -169,7 +169,7 @@ class DebugRowsTest(EndToEndCloudTopicsBase):
     @matrix(
         storage_mode=[
             TopicSpec.STORAGE_MODE_CLOUD,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
         ],
     )
     def test_read_and_write_rows(self, storage_mode: str) -> None:

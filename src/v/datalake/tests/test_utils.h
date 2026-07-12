@@ -10,7 +10,6 @@
 #pragma once
 
 #include "datalake/catalog_schema_manager.h"
-#include "datalake/record_schema_resolver.h"
 #include "datalake/table_creator.h"
 
 namespace datalake {
@@ -24,18 +23,17 @@ iceberg::unresolved_partition_spec day_partition_spec();
 // Creates or alters the table by interfacing directly with a catalog.
 class direct_table_creator : public table_creator {
 public:
-    direct_table_creator(type_resolver&, schema_manager&);
+    explicit direct_table_creator(schema_manager&);
 
     ss::future<checked<std::nullopt_t, errc>> ensure_table(
       const model::topic&,
       model::revision_id topic_revision,
-      record_schema_components) const final;
+      const record_type&) const final;
 
     ss::future<checked<std::nullopt_t, errc>> ensure_dlq_table(
       const model::topic&, model::revision_id topic_revision) const final;
 
 private:
-    type_resolver& type_resolver_;
     schema_manager& schema_mgr_;
 };
 

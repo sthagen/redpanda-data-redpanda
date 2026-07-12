@@ -70,6 +70,13 @@ consumer_offset_sync_options:
 security_sync_options:
   interval: "30s"
   paused: false
+role_sync_options:
+  interval: "30s"
+  paused: false
+  role_name_filters:
+    - pattern_type: "PREFIX"
+      filter_type: "INCLUDE"
+      name: "team-"
 `,
 			want: ShadowLinkConfig{
 				Name: "test-shadow-link",
@@ -120,6 +127,17 @@ security_sync_options:
 				SecuritySyncOptions: &SecuritySettingsSyncOptions{
 					Interval: 30 * time.Second,
 					Paused:   false,
+				},
+				RoleSyncOptions: &RoleSyncOptions{
+					Interval: 30 * time.Second,
+					Paused:   false,
+					RoleNameFilters: []*NameFilter{
+						{
+							PatternType: "PREFIX",
+							FilterType:  "INCLUDE",
+							Name:        "team-",
+						},
+					},
 				},
 			},
 		},
@@ -328,6 +346,15 @@ func TestShadowLinkConfigUnmarshalJSON(t *testing.T) {
 				"security_sync_options": {
 					"interval": 30000000000,
 					"paused": false
+				},
+				"role_sync_options": {
+					"interval": 30000000000,
+					"paused": false,
+					"role_name_filters": [{
+						"pattern_type": "PREFIX",
+						"filter_type": "INCLUDE",
+						"name": "team-"
+					}]
 				}
 			}`,
 			want: ShadowLinkConfig{
@@ -379,6 +406,17 @@ func TestShadowLinkConfigUnmarshalJSON(t *testing.T) {
 				SecuritySyncOptions: &SecuritySettingsSyncOptions{
 					Interval: 30 * time.Second,
 					Paused:   false,
+				},
+				RoleSyncOptions: &RoleSyncOptions{
+					Interval: 30 * time.Second,
+					Paused:   false,
+					RoleNameFilters: []*NameFilter{
+						{
+							PatternType: "PREFIX",
+							FilterType:  "INCLUDE",
+							Name:        "team-",
+						},
+					},
 				},
 			},
 		},

@@ -19,31 +19,44 @@
 # Antithesis testing.
 #
 # This script:
-#   1. Builds Redpanda via Bazel (optionally with --config=antithesis)
+#   1. Builds Redpanda via Bazel (with --config=antithesis unless
+#      --no-instrumented)
 #   2. Builds the base test-node Docker image
 #   3. Builds the node image (test-node + baked-in Redpanda binaries)
 #   4. Builds the runner image (FROM node image + test code, config,
 #      singleton driver, entrypoint)
 #   5. Builds the config image (FROM scratch, docker-compose.yaml at /)
+#   6. Uploads the node/runner/config images to the registry
+#      (unless --skip-registry-upload)
+#   7. Optionally launches an Antithesis test run (--submit; reads the
+#      API password from $AT_PASSWORD)
 #
 # Usage:
 #   ./tools/antithesis/ducktape_test_package.py \
 #       --ducktape-args rptest/tests/e2e_shadow_indexing_test.py
 #   ./tools/antithesis/ducktape_test_package.py \
 #       --ducktape-args rptest/tests/e2e_shadow_indexing_test.py \
-#       --nodes 3 --instrumented
+#       --nodes 3 --no-instrumented
 #
 
 import argparse
 import json
 import shlex
 import shutil
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 from jinja2 import Template
+
+from at_common import (
+    add_common_args,
+    maybe_submit,
+    registry_help_str,
+    run,
+    upload_images,
+    validate_common_args,
+)
 
 TOOLS_DIR = Path(__file__).resolve().parent
 DEPS_DIR = TOOLS_DIR / "ducktape_deps"
@@ -51,23 +64,6 @@ REPO_ROOT = TOOLS_DIR.parent.parent
 
 # Root for installed binaries, matching tools/dt and RedpandaInstaller.
 INSTALL_ROOT = "/opt/redpanda_installs"
-
-
-def run(
-    cmd: list[str],
-    *,
-    check: bool = True,
-    cwd: Path | None = None,
-    capture: bool = False,
-) -> subprocess.CompletedProcess:
-    print(f"  $ {' '.join(str(c) for c in cmd)}")
-    return subprocess.run(
-        cmd,
-        check=check,
-        cwd=cwd,
-        capture_output=capture,
-        text=True,
-    )
 
 
 def render_template(template_path: Path, **kwargs) -> str:
@@ -271,8 +267,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--instrumented",
-        action="store_true",
-        help="Build with --config=antithesis for coverage",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Build with --config=antithesis for coverage (default: enabled)",
     )
     parser.add_argument(
         "--max-parallel",
@@ -319,7 +316,11 @@ def main() -> None:
         action="store_true",
         help="Skip building the base test-node Docker image",
     )
+    add_common_args(parser)
+
     args = parser.parse_args()
+
+    validate_common_args(parser, args)
 
     base_image = args.test_node_image or "vectorized/redpanda-test-node"
     node_tag = f"{args.name}-node:latest"
@@ -356,6 +357,17 @@ def main() -> None:
     compose_out.mkdir(parents=True, exist_ok=True)
     (compose_out / "docker-compose.yaml").write_text(compose)
 
+    config_key = f"{args.name}-config"
+    images = {
+        f"{args.name}-node": node_tag,
+        f"{args.name}-runner": runner_tag,
+        config_key: config_tag,
+    }
+    if not args.skip_registry_upload:
+        upload_images(args.registry, images)
+
+    maybe_submit(args, name=args.name, images=images, config_key=config_key)
+
     print(f"""
 Images built:
   node:   {node_tag}
@@ -368,15 +380,7 @@ Run locally:
       /opt/antithesis/test/v1/ducktape/singleton_driver_ducktape.sh
   docker compose -f {compose_out}/docker-compose.yaml down
 
-Push to Antithesis registry:
-  TENANT=<your-tenant-name>
-  REGISTRY=us-central1-docker.pkg.dev/molten-verve-216720/$TENANT-repository
-  docker tag {node_tag} $REGISTRY/{args.name}-node:latest
-  docker push $REGISTRY/{args.name}-node:latest
-  docker tag {runner_tag} $REGISTRY/{args.name}-runner:latest
-  docker push $REGISTRY/{args.name}-runner:latest
-  docker tag {config_tag} $REGISTRY/{args.name}-config:latest
-  docker push $REGISTRY/{args.name}-config:latest
+{registry_help_str(args.registry, skipped=args.skip_registry_upload, images=images)}
 """)
 
 

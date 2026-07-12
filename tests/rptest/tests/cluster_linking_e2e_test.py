@@ -157,7 +157,6 @@ class MultiClusterRedpandaTest(MultiClusterTestBase):
             self.logger,
             self.redpanda,
             secondary_spec=SecondaryClusterSpec(ServiceType.REDPANDA),
-            num_brokers=3,
         ) as services:
             assert services.secondary.is_redpanda, (
                 f"Expected Redpanda service, got {services.secondary}"
@@ -188,7 +187,6 @@ class MultiClusterKafkaTest(MultiClusterTestBase):
             secondary_spec=SecondaryClusterSpec(
                 ServiceType.KAFKA, kafka_version="3.8.0", kafka_quorum="COMBINED_KRAFT"
             ),
-            num_brokers=3,
         ) as services:
             assert services.secondary.is_kafka, (
                 f"Expected Kafka service, got {services.secondary}"
@@ -247,6 +245,47 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         )
         update_mask = google.protobuf.field_mask_pb2.FieldMask(
             paths=["configurations.schema_registry_sync_options"]
+        )
+
+        with self._expect_connect_error(ConnectErrorCode.FAILED_PRECONDITION):
+            self.update_link(shadow_link=shadow_link, update_mask=update_mask)
+
+    @cluster(num_nodes=6)
+    def test_role_sync_rejected_when_feature_inactive(self):
+        self.target_cluster_service.set_feature_active("shadow_link_role_sync", False)
+
+        role_sync_options = shadow_link_pb2.RoleSyncOptions(
+            role_name_filters=[
+                shadow_link_pb2.NameFilter(
+                    pattern_type=shadow_link_pb2.PATTERN_TYPE_PREFIX,
+                    filter_type=shadow_link_pb2.FILTER_TYPE_INCLUDE,
+                    name="app-",
+                )
+            ]
+        )
+
+        create_req = self.create_default_link_request(
+            link_name="role-sync-link",
+            mirror_all_acls=False,
+            mirror_all_groups=False,
+            mirror_all_topics=False,
+        )
+        create_req.shadow_link.configurations.role_sync_options.CopyFrom(
+            role_sync_options
+        )
+
+        with self._expect_connect_error(ConnectErrorCode.FAILED_PRECONDITION):
+            self.create_link_with_request(req=create_req)
+
+        shadow_link = self.create_link(
+            "test-link",
+            mirror_all_acls=False,
+            mirror_all_groups=False,
+            mirror_all_topics=False,
+        )
+        shadow_link.configurations.role_sync_options.CopyFrom(role_sync_options)
+        update_mask = google.protobuf.field_mask_pb2.FieldMask(
+            paths=["configurations.role_sync_options"]
         )
 
         with self._expect_connect_error(ConnectErrorCode.FAILED_PRECONDITION):
@@ -409,7 +448,20 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
     def test_task_states_change(self):
         topic = TopicSpec(name="test-topic", partition_count=3, replication_factor=3)
         self.source_default_client().create_topic(topic)
-        self.create_link("test-link")
+        req = self.create_default_link_request("test-link")
+        req.shadow_link.configurations.role_sync_options.CopyFrom(
+            shadow_link_pb2.RoleSyncOptions(
+                interval=google.protobuf.duration_pb2.Duration(seconds=1),
+                role_name_filters=[
+                    shadow_link_pb2.NameFilter(
+                        pattern_type=shadow_link_pb2.PATTERN_TYPE_PREFIX,
+                        filter_type=shadow_link_pb2.FILTER_TYPE_INCLUDE,
+                        name="e2e-roles-",
+                    )
+                ],
+            )
+        )
+        self.create_link_with_request(req)
 
         wait_until(
             lambda: self._topics_are_present_in_target_cluster([topic]),
@@ -1875,7 +1927,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
 
         cloud_backed = storage_mode in (
             TopicSpec.STORAGE_MODE_CLOUD,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
         )
         progress_timeout = 120 if cloud_backed else 60
 
@@ -2000,7 +2052,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         # cloud-topics linger.
         if storage_mode in (
             TopicSpec.STORAGE_MODE_CLOUD,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
         ):
             self.source_cluster_service.set_cluster_config(
                 {"cloud_topics_produce_upload_interval": 25}
@@ -2497,7 +2549,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         if storage_mode not in (
             TopicSpec.STORAGE_MODE_LOCAL,
             TopicSpec.STORAGE_MODE_CLOUD,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
         ):
             # Compaction on shadow topics is not yet supported with
             # tiered storage mode.
@@ -4324,7 +4376,7 @@ class ShadowLinkCustomStartOffsetSelectionTests(ShadowLinkPreAllocTestBase):
 
         if (
             starting_offset == self.timequery_offset
-            and storage_mode == TopicSpec.STORAGE_MODE_TIERED_CLOUD
+            and storage_mode == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2
         ):
             # Timestamp queries on tiered_cloud shadow topics are not
             # yet supported.
@@ -4651,7 +4703,8 @@ class ShadowLinkCustomStartOffsetSelectionTests(ShadowLinkPreAllocTestBase):
 class ShadowLinkingCloudTopicReplicationTests(ShadowLinkPreAllocTestBase):
     """
     Tests cluster linking replication with cloud topics
-    (redpanda.storage.mode=cloud and tiered_cloud) on the source cluster.
+    (redpanda.storage.mode=cloud and tiered with version tiered_v2) on the
+    source cluster.
     """
 
     def __init__(self, test_context: TestContext, *args: Any, **kwargs: Any):
@@ -4684,15 +4737,15 @@ class ShadowLinkingCloudTopicReplicationTests(ShadowLinkPreAllocTestBase):
     @matrix(
         storage_mode=[
             TopicSpec.STORAGE_MODE_CLOUD,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
         ],
     )
     def test_cloud_topic_replication(self, storage_mode):
         """
-        Verify that data produced to a cloud/tiered_cloud topic on the source
+        Verify that data produced to a cloud/tiered_v2 topic on the source
         cluster is replicated to the target cluster via cluster linking.
         """
-        if storage_mode == TopicSpec.STORAGE_MODE_TIERED_CLOUD:
+        if storage_mode == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2:
             self.source_cluster_service.set_feature_active(
                 "tiered_cloud_topics", True, timeout_sec=30
             )
@@ -4714,9 +4767,7 @@ class ShadowLinkingCloudTopicReplicationTests(ShadowLinkPreAllocTestBase):
                     topic=topic.name,
                     partitions=topic.partition_count,
                     replicas=topic.replication_factor,
-                    config={
-                        TopicSpec.PROPERTY_STORAGE_MODE: storage_mode,
-                    },
+                    config=TopicSpec.storage_mode_config(storage_mode),
                 )
                 return True
             except Exception as e:
@@ -4733,10 +4784,22 @@ class ShadowLinkingCloudTopicReplicationTests(ShadowLinkPreAllocTestBase):
             err_msg=f"Failed to create source topic with storage_mode={storage_mode}",
         )
 
-        source_configs = source_rpk.describe_topic_configs(topic.name)
-        assert source_configs[TopicSpec.PROPERTY_STORAGE_MODE][0] == storage_mode, (
-            f"Source topic storage mode: {source_configs[TopicSpec.PROPERTY_STORAGE_MODE]}"
+        expected_mode = (
+            TopicSpec.STORAGE_MODE_TIERED
+            if storage_mode == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2
+            else storage_mode
         )
+
+        source_configs = source_rpk.describe_topic_configs(topic.name)
+        assert source_configs[TopicSpec.PROPERTY_STORAGE_MODE][0] == expected_mode, (
+            f"Source topic storage mode: {source_configs[TopicSpec.PROPERTY_STORAGE_MODE]}, "
+            f"expected: {expected_mode}"
+        )
+        if storage_mode == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2:
+            source_version = source_configs[TopicSpec.PROPERTY_STORAGE_MODE_IMPL][0]
+            assert source_version == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2, (
+                f"Source topic storage mode version: {source_version}"
+            )
 
         self.create_link("test-link")
 
@@ -4750,10 +4813,15 @@ class ShadowLinkingCloudTopicReplicationTests(ShadowLinkPreAllocTestBase):
         # Verify target topic has the same storage mode
         target_rpk = RpkTool(self.target_cluster.service)
         target_configs = target_rpk.describe_topic_configs(topic.name)
-        assert target_configs[TopicSpec.PROPERTY_STORAGE_MODE][0] == storage_mode, (
+        assert target_configs[TopicSpec.PROPERTY_STORAGE_MODE][0] == expected_mode, (
             f"Target topic storage mode: {target_configs[TopicSpec.PROPERTY_STORAGE_MODE]}, "
-            f"expected: {storage_mode}"
+            f"expected: {expected_mode}"
         )
+        if storage_mode == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2:
+            target_version = target_configs[TopicSpec.PROPERTY_STORAGE_MODE_IMPL][0]
+            assert target_version == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2, (
+                f"Target topic storage mode version: {target_version}"
+            )
 
         with self.producer_consumer(topic=topic.name, msg_size=128, msg_cnt=10000):
             self.verify()

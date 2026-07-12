@@ -285,7 +285,8 @@ seq_writer::write_subject_version(stored_schema schema) {
     co_return co_await sequenced_write(
       [&schema](model::offset write_at, seq_writer& seq) {
           return seq.do_write_subject_version(schema.share(), write_at);
-      });
+      },
+      schema.schema.sub().ctx);
 }
 
 ss::future<std::optional<sharded_store::insert_result>>
@@ -402,6 +403,7 @@ seq_writer::write_subject_version_imported(stored_schema schema) {
           return seq.do_write_subject_version_imported(
             schema.share(), write_at);
       },
+      schema.schema.sub().ctx,
       write_source::schema_registry_sync);
 }
 
@@ -454,11 +456,13 @@ ss::future<std::optional<bool>> seq_writer::do_write_config(
 
 ss::future<bool> seq_writer::write_config(
   context_subject ctx_sub, compatibility_level compat, write_source src) {
+    auto ctx = ctx_sub.ctx;
     return sequenced_write(
       [ctx_sub{std::move(ctx_sub)}, compat, src](
         model::offset write_at, seq_writer& seq) {
           return seq.do_write_config(ctx_sub, compat, write_at, src);
       },
+      std::move(ctx),
       src);
 }
 
@@ -497,10 +501,12 @@ seq_writer::do_delete_config(context_subject ctx_sub, write_source src) {
 
 ss::future<bool>
 seq_writer::delete_config(context_subject ctx_sub, write_source src) {
+    auto ctx = ctx_sub.ctx;
     return sequenced_write(
       [ctx_sub{std::move(ctx_sub)}, src](model::offset, seq_writer& seq) {
           return seq.do_delete_config(ctx_sub, src);
       },
+      std::move(ctx),
       src);
 }
 
@@ -586,11 +592,13 @@ ss::future<std::optional<bool>> seq_writer::do_write_mode(
 
 ss::future<bool> seq_writer::write_mode(
   context_subject ctx_sub, mode mode, force f, write_source src) {
+    auto ctx = ctx_sub.ctx;
     return sequenced_write(
       [ctx_sub{std::move(ctx_sub)}, mode, f, src](
         model::offset write_at, seq_writer& seq) {
           return seq.do_write_mode(ctx_sub, mode, f, write_at, src);
       },
+      std::move(ctx),
       src);
 }
 
@@ -625,11 +633,13 @@ ss::future<std::optional<bool>> seq_writer::do_delete_mode(
 
 ss::future<bool>
 seq_writer::delete_mode(context_subject ctx_sub, write_source src) {
+    auto ctx = ctx_sub.ctx;
     return sequenced_write(
       [ctx_sub{std::move(ctx_sub)},
        src](model::offset write_at, seq_writer& seq) {
           return seq.do_delete_mode(ctx_sub, write_at, src);
       },
+      std::move(ctx),
       src);
 }
 
@@ -663,10 +673,12 @@ seq_writer::do_delete_context(context ctx, model::offset write_at) {
 }
 
 ss::future<> seq_writer::delete_context(context ctx) {
+    auto ctx_copy = ctx;
     co_await sequenced_write(
       [ctx{std::move(ctx)}](model::offset write_at, seq_writer& seq) {
           return seq.do_delete_context(ctx, write_at);
-      });
+      },
+      std::move(ctx_copy));
 }
 
 /// Impermanent delete: update a version with is_deleted=true
@@ -714,11 +726,13 @@ ss::future<std::optional<bool>> seq_writer::do_delete_subject_version(
 
 ss::future<bool> seq_writer::delete_subject_version(
   context_subject sub, schema_version version, write_source src) {
+    auto ctx = sub.ctx;
     return sequenced_write(
       [sub{std::move(sub)}, version, src](
         model::offset write_at, seq_writer& seq) {
           return seq.do_delete_subject_version(sub, version, write_at, src);
       },
+      std::move(ctx),
       src);
 }
 
@@ -775,10 +789,12 @@ seq_writer::do_delete_subject_impermanent(
 ss::future<chunked_vector<schema_version>>
 seq_writer::delete_subject_impermanent(context_subject sub, write_source src) {
     vlog(srlog.debug, "delete_subject_impermanent sub={}", sub);
+    auto ctx = sub.ctx;
     return sequenced_write(
       [sub{std::move(sub)}, src](model::offset write_at, seq_writer& seq) {
           return seq.do_delete_subject_impermanent(sub, write_at, src);
       },
+      std::move(ctx),
       src);
 }
 
@@ -790,10 +806,12 @@ ss::future<chunked_vector<schema_version>> seq_writer::delete_subject_permanent(
   context_subject sub,
   std::optional<schema_version> version,
   write_source src) {
+    auto ctx = sub.ctx;
     return sequenced_write(
       [sub{std::move(sub)}, version, src](model::offset, seq_writer& seq) {
           return seq.delete_subject_permanent_inner(sub, version, src);
       },
+      std::move(ctx),
       src);
 }
 

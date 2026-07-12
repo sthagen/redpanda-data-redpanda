@@ -27,7 +27,10 @@ public:
     put_object(object_id, staging_file*, ss::abort_source*) override;
 
     ss::future<std::expected<ss::input_stream<char>, errc>> read_object(
-      object_extent, ss::abort_source*, cloud_io::group_id g) override;
+      object_extent,
+      ss::abort_source*,
+      cloud_io::group_id g,
+      bool skip_cache) override;
 
     ss::future<std::expected<void, errc>>
     delete_objects(chunked_vector<object_id>, ss::abort_source*) override;

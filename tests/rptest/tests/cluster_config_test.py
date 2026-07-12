@@ -73,7 +73,10 @@ def check_restart_clears(admin, redpanda, nodes=None):
         nodes = redpanda.nodes
 
     status = admin.get_cluster_config_status()
-    for n in status:
+    relevant_ids = {redpanda.node_id(n) for n in nodes}
+    relevant = [s for s in status if s["node_id"] in relevant_ids]
+    assert len(relevant_ids) == len(relevant)
+    for n in relevant:
         assert n["restart"] is True
 
     first_node = nodes[0]
@@ -145,6 +148,33 @@ def wait_for_version_status_sync(
             timeout_sec=10,
             backoff_sec=0.5,
             err_msg=f"Config status did not converge on {version}",
+        )
+
+
+def wait_for_active_nodes_version_status_sync(admin, redpanda, version, nodes):
+    """
+    Like wait_for_version_status_sync, but only requires the subset of
+    `active_nodes` to agree on `version`. Statuses for other nodes (e.g. a
+    downed node still listed by the controller) are ignored.
+    """
+    active_ids = {redpanda.node_id(n) for n in nodes}
+
+    def is_complete(node):
+        node_status = admin.get_cluster_config_status(node=node)
+        relevant = [s for s in node_status if s["node_id"] in active_ids]
+        return len(relevant) == len(active_ids) and {
+            s["config_version"] for s in relevant
+        } == {version}
+
+    for node in nodes:
+        wait_until(
+            lambda n=node: is_complete(n),
+            timeout_sec=10,
+            backoff_sec=0.5,
+            err_msg=(
+                f"Config status did not converge on {version} for active "
+                f"nodes {sorted(active_ids)}"
+            ),
         )
 
 
@@ -2643,6 +2673,440 @@ class ClusterConfigNodeAddTest(RedpandaTest):
         status = self.admin.get_cluster_config_status()
         for n in status:
             assert n["restart"] is False
+
+
+class ClusterConfigMultiNodeBootstrapTest(RedpandaTest):
+    def __init__(self, test_context):
+        super().__init__(
+            test_context, num_brokers=3, si_settings=SISettings(test_context)
+        )
+        self.admin = Admin(self.redpanda)
+        self.rpk = RpkTool(self.redpanda)
+
+    def setUp(self):
+        # Skip starting redpanda, so that test can explicitly start
+        # it with some override_cfg_params
+        pass
+
+    @cluster(num_nodes=3)
+    def test_node_delayed_restart(self):
+        """
+        A node which has gone down should see the most up to date cluster config immediately in the bootstrap process, instead of needing to restart again.
+        """
+
+        def assert_restart_status_on_nodes(expect: bool, relevant_nodes):
+            relevant_ids = {self.redpanda.node_id(n) for n in relevant_nodes}
+            status = self.admin.get_cluster_config_status()
+            relevant = [s for s in status if s["node_id"] in relevant_ids]
+            assert len(relevant_ids) == len(relevant)
+            for n in relevant:
+                assert n["restart"] is expect, (
+                    f"Expected restart status {n['restart']} to be {expect}"
+                )
+
+        active_nodes = self.redpanda.nodes[0:2]
+        down_node = self.redpanda.nodes[2]
+        all_nodes = self.redpanda.nodes
+        self.redpanda.start(all_nodes)
+
+        # Wait for config status to populate
+        wait_until(
+            lambda: len(self.admin.get_cluster_config_status()) == 3,
+            timeout_sec=30,
+            backoff_sec=1,
+        )
+
+        assert_restart_status_on_nodes(False, all_nodes)
+
+        # Bring one of the nodes down.
+        self.redpanda.stop_node(down_node)
+
+        # An arbitrary restart-requiring setting with a non-default value.
+        new_setting = ("kafka_qdc_idle_depth", 77)
+        prev_version = self.admin.get_cluster_config_status()[0]["config_version"]
+        patch_result = self.admin.patch_cluster_config(upsert=dict([new_setting]))
+        new_version = patch_result["config_version"]
+        # Guard against the setting silently being a no-op, which would leave
+        # the restart status False and make the assertion below vacuous.
+        assert new_version > prev_version, (
+            f"patching {new_setting[0]} did not advance config version "
+            f"({prev_version} -> {new_version}); is it already at that value?"
+        )
+        wait_for_active_nodes_version_status_sync(
+            self.admin, self.redpanda, new_version, nodes=active_nodes
+        )
+        assert_restart_status_on_nodes(True, active_nodes)
+
+        # Restart existing nodes to get them into a clean state
+        check_restart_clears(self.admin, self.redpanda, nodes=active_nodes)
+
+        # Start the node back up.
+        self.redpanda.start_node(down_node)
+
+        status = self.admin.get_cluster_config_status()
+        for n in status:
+            assert n["restart"] is False
+
+    @cluster(num_nodes=3)
+    def test_full_cluster_restart_node_missed_needs_restart_change(self):
+        """
+        A node that was down when a needs_restart property changed must still
+        report restart-required after the cluster restarts, while the nodes
+        that were up when the change was made come back with the new value
+        active.
+
+        To make this deterministic we restart the node that missed the change
+        first and alone: with both peers down there is no controller leader for
+        its bootstrap fetch_controller_snapshot to reach, so it provably falls
+        through to its (stale) local config cache rather than racing a freshly
+        elected leader (two of three peers form a majority and could elect a
+        ready leader before this node runs its pre-controller fetch). Then:
+
+          * It boots with the old value active and only learns of the change
+            via controller log replay once the cluster reforms, which leaves
+            the needs_restart property pending (we no longer promote pending
+            values at start), so it still reports restart-required with the
+            old active value.
+          * The two nodes that observed the change persisted the new value to
+            their local cache (store_delta -> write_local_cache), so when they
+            rejoin they boot with it active and need no restart.
+        """
+        PROPERTY_NAME = "kafka_qdc_idle_depth"
+        DEFAULT_VALUE = 10
+        NEW_VALUE = 77
+
+        all_nodes = self.redpanda.nodes
+        active_nodes = self.redpanda.nodes[0:2]
+        down_node = self.redpanda.nodes[2]
+
+        def restart_required_by_id() -> dict[int, bool]:
+            return {
+                s["node_id"]: s["restart"]
+                for s in self.admin.get_cluster_config_status()
+            }
+
+        # 1. Start a 3 node cluster.
+        self.redpanda.start(all_nodes)
+        active_ids = {self.redpanda.node_id(n) for n in active_nodes}
+        down_id = self.redpanda.node_id(down_node)
+        wait_until(
+            lambda: len(self.admin.get_cluster_config_status()) == 3,
+            timeout_sec=30,
+            backoff_sec=1,
+        )
+        assert set(restart_required_by_id().values()) == {False}
+
+        # 2. Bring one node down; it will miss the config change entirely.
+        self.redpanda.stop_node(down_node)
+
+        # 3. Alter the needs_restart property. Only the two live nodes observe
+        #    it and persist it to their local config cache, and report
+        #    restart-required while keeping the old value active.
+        prev_version = self.admin.get_cluster_config_status()[0]["config_version"]
+        patch_result = self.admin.patch_cluster_config(
+            upsert={PROPERTY_NAME: NEW_VALUE}
+        )
+        new_version = patch_result["config_version"]
+        assert new_version > prev_version, (
+            f"patching {PROPERTY_NAME} did not advance config version "
+            f"({prev_version} -> {new_version}); is it already at that value?"
+        )
+        wait_for_active_nodes_version_status_sync(
+            self.admin, self.redpanda, new_version, nodes=active_nodes
+        )
+        status = restart_required_by_id()
+        for nid in active_ids:
+            assert status[nid] is True, (
+                f"node {nid} should require a restart after the change"
+            )
+        for n in active_nodes:
+            v = self.admin.get_cluster_config(
+                node=n, key=PROPERTY_NAME, suppress_pending=True
+            )[PROPERTY_NAME]
+            assert v == DEFAULT_VALUE, (
+                f"active {PROPERTY_NAME}={v} should still be {DEFAULT_VALUE} on "
+                f"{n.name} until restart"
+            )
+
+        # 4. Restart all the nodes, bringing the node that missed the change up
+        #    first and alone. With both peers down there is no controller leader
+        #    for its bootstrap fetch to reach, so it deterministically falls
+        #    through to its stale local cache (skip_readiness_check because a
+        #    lone node of a 3-node cluster never reports healthy).
+        for n in active_nodes:
+            self.redpanda.stop_node(n)
+        self.redpanda.start_node(down_node, skip_readiness_check=True)
+
+        # Confirm it booted from the stale cache (old value active) before any
+        # leader can exist: with peers still down nothing can change this value,
+        # and controller log replay (once the cluster reforms) only sets the
+        # needs_restart value pending, never active.
+        def down_node_serving_stale_value() -> bool:
+            try:
+                return (
+                    self.admin.get_cluster_config(
+                        node=down_node, key=PROPERTY_NAME, suppress_pending=True
+                    )[PROPERTY_NAME]
+                    == DEFAULT_VALUE
+                )
+            except Exception:
+                return False
+
+        wait_until(
+            down_node_serving_stale_value,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="down node did not boot serving its stale local config",
+        )
+
+        # Reform the quorum by bringing the other two nodes back.
+        for n in active_nodes:
+            self.redpanda.start_node(n)
+        self.admin.await_stable_leader(
+            "controller",
+            partition=0,
+            namespace="redpanda",
+            timeout_s=60,
+            backoff_s=2,
+        )
+
+        # 5. The two nodes that already saw the value reflect it: they booted
+        #    from their local cache with the new value active and need no
+        #    restart.
+        def active_nodes_updated() -> bool:
+            st = restart_required_by_id()
+            if not active_ids.issubset(st.keys()) or any(st[nid] for nid in active_ids):
+                return False
+            return all(
+                self.admin.get_cluster_config(
+                    node=n, key=PROPERTY_NAME, suppress_pending=True
+                )[PROPERTY_NAME]
+                == NEW_VALUE
+                for n in active_nodes
+            )
+
+        wait_until(
+            active_nodes_updated,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Nodes that saw the change did not come back with it active",
+        )
+
+        # 6. The node that was down still needs a restart: it booted from a
+        #    stale cache and only learned the change via controller log replay,
+        #    which left the needs_restart value pending (old value still
+        #    active).
+        wait_until(
+            lambda: restart_required_by_id().get(down_id) is True,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Node that missed the change should still require a restart",
+        )
+        v = self.admin.get_cluster_config(
+            node=down_node, key=PROPERTY_NAME, suppress_pending=True
+        )[PROPERTY_NAME]
+        assert v == DEFAULT_VALUE, (
+            f"Node that missed the change should still have the default "
+            f"{PROPERTY_NAME}={DEFAULT_VALUE} active, got {v}"
+        )
+
+    @cluster(num_nodes=3)
+    def test_full_cluster_restart_is_timely(self):
+        """
+        Replicating a needs_restart config to the cluster and then restarting
+        every node must bring the cluster back up healthy and promptly.
+
+        During a full restart no controller leader exists when nodes run their
+        bootstrap fetch_controller_snapshot, so it must fail fast and fall
+        through to the local config cache rather than blocking startup waiting
+        for a leader or a snapshot. A regression that made bootstrap wait on
+        the fetch would show up as the restart exceeding the timeout below.
+        """
+        PROPERTY_NAME = "kafka_qdc_idle_depth"
+        NEW_VALUE = 77
+        # Generous enough for a healthy docker cluster, tight enough that a
+        # bootstrap that blocks waiting for a leader/snapshot trips it.
+        RESTART_TIMEOUT_SEC = 60
+
+        all_nodes = self.redpanda.nodes
+
+        # 1. Start nodes A, B, C.
+        self.redpanda.start(all_nodes)
+        wait_until(
+            lambda: len(self.admin.get_cluster_config_status()) == 3,
+            timeout_sec=30,
+            backoff_sec=1,
+        )
+
+        # 2. Replicate a restart-requiring config to the leader.
+        prev_version = self.admin.get_cluster_config_status()[0]["config_version"]
+        patch_result = self.admin.patch_cluster_config(
+            upsert={PROPERTY_NAME: NEW_VALUE}
+        )
+        new_version = patch_result["config_version"]
+        assert new_version > prev_version, (
+            f"patching {PROPERTY_NAME} did not advance config version "
+            f"({prev_version} -> {new_version}); is it already at that value?"
+        )
+
+        # 3. Restart A, B, C, and 4. assert they come back healthy in a timely
+        #    fashion. restart_nodes() blocks until every node passes its
+        #    readiness check (or trips start_timeout); await_stable_leader and
+        #    the under-replicated check then confirm the cluster is healthy.
+        start = time.time()
+        self.redpanda.restart_nodes(all_nodes, start_timeout=RESTART_TIMEOUT_SEC)
+        self.admin.await_stable_leader(
+            "controller",
+            partition=0,
+            namespace="redpanda",
+            timeout_s=RESTART_TIMEOUT_SEC,
+            backoff_s=2,
+        )
+        elapsed = time.time() - start
+        self.logger.info(f"full cluster restart settled in {elapsed:.1f}s")
+        assert elapsed < RESTART_TIMEOUT_SEC, (
+            f"full cluster restart took {elapsed:.1f}s, exceeding "
+            f"{RESTART_TIMEOUT_SEC}s"
+        )
+
+        wait_until(
+            self.redpanda.healthy,
+            timeout_sec=RESTART_TIMEOUT_SEC,
+            backoff_sec=2,
+            err_msg="cluster did not become healthy after full restart",
+        )
+
+    @cluster(num_nodes=3)
+    def test_cluster_recovery_needs_restart_property(self):
+        """
+        After cluster recovery applies a needs_restart=yes property, the
+        active value should remain at the default until nodes restart.
+        After a restart, the recovered value should be in active because
+        bootstrap reads the local cache (which apply_delta -> store_delta
+        wrote during recovery).
+        """
+        # Faster cluster metadata upload so the source backup is captured
+        # quickly. enable_cluster_metadata_upload_loop is true by default.
+        self.redpanda.add_extra_rp_conf(
+            {
+                "controller_snapshot_max_age_sec": 1,
+                "cloud_storage_cluster_metadata_upload_interval_ms": 1000,
+            }
+        )
+
+        all_nodes = self.redpanda.nodes
+        self.redpanda.start(all_nodes)
+        wait_until(
+            lambda: len(self.admin.get_cluster_config_status()) == 3,
+            timeout_sec=30,
+            backoff_sec=1,
+        )
+
+        PROPERTY_NAME = "storage_compaction_key_map_memory_limit_percent"
+        PROPERTY_DEFAULT = 12
+        NEW_PROPERTY_VALUE = 6
+        # storage_compaction_key_map_memory_limit_percent is needs_restart=yes with default 12.
+        new_setting = (
+            PROPERTY_NAME,
+            NEW_PROPERTY_VALUE,
+        )
+        patch_result = self.admin.patch_cluster_config(upsert=dict([new_setting]))
+        new_version = patch_result["config_version"]
+        wait_for_active_nodes_version_status_sync(
+            self.admin, self.redpanda, new_version, nodes=all_nodes
+        )
+
+        # Let the metadata upload loop capture the post-patch state.
+        time.sleep(5)
+
+        # Wipe and bring up a fresh cluster.
+        self.redpanda.stop()
+        for n in all_nodes:
+            self.redpanda.remove_local_data(n)
+        self.redpanda.restart_nodes(all_nodes)
+        self.admin.await_stable_leader(
+            "controller",
+            partition=0,
+            namespace="redpanda",
+            timeout_s=60,
+            backoff_s=2,
+        )
+
+        # Use suppress_pending=True so we read the active value only, not
+        # the pending-aware view that rpk cluster_config_get returns by
+        # default. We want to verify that the recovered value lands in
+        # pending without changing active until restart.
+        for n in all_nodes:
+            v = self.admin.get_cluster_config(
+                node=n, key=PROPERTY_NAME, suppress_pending=True
+            )[PROPERTY_NAME]
+            assert v == PROPERTY_DEFAULT, (
+                f"Expected active {PROPERTY_NAME}={v} to be default value "
+                f"{PROPERTY_DEFAULT=} on {n.name} pre-recovery"
+            )
+
+        # Run cluster recovery.
+        self.admin.initialize_cluster_recovery()
+
+        def cluster_recovery_complete():
+            return (
+                "inactive" in self.admin.get_cluster_recovery_status().json()["state"]
+            )
+
+        wait_until(cluster_recovery_complete, timeout_sec=60, backoff_sec=1)
+
+        status = self.admin.get_cluster_config_status()
+        for n in status:
+            assert n["restart"] is True, (
+                f"Expected restart=true after recovery for needs_restart "
+                f"property, got status {status}"
+            )
+
+        # After recovery, the needs_restart=yes property is in pending.
+        # Active stays at the pre-recovery value; the pending-aware view
+        # already reflects the recovered value.
+        for n in all_nodes:
+            active = self.admin.get_cluster_config(
+                node=n, key=PROPERTY_NAME, suppress_pending=True
+            )[PROPERTY_NAME]
+            assert active == PROPERTY_DEFAULT, (
+                f"Expected active {PROPERTY_NAME}={active} to still be "
+                f"default {PROPERTY_DEFAULT=} on {n.name} after recovery "
+                f"(needs_restart=yes properties land in pending, not active)"
+            )
+            pending = self.admin.get_cluster_config(node=n, key=PROPERTY_NAME)[
+                PROPERTY_NAME
+            ]
+            assert pending == NEW_PROPERTY_VALUE, (
+                f"Expected pending-aware view of {PROPERTY_NAME}={pending} "
+                f"to reflect the recovered value {NEW_PROPERTY_VALUE=} on "
+                f"{n.name}"
+            )
+
+        self.redpanda.restart_nodes(all_nodes)
+        self.admin.await_stable_leader(
+            "controller",
+            partition=0,
+            namespace="redpanda",
+            timeout_s=60,
+            backoff_s=2,
+        )
+
+        # After restart, hydrate_cluster_config -> load_cache ->
+        # preload_local writes the recovered value into active.
+        for n in all_nodes:
+            v = self.admin.get_cluster_config(
+                node=n, key=PROPERTY_NAME, suppress_pending=True
+            )[PROPERTY_NAME]
+            assert v == NEW_PROPERTY_VALUE, (
+                f"Expected active {PROPERTY_NAME}={v} to be "
+                f"{NEW_PROPERTY_VALUE=} on {n.name} after recovery + restart"
+            )
+        status = self.admin.get_cluster_config_status()
+        for n in status:
+            assert n["restart"] is False, (
+                f"Unexpected restart=true after post-recovery restart: {status}"
+            )
 
 
 class ClusterConfigLegacyDefaultTest(RedpandaTest, ClusterConfigHelpersMixin):

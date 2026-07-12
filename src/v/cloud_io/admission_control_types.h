@@ -21,7 +21,7 @@
 
 namespace cloud_io {
 
-/// Identifies a cloud_io::scheduler admission policy.
+/// Identifies a cloud_io::admission_control admission policy.
 enum class policy_type : uint8_t {
     /// No-op admission gate; the client pool's capacity is the only
     /// constraint.
@@ -48,7 +48,7 @@ inline fmt::iterator format_to(policy_type t, fmt::iterator out) {
 }
 
 /// Caller-supplied intent label for a cloud_io operation. Used as the
-/// scheduling key for cloud_io::scheduler.
+/// admission key for cloud_io::admission_control.
 enum class group_id : uint8_t {
     /// Object uploads on the Kafka produce path. Latency-critical.
     producer_upload,
@@ -142,10 +142,10 @@ struct reservation_policy_config {
     }
 };
 
-/// Runtime configuration for cloud_io::scheduler. Populated at startup
+/// Runtime configuration for cloud_io::admission_control. Populated at startup
 /// from cluster config (see cloud_storage::configuration::get_config)
-/// and passed by value down to client_pool / scheduler.
-struct scheduler_config {
+/// and passed by value down to client_pool / admission_control.
+struct admission_control_config {
     policy_type policy = policy_type::passthrough;
 
     std::optional<reservation_policy_config> reservation;

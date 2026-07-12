@@ -111,12 +111,15 @@ public:
     virtual ~data_persistence() = default;
 
     // Create a reader that supports random access reads the file with the
-    // specified name.
+    // specified name. `file_size` is the size of the file in bytes; the LSM
+    // already knows it via the manifest's file_meta_data and threads it
+    // through here so cloud-backed implementations can compute byte ranges
+    // without an extra round-trip.
     //
     // If the file does not exist then the implementation should return
     // `std::nullopt`.
     virtual ss::future<optional_pointer<random_access_file_reader>>
-      open_random_access_reader(internal::file_handle) = 0;
+    open_random_access_reader(internal::file_handle, uint64_t file_size) = 0;
 
     // Create a writer that writes to a new file with the specified name.
     // The file_handle must be unique — callers must not write to a handle

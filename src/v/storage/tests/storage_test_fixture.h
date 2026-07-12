@@ -42,9 +42,9 @@ inline ss::logger tlog{"test_log"};
 class storage_test_fixture : public ::testing::Test {
 public:
     ss::sstring test_dir;
-    storage::kvstore kvstore;
     storage::storage_resources resources;
     ss::sharded<features::feature_table> feature_table;
+    storage::kvstore kvstore;
 
     std::optional<model::timestamp> ts_cursor;
 
@@ -59,6 +59,7 @@ public:
           ss::this_shard_id(),
           resources,
           feature_table) {
+        resources.start().get();
         configure_unit_test_logging();
         // avoid double metric registrations - disk_log_builder and other
         // helpers also start a feature_table and other structs that register

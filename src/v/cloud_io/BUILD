@@ -58,7 +58,7 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
-        ":scheduler_types",
+        ":admission_control_types",
         "//src/v/cloud_io:io_result",
         "//src/v/cloud_io:transfer_details",
         "//src/v/cloud_storage_clients",
@@ -88,11 +88,11 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":admission_control_types",
         ":io_resources",
         ":io_result",
         ":provider",
         ":remote_api",
-        ":scheduler_types",
         "//src/v/base",
         "//src/v/cloud_roles:types",
         "//src/v/cloud_storage_clients",
@@ -138,12 +138,12 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
-    name = "scheduler_types",
+    name = "admission_control_types",
     srcs = [
-        "scheduler_types.cc",
+        "admission_control_types.cc",
     ],
     hdrs = [
-        "scheduler_types.h",
+        "admission_control_types.h",
     ],
     implementation_deps = [
         "//src/v/strings:string_switch",
@@ -162,7 +162,7 @@ redpanda_cc_library(
     include_prefix = "cloud_io",
     visibility = ["//visibility:public"],
     deps = [
-        ":scheduler_types",
+        ":admission_control_types",
         "//src/v/base",
         "//src/v/container:intrusive",
         "@seastar",
@@ -170,14 +170,14 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
-    name = "scheduler_policy",
+    name = "admission_control_policy",
     hdrs = [
-        "scheduler_policy.h",
+        "admission_control_policy.h",
     ],
     include_prefix = "cloud_io",
     visibility = ["//visibility:public"],
     deps = [
-        ":scheduler_types",
+        ":admission_control_types",
         "@seastar",
     ],
 )
@@ -191,12 +191,12 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
-    name = "scheduler",
+    name = "admission_control",
     srcs = [
-        "scheduler.cc",
+        "admission_control.cc",
     ],
     hdrs = [
-        "scheduler.h",
+        "admission_control.h",
     ],
     implementation_deps = [
         ":reservation_policy",
@@ -205,8 +205,8 @@ redpanda_cc_library(
     include_prefix = "cloud_io",
     visibility = ["//visibility:public"],
     deps = [
-        ":scheduler_policy",
-        ":scheduler_types",
+        ":admission_control_policy",
+        ":admission_control_types",
         "//src/v/base",
         "//src/v/ssx:semaphore",
         "@seastar",
@@ -231,9 +231,9 @@ redpanda_cc_library(
     include_prefix = "cloud_io",
     visibility = ["//visibility:public"],
     deps = [
+        ":admission_control_policy",
+        ":admission_control_types",
         ":reservation_policy_types",
-        ":scheduler_policy",
-        ":scheduler_types",
         "//src/v/metrics",
         "@seastar",
     ],

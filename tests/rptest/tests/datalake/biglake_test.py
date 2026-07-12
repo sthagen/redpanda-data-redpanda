@@ -167,7 +167,12 @@ class BiglakeTest(RedpandaTest):
             dl.produce_to_topic(self.topic_name, 1024, count)
 
             self.logger.info(f"Producing {count} valid messages to {self.topic_name}")
-            producer = Producer({"bootstrap.servers": self.redpanda.brokers()})
+            producer = Producer(
+                {
+                    "bootstrap.servers": self.redpanda.brokers(),
+                    "enable.idempotence": True,
+                }
+            )
             for i in range(count):
                 producer.produce(
                     self.topic_name,

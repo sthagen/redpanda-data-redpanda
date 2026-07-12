@@ -158,6 +158,7 @@ class DatalakeCustomPartitioningTest(RedpandaTest):
                 "bootstrap.servers": self.redpanda.brokers(),
                 "key.serializer": StringSerializer("utf_8"),
                 "value.serializer": value_serializer,
+                "enable.idempotence": True,
             }
         )
 
@@ -239,26 +240,6 @@ class DatalakeCustomPartitioningTest(RedpandaTest):
         for partition, file_cnt in files_per_partition.items():
             assert file_cnt >= n, (
                 f"partition {partition} has {file_cnt} files, expected at least {n}"
-            )
-
-    def list_files(
-        self,
-        dl: DatalakeServices,
-        query_engine: QueryEngineType,
-        topic_name: str,
-        select="file_path",
-    ):
-        if query_engine == QueryEngineType.SPARK:
-            return set(
-                dl.spark().run_query_fetch_all(
-                    f"select {select} from redpanda.{topic_name}.files"
-                )
-            )
-        elif query_engine == QueryEngineType.TRINO:
-            return set(
-                dl.trino().run_query_fetch_all(
-                    f'select {select} from redpanda."{topic_name}$files"'
-                )
             )
 
     @cluster(num_nodes=6)
@@ -686,7 +667,7 @@ class DatalakeCustomPartitioningTest(RedpandaTest):
                 f"{expected_partitioning=}, got {describe_partitioning=}"
             )
 
-            files = self.list_files(dl, QueryEngineType.SPARK, topic_name)
-            assert len(files) == msg_count, (
-                f"Expected {partitions * msg_count} files, got {len(files)}"
+            num_files = dl.spark().count_parquet_files("redpanda", topic_name)
+            assert num_files == msg_count, (
+                f"Expected {partitions * msg_count} files, got {num_files}"
             )

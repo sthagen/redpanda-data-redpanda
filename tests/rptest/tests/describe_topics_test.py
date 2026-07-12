@@ -343,6 +343,16 @@ class DescribeTopicsTest(RedpandaTest):
                 "the Cloud Topics architecture, or `unset` to use legacy "
                 "remote.read/write configs for backwards compatibility.",
             ),
+            "redpanda.storage.mode.impl": ConfigProperty(
+                config_type="STRING",
+                value="unset",
+                doc_string="Exact implementation of the topic's storage mode. Tiered "
+                "topics report tiered_v1 (classic tiered-storage "
+                "architecture) or tiered_v2 (new tiered-storage "
+                "architecture); other modes mirror redpanda.storage.mode. "
+                "Read-only after creation: supply it at topic creation to "
+                "select the implementation explicitly.",
+            ),
         }
 
         tp_spec = TopicSpec()
@@ -364,8 +374,10 @@ class DescribeTopicsTest(RedpandaTest):
         #     2. Property documentation string
         #     3. An empty line
 
+        # kcl marks read-only properties with a trailing asterisk
+        # (e.g. redpanda.storage.mode.impl*)
         property_re = re.compile(
-            r"^(?P<name>[a-z.]+?)\s+(?P<type>[a-z]+?)\s+(?P<value>\S+?)\s+(?P<src>[a-z_]+?)$"
+            r"^(?P<name>[a-z.]+?)\*?\s+(?P<type>[a-z]+?)\s+(?P<value>\S+?)\s+(?P<src>[a-z_]+?)$"
         )
 
         last_pos = None
@@ -405,7 +417,7 @@ class DescribeTopicsTest(RedpandaTest):
         assert len(doc_lines) % 3 == 0
 
         # The property name in the doc section has a colon
-        name_re = re.compile(r"^(?P<name>[a-z.]+?):$")
+        name_re = re.compile(r"^(?P<name>[a-z.]+?)\*?:$")
 
         # Finally, check the doc section
         for i in range(0, len(doc_lines) // 3):

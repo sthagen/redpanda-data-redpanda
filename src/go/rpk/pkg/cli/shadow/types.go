@@ -28,6 +28,8 @@ type ShadowLinkConfig struct {
 	SecuritySyncOptions *SecuritySettingsSyncOptions `json:"security_sync_options,omitempty" yaml:"security_sync_options,omitempty"`
 	// Schema Registry sync options
 	SchemaRegistrySyncOptions *SchemaRegistrySyncOptions `json:"schema_registry_sync_options,omitempty" yaml:"schema_registry_sync_options,omitempty"`
+	// Role sync options
+	RoleSyncOptions *RoleSyncOptions `json:"role_sync_options,omitempty" yaml:"role_sync_options,omitempty"`
 }
 
 type CloudShadowLinkOptions struct {
@@ -202,6 +204,18 @@ type SecuritySettingsSyncOptions struct {
 	Paused bool `json:"paused,omitempty" yaml:"paused,omitempty"`
 	// ACL filters
 	ACLFilters []*ACLFilter `json:"acl_filters,omitempty" yaml:"acl_filters,omitempty"`
+}
+
+type RoleSyncOptions struct {
+	// Sync interval
+	// If 0 provided, defaults to 30 seconds
+	Interval time.Duration `json:"interval,omitempty" yaml:"interval,omitempty"`
+	// Allows user to pause the role sync task. If paused, then the task will
+	// enter the 'paused' state and will not sync roles from the source cluster
+	Paused bool `json:"paused,omitempty" yaml:"paused,omitempty"`
+	// Filters selecting which roles to shadow by name. Defaults to empty: no
+	// roles are synced until at least one include filter is added
+	RoleNameFilters []*NameFilter `json:"role_name_filters,omitempty" yaml:"role_name_filters,omitempty"`
 }
 
 type SchemaRegistrySyncOptions struct {

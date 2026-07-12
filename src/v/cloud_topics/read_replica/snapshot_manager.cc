@@ -138,7 +138,12 @@ ss::future<> database_refresher::open_or_refresh() {
     cloud_storage_clients::object_key domain_prefix{
       domain_cloud_prefix(domain_uuid_)};
     auto data_persist = co_await lsm::io::open_cloud_cache_data_persistence(
-      cache_, remote_, bucket_, domain_prefix, cloud_io::group_id::metastore);
+      cache_,
+      remote_,
+      bucket_,
+      domain_prefix,
+      config::shard_local_cfg().cloud_topics_metastore_sst_chunk_size.bind(),
+      cloud_io::group_id::metastore);
     auto meta_persist = co_await lsm::io::open_cloud_metadata_persistence(
       remote_, bucket_, domain_prefix, cloud_io::group_id::metastore);
     lsm::io::persistence io{

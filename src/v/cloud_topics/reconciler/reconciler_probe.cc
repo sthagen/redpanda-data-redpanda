@@ -77,7 +77,9 @@ void reconciler_probe::setup_metrics() {
           "object_size_bytes",
           [this] { return _object_size_bytes.seastar_histogram_logform(); },
           sm::description("Distribution of built L1 object sizes in bytes")),
-      });
+      },
+      {},
+      {sm::shard_label});
 }
 
 } // namespace cloud_topics::reconciler

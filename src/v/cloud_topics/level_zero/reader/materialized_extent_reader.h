@@ -11,9 +11,9 @@
 #pragma once
 
 #include "base/outcome.h"
+#include "cloud_io/admission_control_types.h"
 #include "cloud_io/basic_cache_service_api.h"
 #include "cloud_io/remote.h"
-#include "cloud_io/scheduler_types.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
 #include "cloud_topics/level_zero/common/micro_probe.h"
 #include "model/record_batch_reader.h"

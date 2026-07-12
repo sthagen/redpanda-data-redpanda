@@ -21,6 +21,7 @@ import (
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/cluster/selftest"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/cluster/storage"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/cluster/txn"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/cluster/upgrade"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/group"
 	pkgconfig "github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/spf13/afero"
@@ -55,6 +56,7 @@ func NewCommand(fs afero.Fs, p *pkgconfig.Params) *cobra.Command {
 		txn.NewCommand(fs, p),
 		quotas.NewCommand(fs, p),
 		connections.NewCommand(fs, p),
+		upgrade.NewCommand(fs, p),
 		offsets,
 	)
 

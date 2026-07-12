@@ -12,7 +12,6 @@
 #include "config_manager.h"
 
 #include "base/vlog.h"
-#include "cluster/cluster_recovery_table.h"
 #include "cluster/config_frontend.h"
 #include "cluster/controller_service.h"
 #include "cluster/controller_snapshot.h"
@@ -57,15 +56,13 @@ config_manager::config_manager(
   ss::sharded<rpc::connection_cache>& cc,
   ss::sharded<partition_leaders_table>& pl,
   ss::sharded<cluster::members_table>& mt,
-  ss::sharded<ss::abort_source>& as,
-  ss::sharded<cluster_recovery_table>& rt)
+  ss::sharded<ss::abort_source>& as)
   : _self(*config::node().node_id())
   , _frontend(cf)
   , _connection_cache(cc)
   , _leaders(pl)
   , _members(mt)
-  , _as(as)
-  , _recovery_table(rt) {
+  , _as(as) {
     if (ss::this_shard_id() == controller_stm_shard) {
         // Only the controller stm shard handles updates: leave these
         // members in default initialized state on other shards.
@@ -189,41 +186,7 @@ ss::future<> config_manager::do_bootstrap() {
     }
 }
 
-namespace {
-
-/// needs_restart properties accumulate pending values via set_pending_value()
-/// during apply_local(). They are promoted (pending -> active) at three points:
-///
-///   1. start() — after STM replay on node restart
-///      preload() seeds active values from the config cache, then STM replay
-///      stages any values newer than cache state as pending. start() promotes
-///      them all once replay is complete.
-///
-///   2. apply_delta() — during initial bootstrap or cluster recovery
-///      The node is fresh with no running workload, so pending values are
-///      promoted immediately and the restart flag is cleared.
-///
-///   3. apply_snapshot() — after controller snapshot installation
-///      Wholesale state replacement; pending values are promoted
-///      unconditionally. May overlap with (2) when recovery is active, but
-///      promote_pending() on a property with no pending value is a no-op.
-///
-/// During normal operation (a delta applied to a running node outside
-/// bootstrap/recovery), needs_restart properties stay pending until the node
-/// restarts and hits promotion point 1.
-ss::future<> promote_all_pending() {
-    co_await ss::smp::invoke_on_all(
-      [] { config::shard_local_cfg().promote_pending(); });
-}
-} // namespace
-
 ss::future<> config_manager::start() {
-    // Promote any pending values accumulated during STM replay.
-    // With a fresh config cache, this is a no-op (replay values match
-    // preloaded active values). With a stale cache, this promotes
-    // values that replay set as pending.
-    co_await promote_all_pending();
-
     if (_seen_version == config_version_unset) {
         vlog(clusterlog.trace, "Starting config_manager... (initial)");
 
@@ -344,7 +307,7 @@ static void preload_local(
             // for needs_restart properties: preload runs before anything
             // reads the config, so values go straight into _value.
             // STM replay later calls set_pending_value for any updates
-            // beyond the cache, and start() promotes them.
+            // beyond the cache.
 
             if (result.has_value() && set) {
                 vlog(
@@ -946,7 +909,6 @@ config_manager::apply_delta(cluster_config_delta_cmd&& cmd_in) {
           _seen_version);
         co_return errc::success;
     }
-    const bool is_initial_bootstrap = _seen_version == config_version_unset;
     _seen_version = delta_version;
     // version_shard is chosen to match controller_stm_shard, so
     // our raft0 stm apply operations do not need a core jump to
@@ -971,16 +933,6 @@ config_manager::apply_delta(cluster_config_delta_cmd&& cmd_in) {
     auto apply_r = apply_local(data, false);
 
     co_await ss::smp::invoke_on_all([&data] { apply_local(data, true); });
-
-    // During initial bootstrap or cluster recovery, the node is fresh and
-    // has nothing to "restart" from — promote pending values immediately
-    // so needs_restart properties take effect.
-    if (is_initial_bootstrap || _recovery_table.local().is_recovery_active()) {
-        co_await promote_all_pending();
-        // Pending values have been promoted, so any computed restart
-        // requirement no longer applies.
-        apply_r.restart = false;
-    }
 
     // Merge results from this delta into our status.
     my_latest_status.version = delta_version;
@@ -1095,11 +1047,6 @@ config_manager::apply_snapshot(model::offset, const controller_snapshot& snap) {
           ec.message(),
           ec));
     }
-
-    // Snapshot application is a wholesale state replacement — promote
-    // all pending values immediately so needs_restart properties take
-    // effect (e.g. during cluster recovery).
-    co_await promote_all_pending();
 }
 
 } // namespace cluster

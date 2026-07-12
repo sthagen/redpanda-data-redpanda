@@ -13,6 +13,10 @@
 #include "kafka/protocol/api_versions.h"
 #include "kafka/server/handlers/handler.h"
 
+namespace features {
+class feature_table;
+} // namespace features
+
 namespace kafka {
 
 struct api_versions_handler
@@ -32,5 +36,8 @@ struct api_versions_handler
 };
 
 chunked_vector<api_versions_response_key> get_supported_apis();
+
+void remove_unavailable_reserved_apis(
+  api_versions_response& r, const features::feature_table& ft);
 
 } // namespace kafka

@@ -82,6 +82,12 @@ struct error_category final : public std::error_category {
             return "failed to stop task";
         case errc::failed_to_pause_task:
             return "failed to pause task";
+        case errc::link_sr_unreachable:
+            return "unable to reach source schema registry";
+        case errc::link_sr_target_not_empty:
+            return "target schema registry context is not empty";
+        case errc::link_sr_verification_failed:
+            return "schema registry verification failed";
         }
 
         return "(unknown error code)";

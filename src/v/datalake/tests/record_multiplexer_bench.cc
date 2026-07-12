@@ -399,7 +399,7 @@ public:
       , _schema_mgr(catalog, &_features)
       , _type_resolver(registry, _schema_cache, _resolved_type_cache)
       , _record_gen(&registry)
-      , _table_creator(_type_resolver, _schema_mgr) {
+      , _table_creator(_schema_mgr) {
         _features.testing_activate_all();
     }
 
@@ -555,8 +555,11 @@ private:
     datalake::chunked_resolved_type_cache _resolved_type_cache;
     datalake::catalog_schema_manager _schema_mgr;
     datalake::record_schema_resolver _type_resolver;
+    datalake::binary_type_resolver _key_type_resolver;
     datalake::tests::record_generator _record_gen;
-    datalake::default_translator _translator;
+    // Configured to match record_schema_resolver (schema_id_prefix val mode).
+    datalake::record_translator _translator{
+      {}, {model::iceberg_mode::schema_mode::schema_id_prefix}, {}};
     datalake::direct_table_creator _table_creator;
     datalake::translation_probe _translation_probe{ntp};
     chunked_vector<model::record_batch> _batch_data;
@@ -569,6 +572,7 @@ private:
           std::make_unique<datalake::test_serde_parquet_writer_factory>(),
           _schema_mgr,
           _type_resolver,
+          _key_type_resolver,
           _translator,
           _table_creator,
           model::iceberg_invalid_record_action::dlq_table,

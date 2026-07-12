@@ -14,6 +14,8 @@
 #include "cluster/controller.h"
 #include "cluster/controller_snapshot.h"
 #include "cluster/feature_manager.h"
+#include "cluster/members_manager.h"
+#include "cluster/types.h"
 #include "cluster_link/service.h"
 #include "config/configuration.h"
 #include "config/node_config.h"
@@ -48,6 +50,15 @@
 #include <seastar/core/memory.hh>
 #include <seastar/core/smp.hh>
 
+namespace {
+
+bytes node_uuid_key() {
+    static const auto key = bytes::from_string("node_uuid");
+    return key;
+}
+
+} // namespace
+
 void application::wire_up_and_start_crypto_services() {
     construct_single_service(thread_worker);
     thread_worker->start({.name = "worker"}).get();
@@ -80,26 +91,8 @@ void application::wire_up_and_start_crypto_services() {
       .get();
 }
 
-// Forward declarations of helper functions defined in application_config.cc
-std::optional<storage::file_sanitize_config> read_file_sanitizer_config();
-
-storage::kvstore_config kvstore_config_from_global_config(
-  std::optional<storage::file_sanitize_config> sanitizer_config);
-
-storage::log_config manager_config_from_global_config(
-  scheduling_groups& sgs,
-  std::optional<storage::file_sanitize_config> sanitizer_config);
-
-void application::wire_up_bootstrap_services() {
+void application::wire_up_storage_services() {
     // Wire up local storage.
-    ss::smp::invoke_on_all([] {
-        return storage::internal::chunks().start();
-    }).get();
-    _deferred.emplace_back([] {
-        ss::smp::invoke_on_all([] {
-            return storage::internal::chunks().stop();
-        }).get();
-    });
     construct_service(stress_fiber_manager).get();
     syschecks::systemd_message("Constructing storage services").get();
     construct_single_service_sharded(
@@ -115,23 +108,6 @@ void application::wire_up_bootstrap_services() {
       std::ref(storage_node))
       .get();
 
-    const auto sanitizer_config = read_file_sanitizer_config();
-
-    construct_service(
-      storage,
-      [c = sanitizer_config]() mutable {
-          return kvstore_config_from_global_config(std::move(c));
-      },
-      [c = sanitizer_config]() mutable {
-          auto log_cfg = manager_config_from_global_config(
-            scheduling_groups::instance(), std::move(c));
-          log_cfg.reclaim_opts.background_reclaimer_sg
-            = scheduling_groups::instance().cache_background_reclaim_sg();
-          return log_cfg;
-      },
-      std::ref(feature_table))
-      .get();
-
     // Hook up local_monitor to update storage_resources when disk state changes
     auto storage_disk_notification
       = storage_node.local().register_disk_notification(
@@ -145,92 +121,17 @@ void application::wire_up_bootstrap_services() {
         storage_node.local().unregister_disk_notification(
           storage::node::disk_type::data, storage_disk_notification);
     });
-
-    // Start empty, populated from snapshot in start_bootstrap_services
-    syschecks::systemd_message("Creating feature table").get();
-    construct_service(feature_table).get();
-
-    // Wire up the internal RPC server.
-    ss::sharded<net::server_configuration> rpc_cfg;
-    rpc_cfg.start(ss::sstring("internal_rpc")).get();
-    auto stop_cfg = ss::defer([&rpc_cfg] { rpc_cfg.stop().get(); });
-    rpc_cfg
-      .invoke_on_all([this](net::server_configuration& c) {
-          return ss::async([this, &c] {
-              auto rpc_server_addr
-                = net::resolve_dns(config::node().rpc_server()).get();
-              // Use port based load_balancing_algorithm to make connection
-              // shard assignment deterministic.
-              c.load_balancing_algo
-                = ss::server_socket::load_balancing_algorithm::port;
-              c.max_service_memory_per_core = int64_t(
-                memory_groups().rpc_total_memory());
-              c.disable_metrics = net::metrics_disabled(
-                config::shard_local_cfg().disable_metrics());
-              c.disable_public_metrics = net::public_metrics_disabled(
-                config::shard_local_cfg().disable_public_metrics());
-              c.listen_backlog
-                = config::shard_local_cfg().rpc_server_listen_backlog;
-              c.tcp_recv_buf
-                = config::shard_local_cfg().rpc_server_tcp_recv_buf;
-              c.tcp_send_buf
-                = config::shard_local_cfg().rpc_server_tcp_send_buf;
-              config::tls_config tls_config{
-                config::node().rpc_server_tls().is_enabled(),
-                config::node().rpc_server_tls().get_key_cert_files(),
-                config::node().rpc_server_tls().get_truststore_file(),
-                config::node().rpc_server_tls().get_crl_file(),
-                config::node().rpc_server_tls().get_require_client_auth(),
-                config::node()
-                  .rpc_server_tls()
-                  .get_tls_v1_2_cipher_suites()
-                  .value_or(ss::sstring{}),
-                config::node()
-                  .rpc_server_tls()
-                  .get_tls_v1_3_cipher_suites()
-                  .value_or(ss::sstring{net::tls_v1_3_cipher_suites_strict}),
-                config::node().rpc_server_tls().get_min_tls_version().value_or(
-                  config::tls_version::v1_3),
-                config::node()
-                  .rpc_server_tls()
-                  .get_enable_renegotiation()
-                  .value_or(false)};
-              auto credentials
-                = net::build_reloadable_server_credentials_with_probe(
-                    tls_config,
-                    "rpc",
-                    "",
-                    [this](
-                      const std::unordered_set<ss::sstring>& updated,
-                      const std::exception_ptr& eptr) {
-                        rpc::log_certificate_reload_event(
-                          _log, "Internal RPC TLS", updated, eptr);
-                    })
-                    .get();
-              c.addrs.emplace_back(rpc_server_addr, credentials);
-          });
-      })
-      .get();
-
-    syschecks::systemd_message(
-      "Constructing internal RPC services {}", rpc_cfg.local())
-      .get();
-    construct_service(_rpc, &rpc_cfg).get();
 }
 
-void application::start_bootstrap_services() {
-    syschecks::systemd_message("Starting storage services").get();
+void application::bootstrap_from_kvstore() {
+    // We need to recover the kvstore's state from snapshots & segments for
+    // read-only purposes during bootstrapping.
+    storage.invoke_on_all(&storage::api::recover_kvstore).get();
 
-    // single instance
-    storage_node.invoke_on_all(&storage::node::start).get();
-    local_monitor.invoke_on_all(&cluster::node::local_monitor::start).get();
-
-    storage.invoke_on_all(&storage::api::start).get();
-
-    // As soon as storage is up, load our feature_table snapshot, if any,
+    // As soon as storage is up, load our local feature_table snapshot, if any,
     // so that all other services may rely on having features activated as soon
     // as they start.
-    load_feature_table_snapshot();
+    maybe_apply_local_feature_table_snapshot().get();
 
     // Before we start up our bootstrapping RPC service, load any relevant
     // on-disk state we may need: existing cluster UUID, node ID, etc.
@@ -321,10 +222,9 @@ void application::start_bootstrap_services() {
 
     // Load the local node UUID, or create one if none exists.
     auto& kvs = storage.local().kvs();
-    static const auto node_uuid_key = bytes::from_string("node_uuid");
     model::node_uuid node_uuid;
     auto node_uuid_buf = kvs.get(
-      storage::kvstore::key_space::controller, node_uuid_key);
+      storage::kvstore::key_space::controller, node_uuid_key());
     if (node_uuid_buf) {
         node_uuid = serde::from_iobuf<model::node_uuid>(
           std::move(*node_uuid_buf));
@@ -335,12 +235,7 @@ void application::start_bootstrap_services() {
     } else {
         node_uuid = model::node_uuid(uuid_t::create());
         vlog(_log.info, "Generated new UUID for node: {}", node_uuid);
-        kvs
-          .put(
-            storage::kvstore::key_space::controller,
-            node_uuid_key,
-            serde::to_iobuf(node_uuid))
-          .get();
+        _node_uuid_needs_persisting = true;
     }
 
     _node_overrides.maybe_set_overrides(
@@ -354,57 +249,41 @@ void application::start_bootstrap_services() {
           node_uuid,
           u.value());
         node_uuid = u.value();
-        kvs
-          .put(
-            storage::kvstore::key_space::controller,
-            node_uuid_key,
-            serde::to_iobuf(node_uuid))
-          .get();
+        _node_uuid_needs_persisting = true;
     }
     storage
       .invoke_on_all([node_uuid](storage::api& storage) mutable {
           storage.set_node_uuid(node_uuid);
       })
       .get();
-
-    syschecks::systemd_message("Starting internal RPC bootstrap service").get();
-    _rpc
-      .invoke_on_all([this](rpc::rpc_server& s) {
-          std::vector<std::unique_ptr<rpc::service>> bootstrap_service;
-          bootstrap_service.push_back(
-            std::make_unique<cluster::bootstrap_service>(
-              scheduling_groups::instance().cluster_sg(),
-              smp_service_groups.cluster_smp_sg(),
-              std::ref(storage)));
-          s.add_services(std::move(bootstrap_service));
-      })
-      .get();
-    _rpc.invoke_on_all(&rpc::rpc_server::start).get();
-    vlog(
-      _log.info,
-      "Started RPC server listening at {}",
-      config::node().rpc_server());
 }
 
-void application::wire_up_and_start(
-  ::stop_signal& app_signal,
-  bool test_mode,
-  cloud_topics::test_fixture_cfg ct_test_cfg) {
-    // Setup the app level abort service
-    construct_service(_as).get();
+void application::start_storage_services(test_cfg cfg) {
+    syschecks::systemd_message("Starting storage services").get();
 
-    // Bootstrap services.
-    wire_up_bootstrap_services();
-    start_bootstrap_services();
+    // single instance
+    storage_node.invoke_on_all(&storage::node::start).get();
+    local_monitor.invoke_on_all(&cluster::node::local_monitor::start).get();
 
-    // Begin the cluster discovery manager so we can confirm our initial node
-    // ID. A valid node ID is required before we can initialize the rest of our
-    // subsystems.
-    const auto& node_uuid = storage.local().node_uuid();
-    cluster::cluster_discovery cd(
-      node_uuid, storage.local(), app_signal.abort_source());
+    storage::internal::chunk_cache::prealloc prealloc{cfg.chunk_cache_prealloc};
+    storage
+      .invoke_on_all([prealloc](storage::api& a) { return a.start(prealloc); })
+      .get();
+}
 
-    auto invariants_buf = storage.local().kvs().get(
+ss::future<> application::resolve_node_identity() {
+    auto& kvs = storage.local().kvs();
+
+    // We need to persist the node's local UUID before potentially joining the
+    // cluster for the first time.
+    if (_node_uuid_needs_persisting) {
+        co_await kvs.put(
+          storage::kvstore::key_space::controller,
+          node_uuid_key(),
+          serde::to_iobuf(storage.local().node_uuid()));
+    }
+
+    auto invariants_buf = kvs.get(
       storage::kvstore::key_space::controller,
       cluster::controller::invariants_key());
 
@@ -432,26 +311,23 @@ void application::wire_up_and_start(
         node_id = id.value();
         // null out the config'ed ID indiscriminately; it will be set outside
         // the conditional
-        ss::smp::invoke_on_all([] {
-            config::node().node_id.set_value(std::nullopt);
-        }).get();
+        co_await ss::smp::invoke_on_all(
+          [] { config::node().node_id.set_value(std::nullopt); });
         if (invariants_buf.has_value()) {
             auto invariants
               = reflection::from_iobuf<cluster::configuration_invariants>(
                 std::move(invariants_buf.value()));
             invariants.node_id = node_id;
-            storage.local()
-              .kvs()
-              .put(
-                storage::kvstore::key_space::controller,
-                cluster::controller::invariants_key(),
-                reflection::to_iobuf(
-                  cluster::configuration_invariants{invariants}))
-              .get();
+            co_await kvs.put(
+              storage::kvstore::key_space::controller,
+              cluster::controller::invariants_key(),
+              reflection::to_iobuf(
+                cluster::configuration_invariants{invariants}));
             vlog(_log.debug, "Force-updated local node_id to {}", node_id);
         }
     } else {
-        auto registration_result = cd.register_with_cluster().get();
+        auto registration_result
+          = co_await _cluster_discovery->register_with_cluster();
         node_id = registration_result.assigned_node_id;
 
         if (registration_result.newly_registered) {
@@ -464,36 +340,7 @@ void application::wire_up_and_start(
                 auto snap
                   = serde::from_iobuf<cluster::controller_join_snapshot>(
                     std::move(registration_result.controller_snapshot.value()));
-
-                // The controller is not started yet, so write state directly
-                // into the feature table and configuration object.  We do not
-                // currently use the rest of the snapshot, but reserve the right
-                // to do so in future (e.g. to prime all the controller stms
-                // from the snapshot)
-                auto ftsnap = std::move(snap.features.snap);
-                ss::smp::invoke_on_all([ftsnap, &ft = feature_table] {
-                    ftsnap.apply(ft.local());
-                }).get();
-                cluster::feature_backend::do_save_local_snapshot(
-                  storage.local(), ftsnap)
-                  .get();
-
-                // The preload object is usually generated from loading a local
-                // cache or from the bootstrap file.  The configuration received
-                // from the cluster during join takes precedence over either of
-                // these, and we replace it.
-                _config_preload
-                  = cluster::config_manager::preload_join(snap).get();
-                cluster::config_manager::write_local_cache(
-                  _config_preload.version, _config_preload.raw_values)
-                  .get();
-
-                // During controller::start, we wait to reach an applied offset.
-                // By priming this from the join snapshot, we may ensure that
-                // we wait until this node has replicated all the controller
-                // metadata since it joined, before we proceed with e.g.
-                // listening for Kafka API requests.
-                _await_controller_last_applied = snap.last_applied;
+                co_await apply_controller_snapshot(snap);
             }
         }
     }
@@ -501,10 +348,10 @@ void application::wire_up_and_start(
     if (config::node().node_id() == std::nullopt) {
         // If we previously didn't have a node ID, set it in the config. We
         // will persist it in the kvstore when the controller starts up.
-        ss::smp::invoke_on_all([node_id] {
+        co_await ss::smp::invoke_on_all([node_id] {
             config::node().node_id.set_value(
               std::make_optional<model::node_id>(node_id));
-        }).get();
+        });
     }
 
     vlog(
@@ -512,8 +359,189 @@ void application::wire_up_and_start(
       "Starting Redpanda with node_id {}, cluster UUID {}",
       node_id,
       storage.local().get_cluster_uuid());
+}
 
-    wire_up_runtime_services(node_id, app_signal, ct_test_cfg);
+ss::future<> application::bootstrap_controller_view() {
+    if (!feature_table.local().is_active(
+          features::feature::fetch_controller_snapshot_rpc)) {
+        vlog(
+          _log.debug,
+          "fetch_controller_snapshot_rpc feature not active locally; "
+          "skipping bootstrap snapshot fetch (shard_local_cfg and feature "
+          "table will reflect local cache only)");
+        co_return;
+    }
+    // Use the cluster-members snapshot persisted by members_manager as
+    // the candidate set of peers. A founder on first boot or a
+    // non-founder joiner that has not yet completed
+    // register_with_cluster will have no persisted members; in that
+    // case, fall through to the local cache.
+    auto persisted = cluster::members_manager::read_members_from_kvstore(
+      storage.local().kvs());
+    const auto self_id = config::node().node_id();
+    if (self_id.has_value()) {
+        std::erase_if(persisted.members, [self_id](const model::broker& b) {
+            return b.id() == *self_id;
+        });
+    }
+    if (persisted.members.empty()) {
+        vlog(
+          _log.debug,
+          "No persisted cluster members; skipping controller snapshot "
+          "fetch (shard_local_cfg and feature table will reflect local "
+          "cache only)");
+        co_return;
+    }
+    auto fetched = co_await cluster::cluster_discovery::
+      fetch_controller_snapshot_from_leader(persisted.members);
+    if (!fetched.has_value()) {
+        vlog(
+          _log.warn,
+          "Failed to fetch controller snapshot from any persisted "
+          "member; shard_local_cfg and feature table will reflect local "
+          "cache only");
+        co_return;
+    }
+
+    auto snap = serde::from_iobuf<cluster::controller_join_snapshot>(
+      std::move(fetched.value()));
+    co_await apply_controller_snapshot(snap);
+}
+
+ss::future<> application::apply_controller_snapshot(
+  const cluster::controller_join_snapshot& snap) {
+    co_await apply_feature_table_snapshot(snap.features.snap);
+
+    // Only apply the snapshot's cluster config state if its version is higher
+    // than the existing preloaded state.
+    if (snap.config.version > _config_preload.version) {
+        _config_preload = co_await cluster::config_manager::preload_join(snap);
+        co_await cluster::config_manager::write_local_cache(
+          _config_preload.version, _config_preload.raw_values);
+    }
+
+    _await_controller_last_applied = snap.last_applied;
+}
+
+void application::wire_up_and_start_rpc_service() {
+    // Construct the rpc service.
+    ss::sharded<net::server_configuration> rpc_cfg;
+    rpc_cfg.start(ss::sstring("internal_rpc")).get();
+    auto stop_cfg = ss::defer([&rpc_cfg] { rpc_cfg.stop().get(); });
+    rpc_cfg
+      .invoke_on_all([this](net::server_configuration& c) {
+          return ss::async([this, &c] {
+              auto rpc_server_addr
+                = net::resolve_dns(config::node().rpc_server()).get();
+              auto& cfg = config::shard_local_cfg();
+              auto& node_cfg = config::node();
+              // Use port based load_balancing_algorithm to make connection
+              // shard assignment deterministic.
+              c.load_balancing_algo
+                = ss::server_socket::load_balancing_algorithm::port;
+              c.max_service_memory_per_core = int64_t(
+                memory_groups().rpc_total_memory());
+              c.disable_metrics = net::metrics_disabled(cfg.disable_metrics());
+              c.disable_public_metrics = net::public_metrics_disabled(
+                cfg.disable_public_metrics());
+              c.listen_backlog = cfg.rpc_server_listen_backlog();
+              c.tcp_recv_buf = cfg.rpc_server_tcp_recv_buf();
+              c.tcp_send_buf = cfg.rpc_server_tcp_send_buf();
+              config::tls_config tls_config{
+                node_cfg.rpc_server_tls().is_enabled(),
+                node_cfg.rpc_server_tls().get_key_cert_files(),
+                node_cfg.rpc_server_tls().get_truststore_file(),
+                node_cfg.rpc_server_tls().get_crl_file(),
+                node_cfg.rpc_server_tls().get_require_client_auth(),
+                node_cfg.rpc_server_tls().get_tls_v1_2_cipher_suites().value_or(
+                  ss::sstring{}),
+                node_cfg.rpc_server_tls().get_tls_v1_3_cipher_suites().value_or(
+                  ss::sstring{net::tls_v1_3_cipher_suites_strict}),
+                node_cfg.rpc_server_tls().get_min_tls_version().value_or(
+                  config::tls_version::v1_3),
+                node_cfg.rpc_server_tls().get_enable_renegotiation().value_or(
+                  false)};
+              auto credentials
+                = net::build_reloadable_server_credentials_with_probe(
+                    tls_config,
+                    "rpc",
+                    "",
+                    [this](
+                      const std::unordered_set<ss::sstring>& updated,
+                      const std::exception_ptr& eptr) {
+                        rpc::log_certificate_reload_event(
+                          _log, "Internal RPC TLS", updated, eptr);
+                    })
+                    .get();
+              c.addrs.emplace_back(rpc_server_addr, credentials);
+          });
+      })
+      .get();
+
+    syschecks::systemd_message(
+      "Constructing internal RPC services {}", rpc_cfg.local())
+      .get();
+    construct_service(_rpc, &rpc_cfg).get();
+
+    syschecks::systemd_message("Starting internal RPC bootstrap service").get();
+    _rpc
+      .invoke_on_all([this](rpc::rpc_server& s) {
+          std::vector<std::unique_ptr<rpc::service>> bootstrap_service;
+          bootstrap_service.push_back(
+            std::make_unique<cluster::bootstrap_service>(
+              scheduling_groups::instance().cluster_sg(),
+              smp_service_groups.cluster_smp_sg(),
+              std::ref(storage)));
+          s.add_services(std::move(bootstrap_service));
+      })
+      .get();
+    _rpc.invoke_on_all(&rpc::rpc_server::start).get();
+    vlog(
+      _log.info,
+      "Started RPC server listening at {}",
+      config::node().rpc_server());
+}
+
+void application::wire_up_and_start(
+  ::stop_signal& app_signal, bool test_mode, test_cfg cfg) {
+    // Setup the app level abort service
+    construct_service(_as).get();
+
+    auto& cfg_ref = config::shard_local_cfg();
+    smp_groups::config smp_groups_cfg{
+      .raft_group_max_non_local_requests
+      = cfg_ref.raft_smp_max_non_local_requests().value_or(
+        smp_groups::default_raft_non_local_requests(
+          cfg_ref.topic_partitions_per_shard())),
+      .proxy_group_max_non_local_requests
+      = cfg_ref.pp_sr_smp_max_non_local_requests().value_or(
+        smp_groups::default_max_nonlocal_requests)};
+    smp_service_groups.create_groups(smp_groups_cfg).get();
+    _deferred.emplace_back(
+      [this] { smp_service_groups.destroy_groups().get(); });
+
+    // Storage services.
+    wire_up_storage_services();
+    start_storage_services(cfg);
+
+    // Begin the cluster discovery manager so we can confirm our initial node
+    // ID. A valid node ID is required before we can initialize the rest of our
+    // subsystems.
+    _cluster_discovery = std::make_unique<cluster::cluster_discovery>(
+      storage.local().node_uuid(),
+      storage.local().get_cluster_uuid(),
+      app_signal.abort_source());
+
+    wire_up_and_start_rpc_service();
+
+    resolve_node_identity().get();
+
+    vassert(
+      config::node().node_id().has_value(),
+      "config::node().node_id() should have an assigned value at this point in "
+      "the start-up process.");
+    auto node_id = config::node().node_id().value();
+    wire_up_runtime_services(node_id, app_signal, cfg.ct_test_cfg);
 
     if (test_mode) {
         // When running inside a unit test fixture, we may fast-forward
@@ -544,11 +572,12 @@ void application::wire_up_and_start(
             *controller));
     }
 
-    if (cd.is_cluster_founder().get()) {
+    vassert(_cluster_discovery, "_cluster_discovery not constructed");
+    if (_cluster_discovery->is_cluster_founder().get()) {
         controller->set_ready().get();
     }
 
-    start_runtime_services(cd, app_signal, ct_test_cfg);
+    start_runtime_services(app_signal, cfg.ct_test_cfg);
 
     if (_proxy_config && !config::node().recovery_mode_enabled) {
         _proxy->start().get();
@@ -618,34 +647,8 @@ void application::wire_up_and_start(
  * e.g. the controller raft group) may rely on up to date knowledge of which
  * feature bits are enabled.
  */
-void application::load_feature_table_snapshot() {
-    auto val_bytes_opt = storage.local().kvs().get(
-      storage::kvstore::key_space::controller,
-      features::feature_table_snapshot::kvstore_key());
-
-    if (!val_bytes_opt) {
-        // No snapshot?  Probably we are yet to join cluster.
-        return;
-    }
-
-    features::feature_table_snapshot snap;
-    try {
-        snap = serde::from_iobuf<features::feature_table_snapshot>(
-          std::move(*val_bytes_opt));
-    } catch (...) {
-        // Do not block redpanda from starting if there is something invalid
-        // here: the feature table should get replayed eventually via
-        // the controller.
-        vlog(
-          _log.error,
-          "Exception decoding feature table snapshot: {}",
-          std::current_exception());
-#ifndef NDEBUG
-        vunreachable("Snapshot decode failed");
-#endif
-        return;
-    }
-
+ss::future<> application::apply_feature_table_snapshot(
+  const features::feature_table_snapshot& snap) {
     auto my_version = features::feature_table::get_latest_logical_version();
     if (my_version < snap.version) {
         vlog(
@@ -666,13 +669,43 @@ void application::load_feature_table_snapshot() {
           my_version);
     }
 
-    feature_table
-      .invoke_on_all([snap](features::feature_table& ft) { snap.apply(ft); })
-      .get();
+    co_await feature_table.invoke_on_all(
+      [snap](features::feature_table& ft) { snap.apply(ft); });
 
     // Having loaded a snapshot, do our strict check for version compat.
     feature_table.local().assert_compatible_version(
       config::node().upgrade_override_checks);
+}
+
+ss::future<> application::maybe_apply_local_feature_table_snapshot() {
+    auto val_bytes_opt = storage.local().kvs().get(
+      storage::kvstore::key_space::controller,
+      features::feature_table_snapshot::kvstore_key());
+
+    if (!val_bytes_opt) {
+        // No snapshot?  Probably we are yet to join cluster.
+        co_return;
+    }
+
+    features::feature_table_snapshot snap;
+    try {
+        snap = serde::from_iobuf<features::feature_table_snapshot>(
+          std::move(*val_bytes_opt));
+    } catch (...) {
+        // Do not block redpanda from starting if there is something invalid
+        // here: the feature table should get replayed eventually via
+        // the controller.
+        vlog(
+          _log.error,
+          "Exception decoding feature table snapshot: {}",
+          std::current_exception());
+#ifndef NDEBUG
+        vunreachable("Snapshot decode failed");
+#endif
+        co_return;
+    }
+
+    co_await apply_feature_table_snapshot(snap);
 }
 
 /**

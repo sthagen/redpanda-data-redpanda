@@ -37,6 +37,8 @@ std::unique_ptr<storage::compacted_index_writer> make_dummy_compacted_index(
 
 class compacted_topic_fixture : public ::testing::Test {
 public:
+    compacted_topic_fixture() { resources.start().get(); }
+    ~compacted_topic_fixture() { resources.stop().get(); }
     storage::storage_resources resources;
     ss::abort_source as;
 };

@@ -19,10 +19,14 @@
 #include "cluster_link/utils.h"
 #include "config/mock_property.h"
 #include "container/chunked_vector.h"
+#include "features/feature_table.h"
 #include "kafka/client/test/cluster_mock.h"
 #include "kafka/data/rpc/deps.h"
 #include "kafka/data/rpc/test/deps.h"
+#include "schema/tests/fake_registry.h"
 #include "security/acl_entry_set.h"
+#include "security/role.h"
+#include "security/role_store.h"
 
 #include <seastar/util/defer.hh>
 
@@ -33,6 +37,27 @@ using data_src_factory
 using data_sink_factory
   = cluster_link::replication::tests::accounting_sink_factory;
 namespace cluster_link::tests {
+
+/// Source Schema Registry prober test double. Reachable by default, or reports
+/// an error when one is set.
+class fake_source_sr_prober : public source_sr_prober {
+public:
+    ss::future<cl_result<void>> check_source_reachable(
+      const model::schema_registry_sync_config::shadow_schema_registry_api&,
+      ss::abort_source&) override {
+        ++call_count;
+        if (error.has_value()) {
+            return ss::make_ready_future<cl_result<void>>(error.value());
+        }
+        return ss::make_ready_future<cl_result<void>>(outcome::success());
+    }
+
+    std::optional<err_info> error;
+    // Number of times check_source_reachable was invoked; lets tests assert the
+    // source probe ran (or was skipped) rather than inferring it from the
+    // preflight result alone.
+    size_t call_count{0};
+};
 
 class test_link_factory : public link_factory {
 public:
@@ -593,17 +618,79 @@ public:
             entries.rehash();
             results.emplace_back(cluster::errc::success);
         }
-
         co_return results;
     }
 
+    ss::future<std::error_code> create_role(
+      security::role_name name,
+      security::role role,
+      ::model::timeout_clock::duration) final {
+        if (!_rbac_active) {
+            co_return cluster::errc::feature_disabled;
+        }
+        if (_roles.contains(name)) {
+            co_return cluster::errc::role_exists;
+        }
+        _roles.emplace(std::move(name), std::move(role));
+        co_return cluster::errc::success;
+    }
+
+    ss::future<std::error_code> update_role(
+      security::role_name name,
+      security::role role,
+      ::model::timeout_clock::duration) final {
+        if (!_rbac_active) {
+            co_return cluster::errc::feature_disabled;
+        }
+        auto it = _roles.find(name);
+        if (it == _roles.end()) {
+            co_return cluster::errc::role_does_not_exist;
+        }
+        it->second = std::move(role);
+        co_return cluster::errc::success;
+    }
+
+    ss::future<std::error_code> delete_role(
+      security::role_name name, ::model::timeout_clock::duration) final {
+        if (!_rbac_active) {
+            co_return cluster::errc::feature_disabled;
+        }
+        if (_roles.erase(name) == 0) {
+            co_return cluster::errc::role_does_not_exist;
+        }
+        co_return cluster::errc::success;
+    }
+
+    bool rbac_active() const final { return _rbac_active; }
+
+    chunked_vector<security::role_with_members> read_shadow_roles(
+      const std::function<bool(const security::role_name&)>& pred) const final {
+        chunked_vector<security::role_with_members> out;
+        for (const auto& [name, role] : _roles) {
+            if (pred(name)) {
+                out.push_back(
+                  security::role_with_members{
+                    .name = name, .role = security::role{role.members()}});
+            }
+        }
+        return out;
+    }
+
+    // Test seams.
+    void set_rbac_active(bool active) { _rbac_active = active; }
+    void seed_role(security::role_name name, security::role role) {
+        _roles.insert_or_assign(std::move(name), std::move(role));
+    }
+    const auto& roles() const { return _roles; }
     const auto& acls() { return _acls; }
 
 private:
-    using container_type
+    using acl_container_type
       = chunked_hash_map<security::resource_pattern, security::acl_entry_set>;
 
-    container_type _acls;
+    acl_container_type _acls;
+    chunked_hash_map<security::role_name, security::role> _roles;
+    bool _rbac_active{true};
 };
 
 class fake_members_table_provider : public members_table_provider {
@@ -729,7 +816,9 @@ private:
     test_partition_metadata_provider* _partition_metadata_provider{nullptr};
     test_kafka_rpc_client_service* _tkrcs{nullptr};
     fake_members_table_provider* _fmtp{nullptr};
+    schema::fake_registry _fake_schema_registry;
     ss::sharded<manager> _manager;
+    ss::sharded<features::feature_table> _feature_table;
     config::mock_property<int16_t> _default_topic_replication{1};
 
     ::model::node_id _self;

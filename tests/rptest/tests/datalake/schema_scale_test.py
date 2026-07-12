@@ -89,6 +89,7 @@ class SchemaScaleTester:
             {
                 "bootstrap.servers": self.redpanda.brokers(),
                 "schema.registry.url": self.redpanda.schema_reg().split(",")[0],
+                "enable.idempotence": True,
             },
             default_value_schema=avro.loads(json.dumps(self.schema.to_json())),
         )

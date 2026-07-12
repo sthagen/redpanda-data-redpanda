@@ -447,8 +447,8 @@ struct storage_mode_validator {
             return fmt::format(
               "Cannot alter redpanda.storage.mode from {} to {} - this "
               "transition is not permitted",
-              *current_mode,
-              value);
+              model::redpanda_storage_mode_impl_name(*current_mode),
+              model::redpanda_storage_mode_impl_name(value));
         }
         return std::nullopt;
     }

@@ -124,6 +124,41 @@ public:
           .get();
     }
 
+    // Downloads via download_stream (rather than download_object), reading
+    // the streamed body to a string. download_stream requires a
+    // Content-Length on the response.
+    std::pair<download_result, ss::sstring> download_via_stream(
+      std::string_view key,
+      std::optional<cloud_storage_clients::http_byte_range> range
+      = std::nullopt) {
+        retry_chain_node rtc(never_abort, 5s, 100ms);
+        ss::sstring out;
+        auto res = remote()
+                     .download_stream(
+                       {.bucket = bucket_name,
+                        .key = object_key(key),
+                        .parent_rtc = rtc},
+                       [&out](
+                         this auto,
+                         uint64_t content_length,
+                         ss::input_stream<char> in) -> ss::future<uint64_t> {
+                           while (true) {
+                               auto buf = co_await in.read();
+                               if (buf.empty()) {
+                                   break;
+                               }
+                               out.append(buf.get(), buf.size());
+                           }
+                           co_await in.close();
+                           co_return content_length;
+                       },
+                       "test-download-stream",
+                       /*acquire_hydration_units=*/true,
+                       range)
+                     .get();
+        return {res, out};
+    }
+
 private:
     std::unique_ptr<scoped_remote> _scoped;
 };
@@ -324,4 +359,22 @@ TEST_F(db_s3_imposter_test, concurrent_open_multipart_uploads) {
     ASSERT_EQ(res_b, download_result::success);
     EXPECT_EQ(content_b.size(), part_size);
     EXPECT_EQ(content_b[0], 'B');
+}
+
+// download_stream needs a Content-Length, which the imposter can only set on
+// its small-body inline path -- see k_small_response_threshold in
+// db_s3_imposter_fixture.cc for why. These keep payloads small to stay on it.
+TEST_F(db_s3_imposter_test, download_stream_whole_object) {
+    ASSERT_EQ(upload("ds/whole", "hello world"), upload_result::success);
+    auto [res, content] = download_via_stream("ds/whole");
+    EXPECT_EQ(res, download_result::success);
+    EXPECT_EQ(content, "hello world");
+}
+
+TEST_F(db_s3_imposter_test, download_stream_byte_range) {
+    ASSERT_EQ(upload("ds/range", "0123456789"), upload_result::success);
+    auto [res, content] = download_via_stream(
+      "ds/range", cloud_storage_clients::http_byte_range{2, 5});
+    EXPECT_EQ(res, download_result::success);
+    EXPECT_EQ(content, "2345");
 }

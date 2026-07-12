@@ -7,13 +7,16 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+from collections.abc import Callable
+
 from ducktape.tests.test import TestContext
 
-from rptest.clients.rpk import RpkTool
+from rptest.clients.rpk import RpkException, RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
 from rptest.services.redpanda import (
+    PREV_VERSION_LOG_ALLOW_LIST,
     RESTART_LOG_ALLOW_LIST,
     SISettings,
 )
@@ -44,6 +47,13 @@ class StorageModeTestBase(RedpandaTest):
     def _get_topic_storage_mode(self, rpk: RpkTool, topic_name: str) -> str | None:
         """Get the storage mode property value for a topic."""
         return self._get_topic_config(rpk, topic_name, TopicSpec.PROPERTY_STORAGE_MODE)
+
+    def _get_topic_storage_mode_impl(self, rpk: RpkTool, topic_name: str) -> str | None:
+        """Get the read-only storage mode impl property, or None if the
+        broker does not report it (pre-impl binaries)."""
+        return self._get_topic_config(
+            rpk, topic_name, TopicSpec.PROPERTY_STORAGE_MODE_IMPL
+        )
 
     def _get_topic_remote_read(self, rpk: RpkTool, topic_name: str) -> str | None:
         """Get the remote read property value for a topic."""
@@ -566,7 +576,9 @@ class StorageModeTransitionTest(StorageModeTestBase):
             == TopicSpec.STORAGE_MODE_UNSET
         ), "Storage mode should still be unset after rejected transition"
 
-        # Test blocked transition: unset -> tiered_cloud
+        # Test rejected input: the tiered variant names are not valid
+        # redpanda.storage.mode values (a variant is selected at creation
+        # via redpanda.storage.mode.impl)
         self._create_topic(rpk, "topic-unset-to-tiered-cloud")
         assert (
             self._get_topic_storage_mode(rpk, "topic-unset-to-tiered-cloud")
@@ -576,19 +588,20 @@ class StorageModeTransitionTest(StorageModeTestBase):
             rpk.alter_topic_config(
                 "topic-unset-to-tiered-cloud",
                 TopicSpec.PROPERTY_STORAGE_MODE,
-                TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+                TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
             )
             assert False, (
-                "Transition from unset to tiered_cloud should have been rejected"
+                "'tiered_v2' should be rejected as a redpanda.storage.mode value"
             )
         except Exception:
-            pass  # Expected - transition should be rejected
+            pass  # Expected - invalid mode value
         assert (
             self._get_topic_storage_mode(rpk, "topic-unset-to-tiered-cloud")
             == TopicSpec.STORAGE_MODE_UNSET
         ), "Storage mode should still be unset after rejected transition"
 
-        # Test blocked transition: local -> tiered_cloud
+        # Test read-only property: redpanda.storage.mode.impl cannot be
+        # altered
         self._create_topic(
             rpk,
             "topic-local-to-tiered-cloud",
@@ -597,14 +610,12 @@ class StorageModeTransitionTest(StorageModeTestBase):
         try:
             rpk.alter_topic_config(
                 "topic-local-to-tiered-cloud",
-                TopicSpec.PROPERTY_STORAGE_MODE,
-                TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+                TopicSpec.PROPERTY_STORAGE_MODE_IMPL,
+                TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
             )
-            assert False, (
-                "Transition from local to tiered_cloud should have been rejected"
-            )
+            assert False, "redpanda.storage.mode.impl should be read-only for alter"
         except Exception:
-            pass  # Expected - transition should be rejected
+            pass  # Expected - read-only property
         assert (
             self._get_topic_storage_mode(rpk, "topic-local-to-tiered-cloud")
             == TopicSpec.STORAGE_MODE_LOCAL
@@ -671,10 +682,196 @@ class StorageModeValidationTest(RedpandaTest):
         )
 
 
+class TieredCloudUpgradeTest(StorageModeTestBase):
+    """
+    The tiered_v2 storage mode is gated by the tiered_cloud_topics feature
+    flag (v26.2, available_policy::always). While the cluster is only
+    partially upgraded the flag is not active, so creating a tiered_v2 topic
+    or converting a cloud topic to it must be rejected. Once every node runs
+    v26.2 the flag auto-activates and both operations succeed, with the
+    upgraded cluster keeping the classic meaning of 'tiered'
+    (default_redpanda_storage_mode_tiered_impl=tiered_v1 via legacy default).
+    """
+
+    def __init__(self, test_context: TestContext):
+        si_settings = SISettings(
+            test_context,
+            cloud_storage_enable_remote_read=False,
+            cloud_storage_enable_remote_write=False,
+        )
+
+        super(TieredCloudUpgradeTest, self).__init__(
+            test_context=test_context,
+            num_brokers=3,
+            si_settings=si_settings,
+            # The v26.1 binary additionally gates cloud-mode topics on the
+            # cloud_topics_enabled cluster property; deprecated and ignored
+            # from v26.2 on.
+            extra_rp_conf={"cloud_topics_enabled": True},
+        )
+        self.installer = self.redpanda._installer
+
+    def setUp(self):
+        # Start the whole cluster on the latest release of the prior feature
+        # line (26.1.x), which supports the cloud storage mode but predates
+        # the tiered_v2 variant and its feature flag.
+        old_version = self.installer.highest_from_prior_feature_version(
+            RedpandaInstaller.HEAD
+        )
+        self.installer.install(self.redpanda.nodes, old_version)
+        super(TieredCloudUpgradeTest, self).setUp()
+
+    def _expect_rejected(self, what: str, fn: Callable[[], object]):
+        try:
+            fn()
+        except RpkException as e:
+            self.logger.info(f"{what} rejected as expected: {e}")
+        else:
+            raise AssertionError(
+                f"{what} should have been rejected in a partially upgraded cluster"
+            )
+
+    @cluster(
+        num_nodes=3,
+        log_allow_list=RESTART_LOG_ALLOW_LIST + PREV_VERSION_LOG_ALLOW_LIST,
+    )
+    def test_tiered_cloud_gated_in_mixed_cluster(self):
+        rpk = RpkTool(self.redpanda)
+        _ = wait_for_num_versions(self.redpanda, 1)
+
+        # The cloud storage mode is available since v26.1, so this topic can
+        # be created before the upgrade begins.
+        self._create_topic(
+            rpk,
+            "topic-cloud",
+            config={TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_CLOUD},
+        )
+        assert (
+            self._get_topic_storage_mode(rpk, "topic-cloud")
+            == TopicSpec.STORAGE_MODE_CLOUD
+        )
+
+        # Upgrade a single node to HEAD to put the cluster in a mixed state.
+        first = self.redpanda.nodes[0]
+        self.installer.install([first], RedpandaInstaller.HEAD)
+        self.redpanda.restart_nodes([first])
+        _ = wait_for_num_versions(self.redpanda, 2)
+
+        # The upgraded node knows the feature but must not report it active
+        # while old nodes are still in the cluster.
+        state = self.redpanda.get_feature_state("tiered_cloud_topics", node=first)
+        assert state == "unavailable", (
+            f"tiered_cloud_topics should be unavailable in a mixed cluster, got {state}"
+        )
+
+        # CreateTopics is routed to the controller broker. A HEAD controller
+        # rejects the request via the feature gate. A v26.1 controller does
+        # not know the redpanda.storage.mode.impl property: unsupported
+        # topic configs are ignored on create, so the request silently
+        # degrades to a classic tiered topic. Either way the gating
+        # invariant holds: no tiered_v2 topic can exist in a partially
+        # upgraded cluster.
+        created_in_mixed = True
+        try:
+            self._create_topic(
+                rpk,
+                "topic-tiered-v2-mixed",
+                config=TopicSpec.storage_mode_config(
+                    TopicSpec.STORAGE_MODE_IMPL_TIERED_V2
+                ),
+            )
+        except RpkException as e:
+            created_in_mixed = False
+            self.logger.info(f"tiered_v2 creation rejected in mixed cluster: {e}")
+        if created_in_mixed:
+            version = self._get_topic_storage_mode_impl(rpk, "topic-tiered-v2-mixed")
+            assert version != TopicSpec.STORAGE_MODE_IMPL_TIERED_V2, (
+                "a tiered_v2 topic must not be creatable in a partially "
+                "upgraded cluster"
+            )
+
+        # Conversion is expressed as an alter to 'tiered'; both binaries
+        # resolve it to a variant the cloud -> X transition rules forbid
+        # (classic tiered) while the cluster is not fully upgraded.
+        self._expect_rejected(
+            "cloud to tiered_v2 conversion",
+            lambda: rpk.alter_topic_config(
+                "topic-cloud",
+                TopicSpec.PROPERTY_STORAGE_MODE,
+                TopicSpec.STORAGE_MODE_TIERED,
+            ),
+        )
+        assert (
+            self._get_topic_storage_mode(rpk, "topic-cloud")
+            == TopicSpec.STORAGE_MODE_CLOUD
+        ), "Storage mode should still be cloud after the rejected conversion"
+
+        # Finish the upgrade: the feature auto-activates once every node
+        # runs v26.2.
+        self.installer.install(self.redpanda.nodes, RedpandaInstaller.HEAD)
+        self.redpanda.restart_nodes(self.redpanda.nodes[1:])
+        _ = wait_for_num_versions(self.redpanda, 1)
+        self.redpanda.await_feature("tiered_cloud_topics", "active", timeout_sec=60)
+
+        # tiered_v1 is the default for all clusters, so an upgrade never
+        # changes what 'tiered' means.
+        default_impl = Admin(self.redpanda).get_cluster_config()[
+            "default_redpanda_storage_mode_tiered_impl"
+        ]
+        assert default_impl == "tiered_v1", (
+            f"clusters should default to tiered_v1, got {default_impl}"
+        )
+
+        # If the mixed-cluster create went through a v26.1 controller, the
+        # resulting topic must have degraded to classic tiered - never the
+        # v2 variant. Now that every broker runs HEAD, the version property
+        # is authoritative.
+        if created_in_mixed:
+            assert (
+                self._get_topic_storage_mode_impl(rpk, "topic-tiered-v2-mixed")
+                == TopicSpec.STORAGE_MODE_IMPL_TIERED_V1
+            ), "the mixed-cluster create must not have produced a tiered_v2 topic"
+
+        # Creation with an explicit version works under any default.
+        self._create_topic(
+            rpk,
+            "topic-tiered-v2",
+            config=TopicSpec.storage_mode_config(TopicSpec.STORAGE_MODE_IMPL_TIERED_V2),
+        )
+        assert (
+            self._get_topic_storage_mode(rpk, "topic-tiered-v2")
+            == TopicSpec.STORAGE_MODE_TIERED
+        ), "tiered_v2 topic creation should succeed after the upgrade"
+        assert (
+            self._get_topic_storage_mode_impl(rpk, "topic-tiered-v2")
+            == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2
+        )
+
+        # Conversion goes through the 'tiered' alias, so the admin first
+        # points it at the tiered_v2 variant (the version property is
+        # read-only for alter).
+        rpk.cluster_config_set("default_redpanda_storage_mode_tiered_impl", "tiered_v2")
+        rpk.alter_topic_config(
+            "topic-cloud",
+            TopicSpec.PROPERTY_STORAGE_MODE,
+            TopicSpec.STORAGE_MODE_TIERED,
+        )
+        assert (
+            self._get_topic_storage_mode(rpk, "topic-cloud")
+            == TopicSpec.STORAGE_MODE_TIERED
+        ), "cloud to tiered_v2 conversion should succeed after the upgrade"
+        assert (
+            self._get_topic_storage_mode_impl(rpk, "topic-cloud")
+            == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2
+        )
+
+
 class StorageModeCloudTransitionTest(StorageModeTestBase):
     """
-    Test storage mode transitions between cloud and tiered_cloud.
-    Requires cloud topics to be enabled.
+    Test storage mode transitions between the cloud and tiered_v2 modes.
+    Transitions are expressed through the 'tiered' alias (the version
+    property is read-only), so the tests flip default_redpanda_storage_mode_tiered_impl at
+    runtime to select the variant the alias refers to.
     """
 
     def __init__(self, test_context: TestContext):
@@ -690,19 +887,16 @@ class StorageModeCloudTransitionTest(StorageModeTestBase):
             si_settings=si_settings,
         )
 
-    def setUp(self):
-        super().setUp()
-        self.redpanda.set_feature_active("tiered_cloud_topics", True, timeout_sec=30)
-
     @cluster(num_nodes=3)
     def test_cloud_to_tiered_cloud_transition(self):
         """
-        Test that cloud -> tiered_cloud and tiered_cloud -> cloud transitions
-        are permitted.
+        cloud -> tiered_v2 and tiered_v2 -> cloud transitions are permitted;
+        with default_redpanda_storage_mode_tiered_impl=tiered_v2 both are
+        reachable through the 'tiered' alias.
         """
         rpk = RpkTool(self.redpanda)
+        rpk.cluster_config_set("default_redpanda_storage_mode_tiered_impl", "tiered_v2")
 
-        # Create a cloud topic
         self._create_topic(
             rpk,
             "topic-cloud-to-tc",
@@ -713,18 +907,20 @@ class StorageModeCloudTransitionTest(StorageModeTestBase):
             == TopicSpec.STORAGE_MODE_CLOUD
         )
 
-        # Transition cloud -> tiered_cloud (permitted)
         rpk.alter_topic_config(
             "topic-cloud-to-tc",
             TopicSpec.PROPERTY_STORAGE_MODE,
-            TopicSpec.STORAGE_MODE_TIERED_CLOUD,
+            TopicSpec.STORAGE_MODE_TIERED,
         )
         assert (
             self._get_topic_storage_mode(rpk, "topic-cloud-to-tc")
-            == TopicSpec.STORAGE_MODE_TIERED_CLOUD
-        ), "Transition from cloud to tiered_cloud should succeed"
+            == TopicSpec.STORAGE_MODE_TIERED
+        ), "Transition from cloud to tiered_v2 should succeed"
+        assert (
+            self._get_topic_storage_mode_impl(rpk, "topic-cloud-to-tc")
+            == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2
+        )
 
-        # Transition tiered_cloud -> cloud (permitted)
         rpk.alter_topic_config(
             "topic-cloud-to-tc",
             TopicSpec.PROPERTY_STORAGE_MODE,
@@ -733,94 +929,238 @@ class StorageModeCloudTransitionTest(StorageModeTestBase):
         assert (
             self._get_topic_storage_mode(rpk, "topic-cloud-to-tc")
             == TopicSpec.STORAGE_MODE_CLOUD
-        ), "Transition from tiered_cloud to cloud should succeed"
+        ), "Transition from tiered_v2 to cloud should succeed"
+        assert (
+            self._get_topic_storage_mode_impl(rpk, "topic-cloud-to-tc")
+            == TopicSpec.STORAGE_MODE_CLOUD
+        ), "the impl property must mirror the cloud storage mode"
 
     @cluster(num_nodes=3)
     def test_tiered_cloud_blocked_transitions(self):
         """
-        Test that tiered_cloud cannot transition to local, tiered, or unset.
+        A tiered_v2 topic cannot transition to local, classic tiered, or
+        unset.
         """
         rpk = RpkTool(self.redpanda)
 
-        # Create a tiered_cloud topic
         self._create_topic(
             rpk,
             "topic-tc-blocked",
-            config={
-                TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_TIERED_CLOUD
-            },
+            config=TopicSpec.storage_mode_config(TopicSpec.STORAGE_MODE_IMPL_TIERED_V2),
         )
         assert (
-            self._get_topic_storage_mode(rpk, "topic-tc-blocked")
-            == TopicSpec.STORAGE_MODE_TIERED_CLOUD
+            self._get_topic_storage_mode_impl(rpk, "topic-tc-blocked")
+            == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2
         )
 
-        # tiered_cloud -> local (blocked)
-        try:
-            rpk.alter_topic_config(
-                "topic-tc-blocked",
-                TopicSpec.PROPERTY_STORAGE_MODE,
-                TopicSpec.STORAGE_MODE_LOCAL,
-            )
-            assert False, (
-                "Transition from tiered_cloud to local should have been rejected"
-            )
-        except Exception:
-            pass
-        assert (
-            self._get_topic_storage_mode(rpk, "topic-tc-blocked")
-            == TopicSpec.STORAGE_MODE_TIERED_CLOUD
-        ), "Storage mode should still be tiered_cloud after rejected transition"
-
-        # tiered_cloud -> tiered (blocked)
-        try:
-            rpk.alter_topic_config(
-                "topic-tc-blocked",
-                TopicSpec.PROPERTY_STORAGE_MODE,
-                TopicSpec.STORAGE_MODE_TIERED,
-            )
-            assert False, (
-                "Transition from tiered_cloud to tiered should have been rejected"
-            )
-        except Exception:
-            pass
-        assert (
-            self._get_topic_storage_mode(rpk, "topic-tc-blocked")
-            == TopicSpec.STORAGE_MODE_TIERED_CLOUD
-        ), "Storage mode should still be tiered_cloud after rejected transition"
-
-        # tiered_cloud -> unset (blocked)
-        try:
-            rpk.alter_topic_config(
-                "topic-tc-blocked",
-                TopicSpec.PROPERTY_STORAGE_MODE,
-                TopicSpec.STORAGE_MODE_UNSET,
-            )
-            assert False, (
-                "Transition from tiered_cloud to unset should have been rejected"
-            )
-        except Exception:
-            pass
-        assert (
-            self._get_topic_storage_mode(rpk, "topic-tc-blocked")
-            == TopicSpec.STORAGE_MODE_TIERED_CLOUD
-        ), "Storage mode should still be tiered_cloud after rejected transition"
+        # With the alias pointing at the classic variant, altering to
+        # 'tiered' attempts tiered_v2 -> tiered_v1: blocked.
+        rpk.cluster_config_set("default_redpanda_storage_mode_tiered_impl", "tiered_v1")
+        for target in (
+            TopicSpec.STORAGE_MODE_TIERED,
+            TopicSpec.STORAGE_MODE_LOCAL,
+            TopicSpec.STORAGE_MODE_UNSET,
+        ):
+            try:
+                rpk.alter_topic_config(
+                    "topic-tc-blocked",
+                    TopicSpec.PROPERTY_STORAGE_MODE,
+                    target,
+                )
+                assert False, (
+                    f"Transition from tiered_v2 to {target} should have been rejected"
+                )
+            except RpkException:
+                pass
+            assert (
+                self._get_topic_storage_mode_impl(rpk, "topic-tc-blocked")
+                == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2
+            ), "Topic should still be tiered_v2 after rejected transition"
 
     @cluster(num_nodes=3)
     def test_tiered_cloud_topic_creation(self):
         """
-        Test that a topic can be created directly with tiered_cloud mode.
+        Topics can be created directly in either tiered variant with an
+        explicit version, regardless of default_redpanda_storage_mode_tiered_impl.
         """
         rpk = RpkTool(self.redpanda)
 
+        for version in (
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V1,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
+        ):
+            name = f"topic-created-as-{version.replace('_', '-')}"
+            self._create_topic(rpk, name, config=TopicSpec.storage_mode_config(version))
+            assert (
+                self._get_topic_storage_mode(rpk, name) == TopicSpec.STORAGE_MODE_TIERED
+            ), f"{name} should display storage mode 'tiered'"
+            assert self._get_topic_storage_mode_impl(rpk, name) == version
+
+
+class StorageModeAliasMatrixTest(StorageModeTestBase):
+    """
+    Full matrix of default_redpanda_storage_mode_tiered_impl values over all
+    redpanda.storage.mode / redpanda.storage.mode.impl inputs.
+
+    The mode vocabulary is local/tiered/cloud/unset: 'tiered' resolves via
+    the default_redpanda_storage_mode_tiered_impl cluster config. The impl
+    property (create-only, unambiguous local/tiered_v1/tiered_v2/cloud/unset
+    vocabulary) selects the storage mode exactly, alone or together with a
+    matching mode. On describe, both tiered variants display as 'tiered' and
+    the read-only impl property, always present, carries the exact
+    implementation.
+    """
+
+    CLUSTER_CONFIG_CLOUD_STORAGE_DEFAULT_MODE = (
+        "default_redpanda_storage_mode_tiered_impl"
+    )
+
+    def __init__(self, test_context: TestContext):
+        si_settings = SISettings(
+            test_context,
+            cloud_storage_enable_remote_read=False,
+            cloud_storage_enable_remote_write=False,
+        )
+
+        super(StorageModeAliasMatrixTest, self).__init__(
+            test_context=test_context,
+            num_brokers=3,
+            si_settings=si_settings,
+        )
+
+    def _set_default_mode(self, rpk: RpkTool, value: str):
+        rpk.cluster_config_set(self.CLUSTER_CONFIG_CLOUD_STORAGE_DEFAULT_MODE, value)
+
+    @cluster(num_nodes=3)
+    def test_storage_mode_matrix(self):
+        rpk = RpkTool(self.redpanda)
+        admin = Admin(self.redpanda)
+
+        # tiered_v1 is the default for all clusters.
+        default_impl = admin.get_cluster_config()[
+            self.CLUSTER_CONFIG_CLOUD_STORAGE_DEFAULT_MODE
+        ]
+        assert default_impl == "tiered_v1", (
+            f"clusters should default to tiered_v1, got {default_impl}"
+        )
+
+        # (mode, impl) input -> (displayed mode, displayed impl) where a None
+        # input means the property is not set, and DEFAULT stands for the
+        # current default_redpanda_storage_mode_tiered_impl. The impl is
+        # always present in describe output and never ambiguous.
+        DEFAULT = "<default>"
+        accepted: list[tuple[str | None, str | None, str, str]] = [
+            # mode only: 'tiered' resolves through the cluster config
+            ("local", None, "local", "local"),
+            ("tiered", None, "tiered", DEFAULT),
+            ("cloud", None, "cloud", "cloud"),
+            ("unset", None, "unset", "unset"),
+            # impl only: selects the storage mode exactly
+            (None, "tiered_v1", "tiered", "tiered_v1"),
+            (None, "tiered_v2", "tiered", "tiered_v2"),
+            (None, "local", "local", "local"),
+            (None, "cloud", "cloud", "cloud"),
+            (None, "unset", "unset", "unset"),
+            # both: they must agree; the impl picks the tiered variant
+            ("tiered", "tiered_v1", "tiered", "tiered_v1"),
+            ("tiered", "tiered_v2", "tiered", "tiered_v2"),
+            ("cloud", "cloud", "cloud", "cloud"),
+            ("local", "local", "local", "local"),
+        ]
+        rejected: list[tuple[str | None, str | None]] = [
+            # impl names and the internal spelling are not mode values
+            ("tiered_v1", None),
+            ("tiered_v2", None),
+            ("tiered_cloud", None),
+            # the ambiguous alias and the internal spelling are not impl
+            # values
+            (None, "tiered"),
+            (None, "tiered_cloud"),
+            ("tiered", "bogus"),
+            # mode and impl must agree
+            ("local", "tiered_v1"),
+            ("cloud", "tiered_v2"),
+            ("unset", "cloud"),
+        ]
+
+        for cluster_default in ("tiered_v1", "tiered_v2"):
+            self._set_default_mode(rpk, cluster_default)
+            for i, (mode, impl, want_mode, want_impl) in enumerate(accepted):
+                topic = f"topic-{cluster_default}-ok-{i}"
+                config: dict[str, str] = {}
+                if mode is not None:
+                    config[TopicSpec.PROPERTY_STORAGE_MODE] = mode
+                if impl is not None:
+                    config[TopicSpec.PROPERTY_STORAGE_MODE_IMPL] = impl
+                self._create_topic(rpk, topic, config=config)
+                actual_mode = self._get_topic_storage_mode(rpk, topic)
+                assert actual_mode == want_mode, (
+                    f"mode={mode} impl={impl} under {cluster_default}: "
+                    f"expected displayed mode {want_mode}, got {actual_mode}"
+                )
+                expected_impl = cluster_default if want_impl == DEFAULT else want_impl
+                actual_impl = self._get_topic_storage_mode_impl(rpk, topic)
+                assert actual_impl == expected_impl, (
+                    f"mode={mode} impl={impl} under {cluster_default}: "
+                    f"expected impl {expected_impl}, got {actual_impl}"
+                )
+
+            for i, (mode, impl) in enumerate(rejected):
+                topic = f"topic-{cluster_default}-rejected-{i}"
+                config = {}
+                if mode is not None:
+                    config[TopicSpec.PROPERTY_STORAGE_MODE] = mode
+                if impl is not None:
+                    config[TopicSpec.PROPERTY_STORAGE_MODE_IMPL] = impl
+                try:
+                    self._create_topic(rpk, topic, config=config)
+                except RpkException as e:
+                    assert "Invalid storage mode" in str(e), (
+                        f"mode={mode} impl={impl} under {cluster_default}: "
+                        f"rejected, but not by the storage-mode validator: {e}"
+                    )
+                else:
+                    raise AssertionError(
+                        f"mode={mode} impl={impl} should be rejected "
+                        f"under {cluster_default}"
+                    )
+
+    @cluster(num_nodes=3)
+    def test_variant_is_stable_across_default_flips(self):
+        """
+        The variant is fixed at creation: flipping default_redpanda_storage_mode_tiered_impl
+        afterwards changes neither the displayed mode ('tiered' for both
+        variants) nor the version property.
+        """
+        rpk = RpkTool(self.redpanda)
+
+        self._set_default_mode(rpk, "tiered_v1")
         self._create_topic(
             rpk,
-            "topic-created-as-tc",
-            config={
-                TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_TIERED_CLOUD
-            },
+            "topic-alias-v1",
+            config={TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_TIERED},
         )
         assert (
-            self._get_topic_storage_mode(rpk, "topic-created-as-tc")
-            == TopicSpec.STORAGE_MODE_TIERED_CLOUD
-        ), "Topic should be created with storage_mode=tiered_cloud"
+            self._get_topic_storage_mode_impl(rpk, "topic-alias-v1")
+            == TopicSpec.STORAGE_MODE_IMPL_TIERED_V1
+        )
+
+        self._set_default_mode(rpk, "tiered_v2")
+        assert (
+            self._get_topic_storage_mode(rpk, "topic-alias-v1")
+            == TopicSpec.STORAGE_MODE_TIERED
+        )
+        assert (
+            self._get_topic_storage_mode_impl(rpk, "topic-alias-v1")
+            == TopicSpec.STORAGE_MODE_IMPL_TIERED_V1
+        ), "flipping the cluster default must not re-label existing topics"
+
+        self._create_topic(
+            rpk,
+            "topic-alias-v2",
+            config={TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_TIERED},
+        )
+        assert (
+            self._get_topic_storage_mode_impl(rpk, "topic-alias-v2")
+            == TopicSpec.STORAGE_MODE_IMPL_TIERED_V2
+        )

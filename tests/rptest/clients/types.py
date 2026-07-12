@@ -27,8 +27,15 @@ class TopicSpec:
     STORAGE_MODE_LOCAL = "local"
     STORAGE_MODE_TIERED = "tiered"
     STORAGE_MODE_CLOUD = "cloud"
-    STORAGE_MODE_TIERED_CLOUD = "tiered_cloud"
     STORAGE_MODE_UNSET = "unset"
+
+    # Tiered values of the read-only redpanda.storage.mode.impl property,
+    # whose vocabulary is the unambiguous
+    # [unset|local|tiered_v1|tiered_v2|cloud]. On creation the property (set
+    # alone or together with a matching redpanda.storage.mode) selects the
+    # storage mode exactly. Not valid as redpanda.storage.mode values.
+    STORAGE_MODE_IMPL_TIERED_V1 = "tiered_v1"
+    STORAGE_MODE_IMPL_TIERED_V2 = "tiered_v2"
 
     PROPERTY_COMPRESSSION = "compression.type"
     PROPERTY_CLEANUP_POLICY = "cleanup.policy"
@@ -57,6 +64,24 @@ class TopicSpec:
     PROPERTY_REMOTE_READ = "redpanda.remote.read"
     PROPERTY_REMOTE_WRITE = "redpanda.remote.write"
     PROPERTY_STORAGE_MODE = "redpanda.storage.mode"
+    PROPERTY_STORAGE_MODE_IMPL = "redpanda.storage.mode.impl"
+
+    @staticmethod
+    def storage_mode_config(mode: str) -> dict[str, str]:
+        """Topic config dict selecting a storage mode. Tiered variants
+        (tiered_v1/tiered_v2) are spelled as redpanda.storage.mode=tiered plus
+        the redpanda.storage.mode.impl property; sending both keeps v26.1
+        brokers (which ignore the unknown impl property) on a tiered mode
+        rather than silently falling back to the cluster default."""
+        if mode in (
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V1,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
+        ):
+            return {
+                TopicSpec.PROPERTY_STORAGE_MODE: TopicSpec.STORAGE_MODE_TIERED,
+                TopicSpec.PROPERTY_STORAGE_MODE_IMPL: mode,
+            }
+        return {TopicSpec.PROPERTY_STORAGE_MODE: mode}
 
     class CompressionTypes(str, Enum):
         """
@@ -153,6 +178,7 @@ class TopicSpec:
         min_compaction_lag_ms: int | None = None,
         max_compaction_lag_ms: int | None = None,
         redpanda_storage_mode: str | None = None,
+        redpanda_storage_mode_impl: str | None = None,
     ):
         self.name = name or f"topic-{self._random_topic_suffix()}"
         self.partition_count = partition_count
@@ -192,6 +218,10 @@ class TopicSpec:
         self.min_compaction_lag_ms = min_compaction_lag_ms
         self.max_compaction_lag_ms = max_compaction_lag_ms
         self.redpanda_storage_mode = redpanda_storage_mode
+        # Read-only on the broker (reported by DescribeConfigs for every
+        # topic); accepted here so describe output can round-trip through
+        # TopicSpec.
+        self.redpanda_storage_mode_impl = redpanda_storage_mode_impl
 
     def __str__(self):
         return self.name

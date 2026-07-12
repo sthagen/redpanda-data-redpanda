@@ -464,6 +464,12 @@ message SchemaRegistrySyncOptions {
         // destination, such as rulesets or metadata tags. If unset, FAIL is
         // used.
         UnsupportedSchemaFeaturePolicy unsupported_schema_feature_policy = 12;
+
+        // Allows the user to pause the Schema Registry sync task. If paused,
+        // the task enters the 'paused' state and stops replicating schemas from
+        // the source, and the per-context client write protection on the
+        // contexts this link owns is lifted.
+        bool paused = 13;
     }
     // Schema Registry shadowing mode.
     oneof schema_registry_shadowing_mode {
@@ -715,11 +721,11 @@ message SchemaRegistrySyncStatus {
 
     // Sync currently running. This is unset when no Schema Registry sync is
     // running.
-    SchemaRegistryCurrentSync current_sync = 2;
+    optional SchemaRegistryCurrentSync current_sync = 2;
 
     // Counters from the most recently completed full sync. This is unset until
     // a full sync completes on the current task instance.
-    SchemaRegistrySyncSummary last_full_sync = 3;
+    optional SchemaRegistrySyncSummary last_full_sync = 3;
 
     // Cumulative counters since the Schema Registry task started. These
     // counters reset after task restart or leadership transfer.
@@ -759,11 +765,11 @@ message SchemaRegistryInventory {
 message SchemaRegistrySyncSummary {
     // Time when the sync started. For cumulative counters, this is the time
     // when the Schema Registry task started.
-    google.protobuf.Timestamp start_time = 1;
+    optional google.protobuf.Timestamp start_time = 1;
 
     // Time when the sync finished. This is unset for a sync that is still
     // running and for cumulative counters.
-    google.protobuf.Timestamp finish_time = 2;
+    optional google.protobuf.Timestamp finish_time = 2;
 
     // Number of selected subject versions created, updated, or deleted on the
     // destination.

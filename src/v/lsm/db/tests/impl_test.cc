@@ -33,8 +33,8 @@ public:
       : _p(p) {}
 
     ss::future<io::optional_pointer<io::random_access_file_reader>>
-    open_random_access_reader(file_handle h) override {
-        return _p->open_random_access_reader(h);
+    open_random_access_reader(file_handle h, uint64_t file_size) override {
+        return _p->open_random_access_reader(h, file_size);
     }
 
     ss::future<std::unique_ptr<io::sequential_file_writer>>
@@ -84,9 +84,9 @@ public:
       : _underlying(underlying) {}
 
     ss::future<io::optional_pointer<io::random_access_file_reader>>
-    open_random_access_reader(file_handle h) override {
+    open_random_access_reader(file_handle h, uint64_t file_size) override {
         _opened_files.insert(h);
-        return _underlying->open_random_access_reader(h);
+        return _underlying->open_random_access_reader(h, file_size);
     }
 
     ss::future<std::unique_ptr<io::sequential_file_writer>>

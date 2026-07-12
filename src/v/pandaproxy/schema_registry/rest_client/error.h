@@ -132,6 +132,45 @@ struct version_not_found {
     }
 };
 
+// The subject (or context) has no explicitly-configured mode
+// (HTTP 404 / error_code 40409; some server versions instead use 40401, which
+// this client treats the same). Only produced by get_subject_mode with
+// default_to_global::no; with yes the effective mode always resolves, so this
+// never occurs.
+struct subject_mode_not_found {
+    context_subject subject;
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "subject mode not configured: {}", subject);
+    }
+};
+
+// The subject (or context) has no explicitly-configured compatibility config
+// (HTTP 404 / error_code 40408; some server versions instead use 40401, which
+// this client treats the same). Only produced by get_subject_config with
+// default_to_global::no; with yes the effective config always resolves, so
+// this never occurs.
+struct subject_config_not_found {
+    context_subject subject;
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "subject config not configured: {}", subject);
+    }
+};
+
+// The numeric schema id does not resolve in the searched context
+// (HTTP 404 / error_code 40403 — the schema-not-found code, distinct from the
+// 40401/40402 the subject/version endpoints use). Often this just means the
+// wrong context was targeted via get_schema_id_subject_versions' subject
+// parameter.
+struct schema_id_not_found {
+    schema_id id;
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "schema id not found: {}", id());
+    }
+};
+
 // Represents the sum of all error types which can be encountered during
 // rest-client operations. The JSON-decode arm reuses parse_error from parse.h.
 using domain_error = std::variant<
@@ -141,6 +180,9 @@ using domain_error = std::variant<
   retries_exhausted,
   subject_not_found,
   version_not_found,
+  subject_mode_not_found,
+  subject_config_not_found,
+  schema_id_not_found,
   aborted_error>;
 
 } // namespace pandaproxy::schema_registry::rest_client
@@ -191,6 +233,15 @@ struct fmt::formatter<pandaproxy::schema_registry::rest_client::domain_error>
               return fmt::format_to(ctx.out(), "{}", value);
           },
           [&](const rc::version_not_found& value) {
+              return fmt::format_to(ctx.out(), "{}", value);
+          },
+          [&](const rc::subject_mode_not_found& value) {
+              return fmt::format_to(ctx.out(), "{}", value);
+          },
+          [&](const rc::subject_config_not_found& value) {
+              return fmt::format_to(ctx.out(), "{}", value);
+          },
+          [&](const rc::schema_id_not_found& value) {
               return fmt::format_to(ctx.out(), "{}", value);
           },
           [&](const rc::aborted_error& value) {

@@ -5208,14 +5208,11 @@ class SchemaRegistryContextTestBase(SchemaRegistryEndpoints):
     """
 
     def __init__(self, context: TestContext, **kwargs: Any):
-        schema_registry_config = SchemaRegistryConfig()
-        schema_registry_config.mode_mutability = True
         extra_rp_conf = {}
         if "extra_rp_conf" in kwargs:
             extra_rp_conf.update(kwargs.pop("extra_rp_conf"))
         super().__init__(
             context,
-            schema_registry_config=schema_registry_config,
             extra_rp_conf=extra_rp_conf,
             **kwargs,
         )
@@ -7379,7 +7376,6 @@ class SchemaRegistryBasicAuthTestBase(SchemaRegistryEndpoints):
 
         schema_registry_config = SchemaRegistryConfig()
         schema_registry_config.authn_method = "http_basic"
-        schema_registry_config.mode_mutability = True
 
         extra_rp_conf = {}
         if "extra_rp_conf" in kwargs:
@@ -10472,7 +10468,6 @@ class SchemaRegistryAclAuthzTestBase(SchemaRegistryEndpoints):
 
         schema_registry_config = SchemaRegistryConfig()
         schema_registry_config.authn_method = "http_basic"
-        schema_registry_config.mode_mutability = True
 
         merged_rp_conf = {"schema_registry_use_rpc": False}
         if extra_rp_conf:

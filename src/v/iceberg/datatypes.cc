@@ -10,6 +10,8 @@
 
 #include "iceberg/datatypes.h"
 
+#include "base/vassert.h"
+
 #include <variant>
 
 namespace iceberg {

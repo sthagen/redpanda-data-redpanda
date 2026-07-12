@@ -392,6 +392,7 @@ ss::future<> compaction_worker::compact_log(compaction_job* job) {
       _as,
       config::shard_local_cfg().cloud_topics_compaction_max_object_size.bind(),
       _upload_part_size,
+      _probe,
       ctxlog,
       l1::object_builder::options{
         .indexing_interval

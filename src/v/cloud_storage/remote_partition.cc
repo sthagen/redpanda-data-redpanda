@@ -1050,6 +1050,10 @@ remote_partition::get_term_last_offset(model::term_id term) const {
     co_return res.value();
 }
 
+std::optional<model::term_id> remote_partition::highest_term() const {
+    return _manifest_view->highest_term();
+}
+
 ss::future<std::vector<model::tx_range>>
 remote_partition::aborted_transactions(offset_range offsets) {
     auto guard = _gate.hold();

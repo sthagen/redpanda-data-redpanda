@@ -35,9 +35,20 @@ namespace {
 
 constexpr std::string_view accept_json = "application/json";
 
+// Confluent returns extended schema fields (guid, ts, deleted) on a schema
+// response only when this request header is present. The migration client opts
+// in so the tolerant parser sees the full response and the ignorable-field list
+// explicitly drops the server-assigned ones (guid, ts) rather than relying on
+// the server to omit them.
+constexpr std::string_view accept_unknown_properties_header
+  = "Confluent-Accept-Unknown-Properties";
+
 // Schema Registry error_codes for the not-found conditions.
 constexpr int32_t error_code_subject_not_found = 40401;
 constexpr int32_t error_code_version_not_found = 40402;
+constexpr int32_t error_code_schema_id_not_found = 40403;
+constexpr int32_t error_code_subject_config_not_found = 40408;
+constexpr int32_t error_code_subject_mode_not_found = 40409;
 
 // Percent-encode a subject for use as a single path segment. The qualified wire
 // form ":.ctx:sub" contains ':' which must be encoded ("%3A"); uri_encode also
@@ -55,6 +66,16 @@ void add_deleted_param(
   http::request_builder& request, include_deleted deleted) {
     if (deleted) {
         request.query_param_kv("deleted", "true");
+    }
+}
+
+// Append ?defaultToGlobal=true to request the effective (hierarchy-resolved)
+// mode instead of the subject's own override. Omitted otherwise, so the default
+// request asks for the subject's own mode (which yields 40409 when unset).
+void add_default_to_global_param(
+  http::request_builder& request, default_to_global fallback) {
+    if (fallback) {
+        request.query_param_kv("defaultToGlobal", "true");
     }
 }
 
@@ -84,6 +105,84 @@ domain_error translate_not_found(
       version.has_value()
       && status->error_code == error_code_version_not_found) {
         return domain_error{version_not_found{subject, *version}};
+    }
+    return err;
+}
+
+// Translate a terminal 404 from GET /mode/{subject} into the typed
+// subject_mode_not_found: error_code 40409 is the documented "no subject-level
+// mode" signal, and some server versions use 40401 for the same case, so both
+// map. Anything else (other statuses, a bare 404 for an unknown path, non-http
+// errors like retries_exhausted) passes through unchanged. Only reachable with
+// default_to_global::no; with yes the effective mode always resolves.
+domain_error translate_subject_mode_not_found(
+  domain_error err, const context_subject& subject) {
+    auto* call = std::get_if<http_call_error>(&err);
+    if (call == nullptr) {
+        return err;
+    }
+    auto* status = std::get_if<http_status_error>(call);
+    if (status == nullptr) {
+        return err;
+    }
+    if (status->status != boost::beast::http::status::not_found) {
+        return err;
+    }
+    if (
+      status->error_code == error_code_subject_mode_not_found
+      || status->error_code == error_code_subject_not_found) {
+        return domain_error{subject_mode_not_found{subject}};
+    }
+    return err;
+}
+
+// Translate a terminal 404 from GET /config/{subject} into the typed
+// subject_config_not_found: error_code 40408 is the documented "no
+// subject-level compatibility" signal, and some server versions use 40401 for
+// the same case, so both map. Anything else (other statuses, a bare 404 for an
+// unknown path, non-http errors like retries_exhausted) passes through
+// unchanged. Only reachable with default_to_global::no; with yes the effective
+// config always resolves.
+domain_error translate_subject_config_not_found(
+  domain_error err, const context_subject& subject) {
+    auto* call = std::get_if<http_call_error>(&err);
+    if (call == nullptr) {
+        return err;
+    }
+    auto* status = std::get_if<http_status_error>(call);
+    if (status == nullptr) {
+        return err;
+    }
+    if (status->status != boost::beast::http::status::not_found) {
+        return err;
+    }
+    if (
+      status->error_code == error_code_subject_config_not_found
+      || status->error_code == error_code_subject_not_found) {
+        return domain_error{subject_config_not_found{subject}};
+    }
+    return err;
+}
+
+// Translate a terminal 404 from GET /schemas/ids/{id}/versions into the typed
+// schema_id_not_found: error_code 40403 (the schema-not-found code) means the
+// id does not resolve in the searched context. Unlike the subject/config
+// endpoints this uses only 40403 — a bare 404 (unknown path), other statuses,
+// and non-http errors all pass through unchanged.
+domain_error translate_schema_id_not_found(domain_error err, schema_id id) {
+    auto* call = std::get_if<http_call_error>(&err);
+    if (call == nullptr) {
+        return err;
+    }
+    auto* status = std::get_if<http_status_error>(call);
+    if (status == nullptr) {
+        return err;
+    }
+    if (status->status != boost::beast::http::status::not_found) {
+        return err;
+    }
+    if (status->error_code == error_code_schema_id_not_found) {
+        return domain_error{schema_id_not_found{id}};
     }
     return err;
 }
@@ -245,19 +344,27 @@ ss::future<std::expected<iobuf, domain_error>> client::perform_request(
 }
 
 ss::future<std::expected<chunked_vector<context_subject>, domain_error>>
-client::list_subjects(retry_chain_node& rtc, include_deleted deleted) {
+client::list_subjects(
+  retry_chain_node& rtc, include_deleted deleted, std::optional<context> ctx) {
     auto gate = maybe_gate();
     if (!gate.has_value()) {
         co_return std::unexpected(std::move(gate.error()));
     }
-    // TODO: offset/limit pagination, deletedOnly, and subjectPrefix filtering
-    // are unimplemented. Redpanda SR doesn't support deletedOnly/offset/limit;
-    // subjectPrefix is a deferred source-filtering optimization.
+    // TODO: offset/limit pagination and deletedOnly are unimplemented (Redpanda
+    // SR doesn't support them).
     auto request = http::request_builder{}
                      .method(boost::beast::http::verb::get)
                      .path("/subjects")
                      .header("accept", accept_json);
     add_deleted_param(request, deleted);
+    if (ctx.has_value()) {
+        // A source-filtering hint for servers that honor it: ":<ctx>:" is the
+        // context-qualified subject prefix that scopes to a single context
+        // (e.g. ":.dev:", or ":.:" for the default context). The result is also
+        // filtered client-side below, so it is correct against a server that
+        // ignores the hint (Redpanda's own server honors it).
+        request.query_param_kv("subjectPrefix", fmt::format(":{}:", (*ctx)()));
+    }
     maybe_add_basic_auth(request);
 
     auto response = co_await perform_request(rtc, std::move(request));
@@ -266,6 +373,168 @@ client::list_subjects(retry_chain_node& rtc, include_deleted deleted) {
     }
     auto parsed = co_await parse_subjects(
       std::move(response.value()), _qualified);
+    if (!parsed.has_value()) {
+        co_return std::unexpected(domain_error{std::move(parsed.error())});
+    }
+    if (ctx.has_value()) {
+        // Keep only the requested context so the listing is correctly scoped
+        // even if the server ignored the subjectPrefix hint.
+        chunked_vector<context_subject> filtered;
+        for (auto& cs : parsed.value()) {
+            if (cs.ctx == *ctx) {
+                filtered.push_back(std::move(cs));
+            }
+        }
+        co_return std::move(filtered);
+    }
+    co_return std::move(parsed.value());
+}
+
+ss::future<std::expected<chunked_vector<context>, domain_error>>
+client::list_contexts(
+  retry_chain_node& rtc, std::optional<ss::sstring> context_prefix) {
+    auto gate = maybe_gate();
+    if (!gate.has_value()) {
+        co_return std::unexpected(std::move(gate.error()));
+    }
+    // TODO: offset/limit pagination is unimplemented (Redpanda SR ignores it
+    // and returns every materialized context in one unpaginated call).
+    auto request = http::request_builder{}
+                     .method(boost::beast::http::verb::get)
+                     .path("/contexts")
+                     .header("accept", accept_json);
+    if (context_prefix.has_value()) {
+        // A source-filtering hint for servers that honor it; the result is also
+        // filtered client-side below, so it is correct against a server that
+        // ignores it (Redpanda's own server does).
+        request.query_param_kv("contextPrefix", *context_prefix);
+    }
+    maybe_add_basic_auth(request);
+
+    auto response = co_await perform_request(rtc, std::move(request));
+    if (!response.has_value()) {
+        co_return std::unexpected(std::move(response.error()));
+    }
+    auto parsed = co_await parse_contexts(std::move(response.value()));
+    if (!parsed.has_value()) {
+        co_return std::unexpected(domain_error{std::move(parsed.error())});
+    }
+    if (context_prefix.has_value()) {
+        // Filter by the returned dot-prefixed name form (e.g. ".prod" matches
+        // ".prod" and ".prod-eu"), matching the server's contextPrefix
+        // semantics, so the result is correct even if the server did not
+        // filter.
+        chunked_vector<context> filtered;
+        for (auto& ctx : parsed.value()) {
+            if (
+              std::string_view{ctx()}.starts_with(
+                std::string_view{*context_prefix})) {
+                filtered.push_back(std::move(ctx));
+            }
+        }
+        co_return std::move(filtered);
+    }
+    co_return std::move(parsed.value());
+}
+
+ss::future<std::expected<mode_info, domain_error>>
+client::get_mode(retry_chain_node& rtc) {
+    auto gate = maybe_gate();
+    if (!gate.has_value()) {
+        co_return std::unexpected(std::move(gate.error()));
+    }
+    // defaultToGlobal is omitted: on the subject-less GET /mode it has no
+    // observable effect (the global mode is returned either way).
+    auto request = http::request_builder{}
+                     .method(boost::beast::http::verb::get)
+                     .path("/mode")
+                     .header("accept", accept_json);
+    maybe_add_basic_auth(request);
+
+    auto response = co_await perform_request(rtc, std::move(request));
+    if (!response.has_value()) {
+        co_return std::unexpected(std::move(response.error()));
+    }
+    auto parsed = co_await parse_mode(std::move(response.value()));
+    if (!parsed.has_value()) {
+        co_return std::unexpected(domain_error{std::move(parsed.error())});
+    }
+    co_return std::move(parsed.value());
+}
+
+ss::future<std::expected<mode_info, domain_error>> client::get_subject_mode(
+  const context_subject& subject,
+  retry_chain_node& rtc,
+  default_to_global fallback) {
+    auto gate = maybe_gate();
+    if (!gate.has_value()) {
+        co_return std::unexpected(std::move(gate.error()));
+    }
+    auto request = http::request_builder{}
+                     .method(boost::beast::http::verb::get)
+                     .path(fmt::format("/mode/{}", encode_subject(subject)))
+                     .header("accept", accept_json);
+    add_default_to_global_param(request, fallback);
+    maybe_add_basic_auth(request);
+
+    auto response = co_await perform_request(rtc, std::move(request));
+    if (!response.has_value()) {
+        co_return std::unexpected(translate_subject_mode_not_found(
+          std::move(response.error()), subject));
+    }
+    auto parsed = co_await parse_mode(std::move(response.value()));
+    if (!parsed.has_value()) {
+        co_return std::unexpected(domain_error{std::move(parsed.error())});
+    }
+    co_return std::move(parsed.value());
+}
+
+ss::future<std::expected<config_info, domain_error>>
+client::get_config(retry_chain_node& rtc) {
+    auto gate = maybe_gate();
+    if (!gate.has_value()) {
+        co_return std::unexpected(std::move(gate.error()));
+    }
+    // defaultToGlobal is omitted: on the subject-less GET /config it has no
+    // observable effect (the global config is returned either way).
+    auto request = http::request_builder{}
+                     .method(boost::beast::http::verb::get)
+                     .path("/config")
+                     .header("accept", accept_json);
+    maybe_add_basic_auth(request);
+
+    auto response = co_await perform_request(rtc, std::move(request));
+    if (!response.has_value()) {
+        co_return std::unexpected(std::move(response.error()));
+    }
+    auto parsed = co_await parse_config(std::move(response.value()));
+    if (!parsed.has_value()) {
+        co_return std::unexpected(domain_error{std::move(parsed.error())});
+    }
+    co_return std::move(parsed.value());
+}
+
+ss::future<std::expected<config_info, domain_error>> client::get_subject_config(
+  const context_subject& subject,
+  retry_chain_node& rtc,
+  default_to_global fallback) {
+    auto gate = maybe_gate();
+    if (!gate.has_value()) {
+        co_return std::unexpected(std::move(gate.error()));
+    }
+    auto request = http::request_builder{}
+                     .method(boost::beast::http::verb::get)
+                     .path(fmt::format("/config/{}", encode_subject(subject)))
+                     .header("accept", accept_json);
+    add_default_to_global_param(request, fallback);
+    maybe_add_basic_auth(request);
+
+    auto response = co_await perform_request(rtc, std::move(request));
+    if (!response.has_value()) {
+        co_return std::unexpected(translate_subject_config_not_found(
+          std::move(response.error()), subject));
+    }
+    auto parsed = co_await parse_config(std::move(response.value()));
     if (!parsed.has_value()) {
         co_return std::unexpected(domain_error{std::move(parsed.error())});
     }
@@ -303,7 +572,7 @@ client::list_subject_versions(
     co_return std::move(parsed.value());
 }
 
-ss::future<std::expected<parsed_schema, domain_error>>
+ss::future<std::expected<source_schema_read, domain_error>>
 client::get_schema_by_version(
   const context_subject& subject,
   schema_version version,
@@ -319,7 +588,8 @@ client::get_schema_by_version(
           .path(
             fmt::format(
               "/subjects/{}/versions/{}", encode_subject(subject), version()))
-          .header("accept", accept_json);
+          .header("accept", accept_json)
+          .header(accept_unknown_properties_header, "true");
     add_deleted_param(request, deleted);
     maybe_add_basic_auth(request);
 
@@ -329,6 +599,41 @@ client::get_schema_by_version(
           translate_not_found(std::move(response.error()), subject, version));
     }
     auto parsed = co_await parse_subject_version(
+      std::move(response.value()), _qualified);
+    if (!parsed.has_value()) {
+        co_return std::unexpected(domain_error{std::move(parsed.error())});
+    }
+    co_return std::move(parsed.value());
+}
+
+ss::future<std::expected<chunked_vector<subject_version>, domain_error>>
+client::get_schema_id_subject_versions(
+  schema_id id, retry_chain_node& rtc, std::optional<context_subject> subject) {
+    auto gate = maybe_gate();
+    if (!gate.has_value()) {
+        co_return std::unexpected(std::move(gate.error()));
+    }
+    // TODO: deleted/offset/limit are unimplemented. Redpanda's server ignores
+    // them on this endpoint (it always returns the live pairs unpaginated), and
+    // the report notes pagination here is unstable because the result is
+    // unordered.
+    auto request = http::request_builder{}
+                     .method(boost::beast::http::verb::get)
+                     .path(fmt::format("/schemas/ids/{}/versions", id()))
+                     .header("accept", accept_json);
+    if (subject.has_value()) {
+        // Selects the context to resolve the id in. query_param_kv
+        // percent-encodes the value (":" -> "%3A").
+        request.query_param_kv("subject", subject->to_string());
+    }
+    maybe_add_basic_auth(request);
+
+    auto response = co_await perform_request(rtc, std::move(request));
+    if (!response.has_value()) {
+        co_return std::unexpected(
+          translate_schema_id_not_found(std::move(response.error()), id));
+    }
+    auto parsed = co_await parse_schema_id_subject_versions(
       std::move(response.value()), _qualified);
     if (!parsed.has_value()) {
         co_return std::unexpected(domain_error{std::move(parsed.error())});

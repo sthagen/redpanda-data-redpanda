@@ -66,7 +66,6 @@ struct partition_properties_stm_fixture : raft::raft_fixture {
     ss::future<> check_res(result<model::offset> res, bool expect_success) {
         ASSERT_TRUE_CORO(expect_success == res.has_value());
         if (!expect_success) {
-            // we don;t
             ASSERT_EQ_CORO(res.error(), errc::invalid_data_migration_state);
         }
     }
@@ -152,8 +151,8 @@ struct partition_properties_stm_fixture : raft::raft_fixture {
             auto o = co_await replicate_random_batches();
             vlog(tstlog.info, "last batches offset offset: {}", o);
 
-            // 10% chance to create a legacy record
-            if (random_generators::get_int(10) == 0) {
+            // 1/6 chance to create a legacy record
+            if (random_generators::get_int(6) == 0) {
                 revision_id = model::revision_id{};
             }
 
@@ -265,6 +264,12 @@ TEST_F_CORO(partition_properties_stm_fixture, test_basic_operations) {
     co_await disable_writes(model::revision_id{});
     co_await assert_writes(stm_t::writes_disabled::yes);
     // idempotent with empty revision id
+    co_await disable_writes(model::revision_id{});
+    co_await assert_writes(stm_t::writes_disabled::yes);
+    // a legacy command flips the state even when the current revision is also
+    // empty, i.e. adjacent legacy commands are not treated as out-of-order
+    co_await enable_writes(model::revision_id{});
+    co_await assert_writes(stm_t::writes_disabled::no);
     co_await disable_writes(model::revision_id{});
     co_await assert_writes(stm_t::writes_disabled::yes);
     // after reset, even revision id 1 works

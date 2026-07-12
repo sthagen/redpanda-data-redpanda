@@ -93,6 +93,7 @@ compaction_sink::compaction_sink(
   ss::abort_source& as,
   config::binding<size_t> max_object_size,
   size_t upload_part_size,
+  compaction_worker_probe& probe,
   prefix_logger& ctxlog,
   object_builder::options opts,
   cloud_topics::level_zero_notifier* notifier)
@@ -109,6 +110,7 @@ compaction_sink::compaction_sink(
   , _removable_tombstone_ranges(removable_tombstone_ranges)
   , _expected_compaction_epoch(expected_compaction_epoch)
   , _start_offset(start_offset)
+  , _probe(probe)
   , _notifier(notifier) {}
 
 ss::future<bool>
@@ -178,9 +180,13 @@ ss::future<> compaction_sink::compact_objects_without_update() {
     compact_map.emplace(_tp, std::move(compaction_update));
     auto replace_res = co_await do_compact_objects(std::move(compact_map));
     if (replace_res.has_value()) {
+        _probe.add_compaction_objects_committed(_output_objects);
+        _probe.add_compaction_bytes_committed(_output_bytes);
         vlog(
           _ctxlog.info, "Finalized job without a compaction metadata update");
     } else {
+        _probe.add_compaction_objects_rejected(_output_objects);
+        _probe.add_compaction_bytes_rejected(_output_bytes);
         vlog(_ctxlog.warn, "Could not finalize job: {}.", replace_res.error());
     }
 }
@@ -201,6 +207,8 @@ ss::future<> compaction_sink::compact_objects_with_update(
     auto commit_res = co_await do_compact_objects(std::move(compact_map));
 
     if (commit_res.has_value()) {
+        _probe.add_compaction_objects_committed(_output_objects);
+        _probe.add_compaction_bytes_committed(_output_bytes);
         vlog(
           _ctxlog.info,
           "Finalized job with compaction metadata update: {}",
@@ -247,6 +255,8 @@ ss::future<> compaction_sink::finalize(bool success) {
             auto res = co_await _notifier->set_min_allowed_local_threshold(
               _tp, *new_floor);
             if (!res.has_value()) {
+                _probe.add_compaction_objects_rejected(_output_objects);
+                _probe.add_compaction_bytes_rejected(_output_bytes);
                 vlog(
                   _ctxlog.warn,
                   "[{}] skipping compaction commit: failed to advance "

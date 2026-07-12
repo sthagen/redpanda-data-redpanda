@@ -23,6 +23,7 @@ go_library(
         "//src/go/rpk/pkg/cli/cluster/selftest",
         "//src/go/rpk/pkg/cli/cluster/storage",
         "//src/go/rpk/pkg/cli/cluster/txn",
+        "//src/go/rpk/pkg/cli/cluster/upgrade",
         "//src/go/rpk/pkg/cli/group",
         "//src/go/rpk/pkg/config",
         "//src/go/rpk/pkg/kafka",
