@@ -50,6 +50,8 @@
 #include <seastar/core/memory.hh>
 #include <seastar/core/smp.hh>
 
+#include <chrono>
+
 namespace {
 
 bytes node_uuid_key() {
@@ -223,6 +225,7 @@ void application::bootstrap_from_kvstore() {
     // Load the local node UUID, or create one if none exists.
     auto& kvs = storage.local().kvs();
     model::node_uuid node_uuid;
+    bool node_uuid_is_new = false;
     auto node_uuid_buf = kvs.get(
       storage::kvstore::key_space::controller, node_uuid_key());
     if (node_uuid_buf) {
@@ -235,7 +238,7 @@ void application::bootstrap_from_kvstore() {
     } else {
         node_uuid = model::node_uuid(uuid_t::create());
         vlog(_log.info, "Generated new UUID for node: {}", node_uuid);
-        _node_uuid_needs_persisting = true;
+        node_uuid_is_new = true;
     }
 
     _node_overrides.maybe_set_overrides(
@@ -249,13 +252,22 @@ void application::bootstrap_from_kvstore() {
           node_uuid,
           u.value());
         node_uuid = u.value();
-        _node_uuid_needs_persisting = true;
+        node_uuid_is_new = true;
     }
     storage
       .invoke_on_all([node_uuid](storage::api& storage) mutable {
           storage.set_node_uuid(node_uuid);
       })
       .get();
+
+    if (node_uuid_is_new) {
+        kvs
+          .persist_pre_start(
+            storage::kvstore::key_space::controller,
+            node_uuid_key(),
+            serde::to_iobuf(node_uuid))
+          .get();
+    }
 }
 
 void application::start_storage_services(test_cfg cfg) {
@@ -271,78 +283,150 @@ void application::start_storage_services(test_cfg cfg) {
       .get();
 }
 
-ss::future<> application::resolve_node_identity() {
-    auto& kvs = storage.local().kvs();
+ss::future<std::optional<model::node_id>>
+application::register_and_apply_join_snapshot(
+  cluster::cluster_discovery::join_retry_policy policy,
+  cluster::defer_needs_restart defer_needs_restart) {
+    auto registration_result
+      = co_await _cluster_discovery->register_with_cluster(policy);
 
-    // We need to persist the node's local UUID before potentially joining the
-    // cluster for the first time.
-    if (_node_uuid_needs_persisting) {
-        co_await kvs.put(
-          storage::kvstore::key_space::controller,
-          node_uuid_key(),
-          serde::to_iobuf(storage.local().node_uuid()));
+    if (!registration_result.has_value()) {
+        vassert(
+          policy
+            == cluster::cluster_discovery::join_retry_policy::
+              require_existing_cluster,
+          "register_with_cluster returned no result under retry_until_joined");
+        // No existing cluster was found (this node is likely a founder).
+        // Registration is deferred until later in the bootstrapping process.
+        co_return std::nullopt;
     }
 
-    auto invariants_buf = kvs.get(
-      storage::kvstore::key_space::controller,
-      cluster::controller::invariants_key());
-
-    bool ever_ran_controller = invariants_buf.has_value();
-
-    bool has_id = config::node().node_id().has_value() && ever_ran_controller;
-
-    bool force_override = _node_overrides.node_id().has_value()
-                          && _node_overrides.ignore_existing_node_id();
-
-    model::node_id node_id;
-    if (has_id && !force_override) {
+    if (registration_result->newly_registered) {
         vlog(
           _log.info,
-          "Running with already-established node ID {}",
-          config::node().node_id());
-        node_id = config::node().node_id().value();
-    } else if (auto id = _node_overrides.node_id(); id.has_value()) {
-        vlog(
-          _log.warn,
-          "Overriding node ID: {} -> {} [ignore_existing_node_id? {}]",
-          config::node().node_id(),
-          id,
-          has_id && force_override);
-        node_id = id.value();
-        // null out the config'ed ID indiscriminately; it will be set outside
-        // the conditional
-        co_await ss::smp::invoke_on_all(
-          [] { config::node().node_id.set_value(std::nullopt); });
-        if (invariants_buf.has_value()) {
-            auto invariants
-              = reflection::from_iobuf<cluster::configuration_invariants>(
-                std::move(invariants_buf.value()));
-            invariants.node_id = node_id;
-            co_await kvs.put(
-              storage::kvstore::key_space::controller,
-              cluster::controller::invariants_key(),
-              reflection::to_iobuf(
-                cluster::configuration_invariants{invariants}));
-            vlog(_log.debug, "Force-updated local node_id to {}", node_id);
+          "Registered with cluster as node ID {}",
+          registration_result->assigned_node_id);
+        if (registration_result->controller_snapshot.has_value()) {
+            auto snap = serde::from_iobuf<cluster::controller_join_snapshot>(
+              std::move(registration_result->controller_snapshot.value()));
+            co_await apply_controller_snapshot(snap, defer_needs_restart);
         }
-    } else {
-        auto registration_result
-          = co_await _cluster_discovery->register_with_cluster();
-        node_id = registration_result.assigned_node_id;
+    }
+    co_return registration_result->assigned_node_id;
+}
 
-        if (registration_result.newly_registered) {
-            vlog(
-              _log.info,
-              "Registered with cluster as node ID {}",
-              registration_result.assigned_node_id);
-            if (registration_result.controller_snapshot.has_value()) {
-                // Do something with the controller snapshot
-                auto snap
-                  = serde::from_iobuf<cluster::controller_join_snapshot>(
-                    std::move(registration_result.controller_snapshot.value()));
-                co_await apply_controller_snapshot(snap);
-            }
-        }
+application::node_id_source application::classify_node_id_source() {
+    bool ever_ran_controller = storage.local()
+                                 .kvs()
+                                 .get(
+                                   storage::kvstore::key_space::controller,
+                                   cluster::controller::invariants_key())
+                                 .has_value();
+    bool has_id = config::node().node_id().has_value() && ever_ran_controller;
+    bool force_override = _node_overrides.node_id().has_value()
+                          && _node_overrides.ignore_existing_node_id();
+    if (has_id && !force_override) {
+        return node_id_source::established;
+    }
+    if (_node_overrides.node_id().has_value()) {
+        return node_id_source::overridden;
+    }
+    return node_id_source::unregistered;
+}
+
+bool application::is_seed_node() const {
+    const auto& self_addr = config::node().advertised_rpc_api();
+    const auto& seeds = config::node().seed_servers();
+    return std::ranges::any_of(
+      seeds, [&](const auto& s) { return s.addr == self_addr; });
+}
+
+ss::future<> application::prime_node_identity() {
+    // A non-seed joiner always has an existing cluster to join, so register,
+    // retrying until it succeeds. A seed is either a genuine founder (no
+    // cluster exists yet) or a wiped seed rejoining.
+    // For the former, we fast-fail and defer to the authoritative founder
+    // handshake later in the bootstrapping process. For the latter, we take the
+    // fast joiner path.
+    const auto policy
+      = is_seed_node()
+          ? cluster::cluster_discovery::join_retry_policy::
+              require_existing_cluster
+          : cluster::cluster_discovery::join_retry_policy::retry_until_joined;
+    auto node_id = co_await register_and_apply_join_snapshot(policy);
+    if (!node_id.has_value()) {
+        co_return;
+    }
+    if (config::node().node_id() == std::nullopt) {
+        // If we previously didn't have a node ID, set it in the config. We
+        // will persist it in the kvstore when the controller starts up.
+        co_await ss::smp::invoke_on_all([id = *node_id] {
+            config::node().node_id.set_value(
+              std::make_optional<model::node_id>(id));
+        });
+    }
+    _node_identity_resolved = true;
+    vlog(
+      _log.info,
+      "Resolved node identity early as node_id {}, cluster UUID {}",
+      *node_id,
+      storage.local().get_cluster_uuid());
+}
+
+ss::future<model::node_id> application::apply_node_id_override() {
+    auto node_id = _node_overrides.node_id().value();
+    vlog(
+      _log.warn,
+      "Overriding node ID: {} -> {} [ignore_existing_node_id? {}]",
+      config::node().node_id(),
+      node_id,
+      _node_overrides.ignore_existing_node_id());
+    // Null out the config'ed ID; the caller re-sets it after we return.
+    co_await ss::smp::invoke_on_all(
+      [] { config::node().node_id.set_value(std::nullopt); });
+    if (
+      auto invariants_buf = storage.local().kvs().get(
+        storage::kvstore::key_space::controller,
+        cluster::controller::invariants_key());
+      invariants_buf.has_value()) {
+        auto invariants
+          = reflection::from_iobuf<cluster::configuration_invariants>(
+            std::move(invariants_buf.value()));
+        invariants.node_id = node_id;
+        co_await storage.local().kvs().put(
+          storage::kvstore::key_space::controller,
+          cluster::controller::invariants_key(),
+          reflection::to_iobuf(cluster::configuration_invariants{invariants}));
+        vlog(_log.debug, "Force-updated local node_id to {}", node_id);
+    }
+    co_return node_id;
+}
+
+ss::future<> application::resolve_node_identity() {
+    if (_node_identity_resolved) {
+        co_return;
+    }
+
+    model::node_id node_id;
+    switch (_node_id_source.value()) {
+    case node_id_source::established:
+        node_id = config::node().node_id().value();
+        vlog(_log.info, "Running with already-established node ID {}", node_id);
+        break;
+    case node_id_source::overridden:
+        node_id = co_await apply_node_id_override();
+        break;
+    case node_id_source::unregistered:
+        // Reached only by an unregistered seed (a founding node, or a wiped
+        // seed rejoining whose early registration found no cluster).
+        // This runs after initialization has already occured, so apply the
+        // join snapshot with needs_restart configs pending.
+        node_id = (co_await register_and_apply_join_snapshot(
+                     cluster::cluster_discovery::join_retry_policy::
+                       retry_until_joined,
+                     cluster::defer_needs_restart::yes))
+                    .value();
+        break;
     }
 
     if (config::node().node_id() == std::nullopt) {
@@ -354,6 +438,7 @@ ss::future<> application::resolve_node_identity() {
         });
     }
 
+    _node_identity_resolved = true;
     vlog(
       _log.info,
       "Starting Redpanda with node_id {}, cluster UUID {}",
@@ -409,13 +494,15 @@ ss::future<> application::bootstrap_controller_view() {
 }
 
 ss::future<> application::apply_controller_snapshot(
-  const cluster::controller_join_snapshot& snap) {
+  const cluster::controller_join_snapshot& snap,
+  cluster::defer_needs_restart defer_needs_restart) {
     co_await apply_feature_table_snapshot(snap.features.snap);
 
     // Only apply the snapshot's cluster config state if its version is higher
     // than the existing preloaded state.
     if (snap.config.version > _config_preload.version) {
-        _config_preload = co_await cluster::config_manager::preload_join(snap);
+        _config_preload = co_await cluster::config_manager::preload_join(
+          snap, defer_needs_restart);
         co_await cluster::config_manager::write_local_cache(
           _config_preload.version, _config_preload.raw_values);
     }
@@ -523,14 +610,6 @@ void application::wire_up_and_start(
     // Storage services.
     wire_up_storage_services();
     start_storage_services(cfg);
-
-    // Begin the cluster discovery manager so we can confirm our initial node
-    // ID. A valid node ID is required before we can initialize the rest of our
-    // subsystems.
-    _cluster_discovery = std::make_unique<cluster::cluster_discovery>(
-      storage.local().node_uuid(),
-      storage.local().get_cluster_uuid(),
-      app_signal.abort_source());
 
     wire_up_and_start_rpc_service();
 

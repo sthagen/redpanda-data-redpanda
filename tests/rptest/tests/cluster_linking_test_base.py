@@ -103,6 +103,10 @@ CONTROLLER_LOCKED_TASKS = [
     "Roles Migrator Task",
 ]
 
+# Matches mirroring_task::task_name in
+# src/v/cluster_link/schema_registry_sync/mirroring_task.h
+SCHEMA_REGISTRY_SYNC_TASK_NAME = "Schema Registry Shadowing"
+
 ALL_STORAGE_MODES = [
     TopicSpec.STORAGE_MODE_LOCAL,
     TopicSpec.STORAGE_MODE_IMPL_TIERED_V1,
@@ -473,6 +477,20 @@ class ClusterLinkingProgressVerifier:
         self.target_consumer.stop()
         self.producer.stop()
 
+    def _raise_if_worker_crashed(self):
+        """Fail fast if any kgo-verifier worker's status thread has errored.
+
+        A worker whose process dies (e.g. a client-library crash such as the
+        franz-go produce-path panic) stops answering status polls and can never
+        recover. Its StatusThread records the failure -- naming the worker that
+        exited -- and raise_on_error() re-raises it here, so validate_progress
+        surfaces that descriptive error immediately instead of waiting out
+        progress_timeout and reporting an opaque "Workload stalled".
+        """
+        for svc in (self.producer, self.source_consumer, self.target_consumer):
+            if svc._status_thread is not None:
+                svc._status_thread.raise_on_error()
+
     def validate_progress(self, progress_timeout=60, backoff_delay=5):
         workload_last_progress = time.time()
         source_consumer_last_reads = 0
@@ -484,6 +502,11 @@ class ClusterLinkingProgressVerifier:
             producer_acked = self.producer.produce_status.acked
             source_reads = self.source_consumer.consumer_status.validator.total_reads
             target_reads = self.target_consumer.consumer_status.validator.total_reads
+
+            # A crashed kgo-verifier worker can never make progress, so fail
+            # fast with the descriptive error its status thread recorded rather
+            # than blaming a "Workload stalled" after progress_timeout elapses.
+            self._raise_if_worker_crashed()
 
             # track workload progress
             if (
@@ -585,6 +608,16 @@ class ShadowLinkTestBase(PreallocNodesTest):
     the test uses a primary service from MultiClusterServices as
     the target cluster. Secondary service is used as the source cluster.
     """
+
+    # Pause Schema Registry API-mode sync and wait for the sync task to park
+    # before the target cluster is stopped, so shutdown never overlaps an
+    # in-flight sync (an overlap can stall shutdown long enough to time the
+    # test out). Set False (class- or instance-level) to opt out, e.g. for
+    # tests that deliberately exercise shutdown during a sync.
+    pause_sr_sync_before_shutdown: bool = True
+    # The drain must outlast a mid-flight sync's destination write retries
+    # (~70s worst case) on a loaded debug machine.
+    sr_sync_pause_timeout_sec: int = 120
 
     def __init__(
         self,
@@ -751,6 +784,92 @@ class ShadowLinkTestBase(PreallocNodesTest):
         self.admin_v2 = AdminV2(self.target_cluster_service)
         self.service_client = self.admin_v2.shadow_link()
         self.internal_service_client = self.admin_v2.internal_shadow_link()
+        self._install_sr_sync_pause_hook()
+
+    def _install_sr_sync_pause_hook(self) -> None:
+        """Make the target service's stop() pause SR sync first. The @cluster
+        decorator stops the target cluster inside the test wrapper, before
+        tearDown runs, so a tearDown hook would fire only after the cluster is
+        already gone; wrapping stop() runs the pause right before any stop of
+        a live cluster, on both the passed and failed paths, while both
+        clusters are still up."""
+        target = self.target_cluster_service
+        original_stop = target.stop
+
+        def stop_with_sr_sync_pause(**kwargs: Any) -> None:
+            # Skip when nothing is running: ducktape's teardown stops services
+            # again after the decorator already stopped this one, and a pause
+            # attempt against a stopped cluster would only log a spurious
+            # warning. Any stop of a live cluster (including a mid-test one)
+            # pauses first.
+            if self.pause_sr_sync_before_shutdown and target.started_nodes():
+                try:
+                    self._pause_schema_registry_sync(self.sr_sync_pause_timeout_sec)
+                except Exception:
+                    # Best effort: a failed pause must not replace the test's
+                    # own result; shutdown just proceeds with the usual
+                    # overlap odds.
+                    self.logger.warn(
+                        "failed to pause Schema Registry sync before shutdown",
+                        exc_info=True,
+                    )
+            original_stop(**kwargs)
+
+        target.stop = stop_with_sr_sync_pause
+
+    def _pause_schema_registry_sync(self, timeout_sec: int) -> None:
+        """Pause Schema Registry API-mode sync on every link and wait until
+        the sync task is parked, so no sync is running when the clusters
+        shut down."""
+        for link in self.list_links():
+            sr = link.configurations.schema_registry_sync_options
+            if not sr.HasField("shadow_schema_registry_api"):
+                continue
+            link_name = link.name
+            if not sr.shadow_schema_registry_api.paused:
+                self.logger.info(
+                    f"Pausing Schema Registry sync on link {link_name} before shutdown"
+                )
+                sr.shadow_schema_registry_api.paused = True
+                self.update_link(
+                    shadow_link=link,
+                    update_mask=google.protobuf.field_mask_pb2.FieldMask(
+                        paths=[
+                            "configurations.schema_registry_sync_options"
+                            ".shadow_schema_registry_api.paused"
+                        ]
+                    ),
+                )
+
+            def sr_task_parked() -> bool:
+                status = self.get_link(link_name).status
+                for task in status.task_statuses:
+                    if task.name == SCHEMA_REGISTRY_SYNC_TASK_NAME:
+                        if task.state not in (
+                            shadow_link_pb2.TASK_STATE_PAUSED,
+                            shadow_link_pb2.TASK_STATE_NOT_RUNNING,
+                        ):
+                            return False
+                        # The task reports PAUSED before its in-flight run
+                        # has drained (task::pause flips the state, then
+                        # closes the runner gate), so PAUSED alone is not
+                        # proof the sync stopped. current_sync clears only
+                        # when the run actually exits; require that too.
+                        return not status.schema_registry_sync_status.HasField(
+                            "current_sync"
+                        )
+                # No task entry: nothing is running, so nothing to drain.
+                return True
+
+            wait_until(
+                sr_task_parked,
+                timeout_sec=timeout_sec,
+                backoff_sec=1,
+                err_msg=(
+                    f"Schema Registry sync task on link {link_name} "
+                    "did not pause before shutdown"
+                ),
+            )
 
     @property
     def source_cluster(self) -> Cluster:

@@ -236,6 +236,30 @@ SEASTAR_THREAD_TEST_CASE(test_http_POST_roundtrip) {
       });
 }
 
+SEASTAR_THREAD_TEST_CASE(test_collect_response_carries_headers) {
+    auto config = transport_configuration();
+    auto [server, client] = started_client_and_server(config);
+
+    http::client::request_header header;
+    header.method(boost::beast::http::verb::get);
+    header.target("/get");
+    header_set_host(header, config.server_addr);
+
+    auto resp = client->request_and_collect_response(std::move(header)).get();
+    server->stop().get();
+
+    BOOST_REQUIRE_EQUAL(resp.status, boost::beast::http::status::ok);
+    BOOST_REQUIRE(!resp.body.empty());
+    // The collected headers mirror the wire: the server's content-length
+    // matches the body actually received.
+    auto content_length = resp.headers.find(
+      boost::beast::http::field::content_length);
+    BOOST_REQUIRE(content_length != resp.headers.end());
+    BOOST_REQUIRE_EQUAL(
+      std::string(content_length->value()),
+      std::to_string(resp.body.size_bytes()));
+}
+
 /// Test http streaming requests e2e in ss::async
 template<class Func>
 void test_http_streaming_request(

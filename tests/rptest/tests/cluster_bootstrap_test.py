@@ -11,11 +11,12 @@ import concurrent.futures
 import threading
 
 from ducktape.mark import matrix
+from ducktape.utils.util import wait_until
 from requests.exceptions import ConnectionError
 
 from rptest.clients.rpk import TopicSpec
 from rptest.services.cluster import cluster
-from rptest.services.redpanda import RpkTool
+from rptest.services.redpanda import RedpandaService, RpkTool, SISettings
 from rptest.services.redpanda_installer import RedpandaInstaller
 from rptest.services.utils import NodeCrash
 from rptest.tests.redpanda_test import RedpandaTest
@@ -235,4 +236,127 @@ class ClusterBootstrapUpgrade(RedpandaTest):
                 "empty_seed_starts_cluster": empty_seed_starts_cluster
             },
             omit_seeds_on_idx_one=False,
+        )
+
+
+class ClusterBootstrapJoinerConfigPriming(RedpandaTest):
+    """
+    Ensures that a first time joiner (non-seed) node correctly recieves a cluster
+    wide view of the config before initializing its subsystems (just as a restarting node would).
+    """
+
+    def __init__(self, test_context):
+        super().__init__(
+            test_context=test_context,
+            num_brokers=4,
+            si_settings=SISettings(test_context=test_context),
+        )
+        self.admin = self.redpanda._admin
+
+    def setUp(self):
+        # Defer startup to the test body so we can add the joiner separately.
+        pass
+
+    @cluster(num_nodes=4)
+    def test_joiner_primes_config_before_sizing_memory_groups(self):
+        seeds = self.redpanda.nodes[:3]
+        joiner = self.redpanda.nodes[3]
+
+        # Form the cluster (with cloud storage enabled as a cluster-level
+        # bootstrap config) using only the seed nodes.
+        set_seeds_for_cluster(self.redpanda, num_seeds=3)
+        self.redpanda.start(nodes=seeds)
+
+        # Make `joiner` a genuine first-time joiner that must learn the cluster's
+        # cloud-storage configuration from its join snapshot rather than from a
+        # local file. ducktape pre-writes .bootstrap.yaml to every node; remove
+        # it so the joiner starts with cloud_storage_enabled at its default
+        # (false), exactly as a freshly-(re)added node does in production.
+        joiner.account.ssh(f"rm -f {RedpandaService.CLUSTER_BOOTSTRAP_CONFIG_FILE}")
+
+        # Add the joiner and wait for it to fully register with the cluster.
+        self.redpanda.start_node(joiner)
+        wait_until(
+            lambda: self.redpanda.registered(joiner),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="joiner failed to register with the cluster",
+        )
+
+        # The joiner logs its per-shard memory-group allocations once at
+        # startup. With cloud storage enabled cluster-wide, its cloud-topics
+        # compaction reservation must be non-zero; a zero reservation means it
+        # sized memory groups before applying its join snapshot.
+        assert self.redpanda.search_log_node(
+            joiner, "Per shard memory group allocations"
+        ), "joiner did not log its per-shard memory-group allocations"
+        assert not self.redpanda.search_log_node(
+            joiner, "cloud topics compaction: 0.000bytes"
+        ), (
+            "joiner sized its memory groups before its cloud storage "
+            "configuration was primed (cloud-topics reservation was 0)"
+        )
+        assert self.redpanda.search_log_node(
+            joiner, "Resolved node identity early as node_id"
+        ), "joiner did not take the early first-time-join prime path"
+
+
+class ClusterBootstrapWipedSeedRejoin(RedpandaTest):
+    """
+    Regression test for a wiped seed node rejoining a cloud-storage cluster.
+    """
+
+    def __init__(self, test_context):
+        super().__init__(
+            test_context=test_context,
+            num_brokers=3,
+            si_settings=SISettings(test_context=test_context),
+        )
+
+    def setUp(self):
+        # Defer startup so we can wipe and re-add a seed from the test body.
+        pass
+
+    PRIMED_EARLY = "Resolved node identity early as node_id"
+    ZERO_CLOUD_RESERVATION = "cloud topics compaction: 0.000bytes"
+
+    @cluster(num_nodes=3)
+    def test_wiped_seed_rejoin_primes_config_early(self):
+        # All three nodes are seeds; cloud storage is enabled cluster-wide.
+        set_seeds_for_cluster(self.redpanda, num_seeds=3)
+        self.redpanda.start()
+
+        victim = self.redpanda.nodes[2]
+
+        # Wipe the seed's local state and its .bootstrap.yaml so it rejoins as a
+        # wiped seed with cloud_storage_enabled at its default (false) locally,
+        # forcing it to learn cloud storage from the cluster. Truncate the log
+        # too so the assertions below only see the rejoin boot, not the original
+        # one that had cloud storage enabled from .bootstrap.yaml.
+        self.redpanda.stop_node(victim)
+        self.redpanda.remove_local_data(victim)
+        victim.account.ssh(f"rm -f {RedpandaService.CLUSTER_BOOTSTRAP_CONFIG_FILE}")
+        victim.account.ssh(f"truncate -s 0 {RedpandaService.STDOUT_STDERR_CAPTURE}")
+
+        self.redpanda.start_node(victim)
+        wait_until(
+            lambda: self.redpanda.registered(victim),
+            timeout_sec=60,
+            backoff_sec=1,
+            err_msg="wiped seed failed to rejoin the cluster",
+        )
+
+        # The wiped seed should have registered with the existing cluster via
+        # the bounded require_existing_cluster path and primed its identity
+        # early, rather than falling through to the late founder/resolve path.
+        assert self.redpanda.search_log_node(victim, self.PRIMED_EARLY), (
+            "wiped seed did not take the early prime path "
+            "(require_existing_cluster registration)"
+        )
+
+        # Memory groups should be sized *with* cloud storage enabled, so the
+        # running config and the sizing agree.
+        assert not self.redpanda.search_log_node(victim, self.ZERO_CLOUD_RESERVATION), (
+            "wiped seed sized its memory groups before priming cloud storage "
+            "(cloud-topics reservation was 0)"
         )

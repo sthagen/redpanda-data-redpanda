@@ -112,7 +112,11 @@ class ShutdownTest(EndToEndTest):
                 self.redpanda.logger.info(
                     f"Restarting leader node {leader.account.hostname}"
                 )
-                self.redpanda.restart_nodes(leader)
+                # The background failure injector repeatedly isolates a random
+                # non-leader node, which can strip the 3-node controller of
+                # quorum while the restarted node is trying to rejoin. Give the
+                # restarting node some extra timeout slack.
+                self.redpanda.restart_nodes(leader, start_timeout=90)
                 pending_attempts -= 1
         finally:
             # Stop the finjector

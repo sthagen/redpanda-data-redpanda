@@ -175,6 +175,24 @@ ss::future<errc> frontend::batch_update_mirror_topic_status(
     if (!cluster_linking_enabled()) {
         co_return errc::feature_disabled;
     }
+    // Defense in depth at the replicate boundary. failover_link_topics only
+    // produces this batched command once batch_mirror_topic_status is active
+    // cluster-wide, and the controller leader observes activation no later than
+    // any follower, so a node reaching this path (locally or via a forwarded
+    // RPC) with the feature inactive is version skew or a bug -- never a normal
+    // state. Refuse rather than replicate: the batched command's record type is
+    // unknown to pre-feature binaries and would poison a downgrade's
+    // controller-log replay.
+    if (!_features->is_active(features::feature::batch_mirror_topic_status)) {
+        vlog(
+          cluster::clusterlog.error,
+          "Refusing to replicate a batched mirror-topic-status update for link "
+          "{} while the batch_mirror_topic_status feature is inactive; the "
+          "feature gates the only producer of this command, so this indicates "
+          "version skew or a logic error",
+          id);
+        co_return errc::feature_disabled;
+    }
     cluster_link_cmd c{
       cluster::cluster_link_batch_update_mirror_topic_status_cmd(
         id, std::move(cmd))};

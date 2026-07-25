@@ -165,7 +165,7 @@ class RpkShadowLinkTest(ShadowLinkTestBase):
         return the ACL fields expected to appear on the shadow cluster."""
         user = "shadow-user"
         acl_topic = "acl-topic"
-        self.source_cluster_rpk.sasl_create_user(user, "shadow-pass")
+        self.source_cluster_rpk.sasl_create_user(user, "shadow-pass-1234")
         self.source_cluster_rpk.acl_create(
             RPKACLInput(
                 allow_principal=[user],

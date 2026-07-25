@@ -631,6 +631,11 @@ public:
         return _registry.get_subjects(inc_del);
     }
 
+    ss::future<chunked_vector<pandaproxy::schema_registry::context>>
+    list_contexts() const override {
+        return _registry.list_contexts();
+    }
+
     ss::future<pandaproxy::schema_registry::context_schema_id> create_schema(
       pandaproxy::schema_registry::subject_schema unparsed) override {
         return _registry.create_schema(std::move(unparsed));
@@ -675,6 +680,11 @@ public:
     ss::future<bool>
     delete_config(pandaproxy::schema_registry::context_subject sub) override {
         return _registry.delete_config(std::move(sub));
+    }
+
+    ss::future<>
+    delete_context(pandaproxy::schema_registry::context ctx) override {
+        return _registry.delete_context(std::move(ctx));
     }
 
     const std::vector<pandaproxy::schema_registry::stored_schema>& get_all() {

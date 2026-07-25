@@ -10,6 +10,7 @@
 
 import asyncio
 from contextlib import closing
+import json
 import random
 import threading
 import time
@@ -589,10 +590,16 @@ class ConsumerGroupTest(RedpandaTest):
                     )
                     try:
                         consumer.subscribe([self.topic_spec.name])
-                        # poll() must run long enough for JoinGroup to
-                        # complete so the group is registered; kafka-python
-                        # 2.3.1's coordinator poll honors this timeout.
-                        consumer.poll(timeout_ms=5000)
+                        # Poll until the consumer is actually assigned
+                        # partitions, which proves JoinGroup/SyncGroup
+                        # completed and the group is registered on the
+                        # coordinator.
+                        deadline = time.monotonic() + 30
+                        while not consumer.assignment() and time.monotonic() < deadline:
+                            consumer.poll(timeout_ms=500)
+                        assert consumer.assignment(), (
+                            f"consumer g-{i} failed to join group in time"
+                        )
                     finally:
                         consumer.close(autocommit=True)
                 except Exception as e:
@@ -600,11 +607,15 @@ class ConsumerGroupTest(RedpandaTest):
                     raise
 
             async def create_groups(r):
+                # Limit to 10 concurrent connections to avoid overwhelming the broker
+                sem = asyncio.Semaphore(10)
+
+                async def throttled(i):
+                    async with sem:
+                        await asyncio.to_thread(poll_once, i + r * groups_in_round)
+
                 results = await asyncio.gather(
-                    *[
-                        asyncio.to_thread(poll_once, i + r * groups_in_round)
-                        for i in range(groups_in_round)
-                    ],
+                    *[throttled(i) for i in range(groups_in_round)],
                     return_exceptions=True,
                 )
                 for res in results:
@@ -918,14 +929,15 @@ class ConsumerGroupTest(RedpandaTest):
         )
         topic_count = 1
         partition_count = 20
-        consumer_count = 4
+        # One consumer per partition: each consumer then owns exactly one
+        # partition, so its consume() queue holds only that partition and any
+        # non-empty poll covers it -- avoiding the cross-partition delivery-order
+        # starvation that made this test flaky (CORE-13976). See the consume loop.
+        consumer_count = partition_count
         group = "test-lag-metrics-group"
         # Use a small batch size to ensure that fetches are distributed across all partitions
         batch_size = 1
         produce_msg_cnt_min = 1000
-        consume_count = (topic_count * partition_count * produce_msg_cnt_min) // (
-            2 * consumer_count
-        )
 
         self.redpanda.set_cluster_config(
             {
@@ -948,6 +960,12 @@ class ConsumerGroupTest(RedpandaTest):
             ]
         )
 
+        # Per-consumer librdkafka statistics, refreshed via stats_cb. Cheap to
+        # collect; only dumped on failure (see not_ready_diagnostic) to show the
+        # per-broker connection state and per-partition fetch state when a
+        # consumer stalls reading from a broker. See CORE-13976.
+        consumer_stats: dict[int, dict] = {}
+
         def create_consumer(instance_id: int) -> Consumer:
             return Consumer(
                 {
@@ -959,6 +977,10 @@ class ConsumerGroupTest(RedpandaTest):
                     "enable.auto.offset.store": True,
                     "enable.auto.commit": False,
                     "max.partition.fetch.bytes": batch_size,
+                    "statistics.interval.ms": 2000,
+                    "stats_cb": lambda s, i=instance_id: consumer_stats.__setitem__(
+                        i, json.loads(s)
+                    ),
                     "log_level": 7,
                     "debug": "cgrp",
                 },
@@ -1010,12 +1032,110 @@ class ConsumerGroupTest(RedpandaTest):
             self.logger.debug(f"  Produced {tp} - flushed {offset} msgs")
 
         self.logger.info("Consuming")
-        for consumer in consumers:
-            consumer.consume(num_messages=consume_count, timeout=10)
-            assert len(consumer.assignment()) != 0, (
-                "Consumer was not assigned any partitions"
-            )
-            self.logger.debug("  Consumed")
+
+        # Consume until every consumer has read at least one record from each of
+        # its assigned partitions, so that every partition ends up with a
+        # committed offset (and therefore a committed-offset/lag metric).
+
+        # assigned
+        # consumer -> set{(topic, partition)}
+        # For each consumer, set of partitions assigned as of most recent request
+        assigned: list[set[tuple[str, int]]] = [set() for _ in consumers]
+
+        # consumed_from
+        # consumer -> set{(topic, partition)}
+        # For each consumer, set of all partitions ever consumed from
+        consumed_from: list[set[tuple[str, int]]] = [set() for _ in consumers]
+
+        def is_consumer_ready(i):
+            """
+            For consumer i, returns True if the consumer has read from
+            all assigned partitions, False otherwise.
+            """
+            if not assigned[i]:
+                self.logger.debug(f"Consumer {i} was not assigned any partitions.")
+                return False
+            elif not assigned[i] <= consumed_from[i]:
+                not_yet_assigned = {
+                    str(p) for p in assigned[i] if p not in consumed_from[i]
+                }
+                self.logger.debug(
+                    f"Consumer {i} has not yet consumed from assigned "
+                    f"partitions: {', '.join(not_yet_assigned)}."
+                )
+                return False
+            else:
+                return True
+
+        def all_consumers_ready():
+            return all(map(is_consumer_ready, range(len(consumers))))
+
+        def consume_and_check_ready():
+            """
+            For each consumer:
+            - consume partition_count messages.
+            - set assigned with the resulting set of partitions assigned to the
+              consumer.
+            - update consumed_from with each partition consumed from
+
+            Return true once all partitions have read at least one message from
+            each partition to which they were most recently assigned.
+            """
+            for i, consumer in enumerate(consumers):
+                msgs = consumer.consume(num_messages=partition_count, timeout=1)
+                assigned[i] = {(tp.topic, tp.partition) for tp in consumer.assignment()}
+                for msg in msgs:
+                    if msg is None or msg.error() is not None:
+                        continue
+                    consumed_from[i].add((msg.topic(), msg.partition()))
+            return all_consumers_ready()
+
+        def not_ready_diagnostic() -> str:
+            """On timeout, dump each stalled consumer's assigned-but-unconsumed
+            partitions together with the librdkafka broker/partition state, so a
+            failure is self-diagnosing (which broker's fetch path stalled, and
+            whether it looks like a dead connection vs a stuck fetch)."""
+            lines = ["Timed out waiting for all partitions to be consumed"]
+            for i in range(len(consumers)):
+                missing = assigned[i] - consumed_from[i]
+                if assigned[i] and not missing:
+                    continue
+                stats = consumer_stats.get(i, {})
+                brokers = {
+                    b.get("nodeid"): {
+                        "state": b.get("state"),
+                        "rxidle_us": b.get("rxidle"),
+                    }
+                    for b in stats.get("brokers", {}).values()
+                    if b.get("nodeid", -1) >= 0
+                }
+                lines.append(
+                    f"consumer {i}: missing {sorted(missing)} of assigned "
+                    f"{sorted(assigned[i])}; brokers={brokers}"
+                )
+                for topic in stats.get("topics", {}).values():
+                    tname = topic.get("topic")
+                    for pid, p in topic.get("partitions", {}).items():
+                        try:
+                            key = (tname, int(pid))
+                        except ValueError:
+                            continue
+                        if key not in missing:
+                            continue
+                        lines.append(
+                            f"  {tname}/{pid}: leader={p.get('leader')} "
+                            f"fetch_state={p.get('fetch_state')} "
+                            f"next_offset={p.get('next_offset')} "
+                            f"rxbytes={p.get('rxbytes')} lag={p.get('consumer_lag')}"
+                        )
+            return "\n".join(lines)
+
+        wait_until(
+            consume_and_check_ready,
+            30,
+            1,
+            err_msg=not_ready_diagnostic,
+        )
 
         self.logger.info("Waiting for lag_metrics")
         time.sleep(wait_for_lag_secs)

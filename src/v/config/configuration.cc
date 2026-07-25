@@ -887,6 +887,19 @@ configuration::configuration()
        model::compression::lz4,
        model::compression::zstd,
        model::compression::producer})
+  , kafka_produce_enable_batch_compression(
+      *this,
+      "kafka_produce_enable_batch_compression",
+      "Enables broker-side compression on the produce path. When enabled, "
+      "produced batches are recompressed to match the topic's effective "
+      "`compression.type` if their codec differs from it. An effective "
+      "compression type of `producer` retains the codec set by the producing "
+      "client. When disabled, batches are always stored with the codec set by "
+      "the producing client.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      true,
+      property<bool>::noop_validator,
+      legacy_default<bool>{false, legacy_version{18}})
   , fetch_max_bytes(
       *this,
       "fetch_max_bytes",
@@ -899,6 +912,14 @@ configuration::configuration()
       "Use a separate scheduler group for fetch processing.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       true)
+  , kafka_fetch_read_coalescing_enabled(
+      *this,
+      "kafka_fetch_read_coalescing_enabled",
+      "Coalesce concurrent fetches of the same partition offset into one read "
+      "and serialization shared across the requesting consumers, reducing "
+      "duplicate reads and fetch-response memory under high fanout.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      false)
   , use_produce_scheduler_group(
       *this,
       "use_produce_scheduler_group",
@@ -1062,9 +1083,9 @@ configuration::configuration()
       "The topic property `min.cleanable.dirty.ratio` overrides the value of "
       "`min_cleanable_dirty_ratio` at the topic level.",
       {.needs_restart = needs_restart::no,
-       .example = "0.2",
+       .example = "0.5",
        .visibility = visibility::user},
-      0.2,
+      0.5,
       {.min = 0.0, .max = 1.0})
   , min_compaction_lag_ms(
       *this,
@@ -1566,8 +1587,7 @@ configuration::configuration()
       "storage_compaction_key_map_memory_limit_percent",
       "Limit on `storage_compaction_key_map_memory`, expressed as a percentage "
       "of memory per shard, that bounds the amount of memory used by "
-      "compaction key-offset maps. Memory per shard is computed after "
-      "`data_transforms_per_core_memory_reservation`, and only applies when "
+      "compaction key-offset maps. Only applies when "
       "`log_compaction_use_sliding_window` is set to `true`.",
       {.needs_restart = needs_restart::yes,
        .example = "12.0",
@@ -2067,8 +2087,8 @@ configuration::configuration()
       *this,
       true,
       "cloud_storage_enabled",
-      "Enable object storage. Must be set to `true` to use Tiered Storage or "
-      "Remote Read Replicas.",
+      "Enable object storage. Must be set to `true` to use Tiered Storage, "
+      "Remote Read Replicas, or Cloud Topics.",
       meta{.needs_restart = needs_restart::yes, .visibility = visibility::user},
       false)
   , cloud_storage_enable_remote_read(
@@ -3029,6 +3049,18 @@ configuration::configuration()
        .visibility = visibility::tunable},
       10,
       {.min = 1})
+  , log_eviction_exempt_topics(
+      *this,
+      "log_eviction_exempt_topics",
+      "A list of topics in the kafka namespace whose local log is exempt "
+      "from any form of data deletion: retention settings, local retention "
+      "for topics with Tiered Storage enabled, and disk space management "
+      "never remove their data from local disk, and partition moves always "
+      "deliver the full log to the new replica. Does not affect topic "
+      "deletion via the Kafka API (see kafka_nodelete_topics).",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      {model::schema_registry_internal_tp.topic()},
+      &validate_non_empty_string_vec)
   , initial_retention_local_target_bytes_default(
       *this,
       "initial_retention_local_target_bytes_default",
@@ -3966,6 +3998,23 @@ configuration::configuration()
       {.needs_restart = needs_restart::no,
        .visibility = visibility::user,
        .aliases = {"schema_registry_normalize_on_startup"}},
+      false)
+  , schema_registry_deferred_recovery(
+      *this,
+      "schema_registry_deferred_recovery",
+      "Defer schema compilation during Schema Registry startup, then compile "
+      "the loaded schemas in parallel across cores. If disabled, every "
+      "replayed record is compiled sequentially during the replay.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      true)
+  , schema_registry_replay_on_startup(
+      *this,
+      "schema_registry_replay_on_startup",
+      "Replay the internal `_schemas` topic into the store at Schema Registry "
+      "start-up instead of lazily on the first request. Makes recovery time "
+      "predictable and keeps the first request from blocking behind a full "
+      "replay.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
       false)
   , schema_registry_avro_use_named_references(
       *this, "schema_registry_avro_use_named_references")
@@ -4999,6 +5048,37 @@ configuration::configuration()
       "in time and blast radius. Lower values mean more, smaller jobs.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       1_GiB)
+  , cloud_topics_leveling_max_ranges_per_partition(
+      *this,
+      "cloud_topics_leveling_max_ranges_per_partition",
+      "Maximum number of levelable ranges returned per partition by a single "
+      "leveling scan. Bounds the scan reply's size as well as the rate at "
+      "which leveling work is produced along with "
+      "`cloud_topics_leveling_interval_ms`.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      5)
+  , cloud_topics_compaction_commit_interval_bytes(
+      *this,
+      "cloud_topics_compaction_commit_interval_bytes",
+      "Bytes of finished output an L1 compaction job accumulates before "
+      "committing it to the metastore. Commits happen at the next source "
+      "extent boundary once at least this much output is pending. Lower "
+      "values bound the work lost to a failed job and the time committed "
+      "objects spend pre-registered, at the cost of more metastore commits "
+      "and one potentially undersized trailing object per commit.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      512_MiB)
+  , cloud_topics_leveling_commit_interval_bytes(
+      *this,
+      "cloud_topics_leveling_commit_interval_bytes",
+      "Bytes of finished output an L1 leveling job accumulates before "
+      "committing it to the metastore. Commits happen at the next source "
+      "extent boundary once at least this much output is pending. Lower "
+      "values bound the work lost to a failed job and the time committed "
+      "objects spend pre-registered, at the cost of more metastore commits "
+      "and one potentially undersized trailing object per commit.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      512_MiB)
   , cloud_topics_compaction_disabled(
       *this,
       "cloud_topics_compaction_disabled",

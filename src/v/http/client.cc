@@ -786,9 +786,12 @@ ss::future<http::downloaded_response> client::request_and_collect_response(
     }
 
     auto status_code = co_await status(response);
+    boost::beast::http::fields headers = response->get_headers();
     auto body = co_await drain(response);
     co_return downloaded_response{
-      .status = status_code, .body = std::move(body)};
+      .status = status_code,
+      .body = std::move(body),
+      .headers = std::move(headers)};
 }
 
 ss::output_stream<char> client::request_stream::as_output_stream() {

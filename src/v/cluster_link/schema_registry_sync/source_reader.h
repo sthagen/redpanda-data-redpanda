@@ -48,6 +48,14 @@ struct source_error {
 template<typename T>
 using source_result = std::expected<T, source_error>;
 
+/// A config read from the source: the compatibility-level override (nullopt
+/// when the source has none) plus any unsupported config fields, for the
+/// caller's unsupported-feature policy.
+struct source_config_read {
+    std::optional<ppsr::compatibility_level> compatibility;
+    chunked_vector<ppsr::unsupported_feature> unsupported;
+};
+
 /// \brief Abstraction over a source Schema Registry, scoped to one link.
 ///
 /// Reads are split into discovery (list subjects/versions) and fetch (read a
@@ -90,8 +98,9 @@ public:
     virtual ss::future<source_result<std::optional<ppsr::mode>>>
     read_mode(ppsr::context_subject, ss::abort_source&) = 0;
 
-    /// As read_mode, for the compatibility-level override.
-    virtual ss::future<source_result<std::optional<ppsr::compatibility_level>>>
+    /// As read_mode, for the compatibility-level override plus any unsupported
+    /// config fields.
+    virtual ss::future<source_result<source_config_read>>
     read_config(ppsr::context_subject, ss::abort_source&) = 0;
 
     /// Releases any resources the reader holds (e.g. an HTTP transport). Called

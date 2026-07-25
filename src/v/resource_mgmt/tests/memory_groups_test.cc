@@ -48,10 +48,10 @@ public:
 
 TEST_P(MemoryGroupSharesTest, DividesSharesCorrectly) {
     auto total_available_memory = total_memory;
-    auto total_system_memory = total_memory;
+    data_transforms_memory_reservation data_transforms_reservation{};
     if (wasm_enabled()) {
-        total_system_memory -= user_wasm_reservation;
         total_available_memory -= user_wasm_reservation;
+        data_transforms_reservation = {.max_bytes = user_wasm_reservation};
     }
     compaction_memory_reservation reservation{};
     if (compaction_enabled()) {
@@ -64,13 +64,14 @@ TEST_P(MemoryGroupSharesTest, DividesSharesCorrectly) {
     cloud_topics_compaction_memory_reservation ct_compaction_reservation{
       .max_bytes = user_cloud_topics_compaction_reservation};
     partitions_memory_reservation partitions{.max_limit_pct = 20};
-    total_available_memory -= partitions.reserved_bytes(total_system_memory);
+    total_available_memory -= partitions.reserved_bytes(total_memory);
 
     class system_memory_groups groups(
-      total_system_memory,
+      total_memory,
       reservation,
       ct_compaction_reservation,
       /*cloud_topics_reconciler_memory_reservation=*/{},
+      data_transforms_reservation,
       wasm_enabled(),
       datalake_enabled(),
       cloud_storage_enabled(),
@@ -153,6 +154,7 @@ TEST(MemoryGroups, CompactionMemoryBytes) {
           },
           /*cloud_topics_compaction_memory_reservation=*/{},
           /*cloud_topics_reconciler_memory_reservation=*/{},
+          /*data_transforms_memory_reservation=*/{},
           /*wasm_enabled=*/false,
           /*datalake_enabled=*/false,
           /*cloud_storage_enabled=*/false,
@@ -172,6 +174,7 @@ TEST(MemoryGroups, CompactionMemoryBytes) {
           },
           /*cloud_topics_compaction_memory_reservation=*/{},
           /*cloud_topics_reconciler_memory_reservation=*/{},
+          /*data_transforms_memory_reservation=*/{},
           /*wasm_enabled=*/false,
           /*datalake_enabled=*/false,
           /*cloud_storage_enabled=*/false,

@@ -18,6 +18,8 @@
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/kafka_batch_adapter.h"
 #include "kafka/server/handlers/produce_validation.h"
+#include "model/batch_compression.h"
+#include "model/compression.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
@@ -212,7 +214,71 @@ struct ntp_produce_request {
     model::timestamp_type timestamp_type;
     std::chrono::milliseconds message_timestamp_before_max_ms;
     std::chrono::milliseconds message_timestamp_after_max_ms;
+    model::compression compression_type;
 };
+
+// Applies the topic's effective `compression.type` policy to a produced batch
+// (broker-side compression): a batch whose codec differs from the policy is
+// recompressed (or decompressed, for a policy of `none`) before being
+// replicated and stored. A policy of `producer` retains the codec chosen by
+// the producing client.
+//
+// `decompressed_payload` is the batch's records payload as decompressed on
+// the validation path, if that path had to decompress; it is reused here to
+// avoid decompressing the batch a second time.
+ss::future<std::optional<error_code_and_msg>> maybe_recompress_batch(
+  model::record_batch& batch,
+  std::optional<iobuf> decompressed_payload,
+  model::compression target) {
+    if (
+      target == model::compression::producer
+      || batch.header().attrs.compression() == target) {
+        co_return std::nullopt;
+    }
+
+    // The batch's header carries any updates made by validation (e.g.
+    // `max_timestamp`); its size and checksum metadata are recomputed by
+    // recompress_batch() over the final payload.
+    const auto header = batch.header();
+
+    if (!decompressed_payload.has_value()) {
+        if (batch.compressed()) {
+            try {
+                decompressed_payload = co_await model::decompress_payload(
+                  batch);
+            } catch (const std::exception& e) {
+                vlog(
+                  klog.warn,
+                  "Failed to decompress produced batch {}: {}",
+                  header,
+                  e.what());
+                co_return error_code_and_msg{
+                  .err = error_code::corrupt_message,
+                  .msg = "unable to decompress batch",
+                };
+            }
+        } else {
+            decompressed_payload = std::move(batch).release_data();
+        }
+    }
+
+    try {
+        batch = co_await model::recompress_batch(
+          target, header, std::move(*decompressed_payload));
+    } catch (const std::exception& e) {
+        vlog(
+          klog.error,
+          "Failed to recompress produced batch with topic compression type "
+          "{}: {}",
+          target,
+          e.what());
+        co_return error_code_and_msg{
+          .err = error_code::unknown_server_error,
+          .msg = "unable to compress batch",
+        };
+    }
+    co_return std::nullopt;
+}
 
 ss::future<produce_response::partition> do_produce_topic_partition(
   produce_ctx& octx,
@@ -228,13 +294,13 @@ ss::future<produce_response::partition> do_produce_topic_partition(
        .ntp = req.ntp,
        .client_id = octx.rctx.header().client_id});
 
-    if (validate_batch_res.has_value()) {
+    if (validate_batch_res.error.has_value()) {
         co_return finalize_request_with_error_code(
-          validate_batch_res->err,
+          validate_batch_res.error->err,
           std::move(dispatched),
           req.ntp,
           ss::this_shard_id(),
-          std::move(validate_batch_res->msg));
+          std::move(validate_batch_res.error->msg));
     }
 
     auto batch_size = req.batch->size_bytes();
@@ -289,6 +355,19 @@ ss::future<produce_response::partition> do_produce_topic_partition(
       batch_size, req.batch->header().attrs.compression());
     octx.rctx.connection()->attributes().produce_bytes.record(batch_size);
     octx.rctx.connection()->attributes().produce_batch_count.record(1);
+
+    auto recompress_res = co_await maybe_recompress_batch(
+      *req.batch,
+      std::move(validate_batch_res.decompressed_payload),
+      req.compression_type);
+    if (recompress_res.has_value()) {
+        co_return finalize_request_with_error_code(
+          recompress_res->err,
+          std::move(dispatched),
+          req.ntp,
+          ss::this_shard_id(),
+          std::move(recompress_res->msg));
+    }
 
     auto timeout = octx.request.data.timeout_ms;
     if (timeout < 0ms) {
@@ -366,8 +445,18 @@ struct topic_configuration_context {
     model::timestamp_type timestamp_type;
     std::chrono::milliseconds message_timestamp_before_max_ms;
     std::chrono::milliseconds message_timestamp_after_max_ms;
+    model::compression compression_type;
     const cluster::topic_properties* properties;
 };
+
+model::compression effective_compression_type(
+  const cluster::topic_properties& properties, const produce_ctx& octx) {
+    if (!config::shard_local_cfg().kafka_produce_enable_batch_compression()) {
+        return model::compression::producer;
+    }
+    return properties.compression.value_or(
+      octx.rctx.metadata_cache().get_default_compression());
+}
 
 /**
  * \brief handle writing to a single topic partition.
@@ -399,6 +488,7 @@ partition_produce_stages produce_topic_partition(
         = cfg_ctx.message_timestamp_before_max_ms,
         .message_timestamp_after_max_ms
         = cfg_ctx.message_timestamp_after_max_ms,
+        .compression_type = cfg_ctx.compression_type,
       },
       std::move(dispatch));
     return partition_produce_stages{
@@ -486,6 +576,8 @@ produce_topic(produce_ctx& octx, produce_request::topic& topic) {
       = topic_cfg.properties.message_timestamp_after_max_ms.value_or(
         octx.rctx.metadata_cache()
           .get_default_message_timestamp_after_max_ms()),
+      .compression_type = effective_compression_type(
+        topic_cfg.properties, octx),
       .properties = &topic_cfg.properties,
     };
 
@@ -629,6 +721,8 @@ partition_produce_stages produce_single_partition(
       = topic_cfg.properties.message_timestamp_after_max_ms.value_or(
         octx.rctx.metadata_cache()
           .get_default_message_timestamp_after_max_ms()),
+      .compression_type = effective_compression_type(
+        topic_cfg.properties, octx),
       .properties = &topic_cfg.properties,
     };
     return produce_topic_partition(octx, topic, part, cfg_ctx);

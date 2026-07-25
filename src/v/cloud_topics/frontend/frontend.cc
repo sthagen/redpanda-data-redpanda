@@ -872,6 +872,70 @@ ss::future<result<raft::replicate_result>> do_upload_and_replicate(
       .last_term = res.value().last_term,
     };
 }
+
+/// Replicate a raft_data batch directly through raft (tiered_cloud mode),
+/// ordered behind the producer's requests that are still in the cloud
+/// produce pipeline.
+///
+/// A request admitted in cloud mode reaches the raft layer only after an L0
+/// upload, so after a cloud -> tiered_cloud storage-mode flip a request from
+/// the same producer admitted in tiered_cloud mode could otherwise overtake
+/// it and draw a spurious out-of-order-sequence error. The client recovers
+/// from that by bumping the producer epoch and re-sending its in-doubt
+/// batches; if the overtaken request's append lands before the epoch bump
+/// reaches the partition, the re-send appends a second copy of the same
+/// records. Redeeming a producer-queue ticket here serializes this request
+/// behind the producer's in-flight cloud-path requests, which closes the
+/// window. The queue is empty in steady state so this adds no waiting
+/// outside of a mode transition.
+ss::future<result<raft::replicate_result>> do_tiered_replicate(
+  ss::lw_shared_ptr<cluster::partition> partition,
+  l0::producer_ticket ticket,
+  model::batch_identity batch_id,
+  model::record_batch batch,
+  raft::replicate_options opts,
+  ss::promise<> enqueued) {
+    // Wait for all previous requests from this producer to be enqueued
+    // into raft.
+    ss::future<> redeem_fut = opts.as ? ticket.redeem(opts.as->get())
+                                      : ticket.redeem();
+    auto redeemed = co_await ss::coroutine::as_future(std::move(redeem_fut));
+    if (redeemed.failed()) {
+        // The ticket releases itself on destruction; resolve the enqueued
+        // stage and deliver the error through the finished stage, matching
+        // the cloud path.
+        enqueued.set_value();
+        co_await ss::coroutine::return_exception_ptr(redeemed.get_exception());
+    }
+
+    auto stages = partition->replicate_in_stages(
+      batch_id, std::move(batch), opts);
+    auto enq = co_await ss::coroutine::as_future(
+      std::move(stages.request_enqueued));
+
+    ticket.release(); // always release the ticket
+
+    if (enq.failed()) {
+        auto ex = enq.get_exception();
+        vlog(
+          cd_log.trace,
+          "failed to enqueue replicate request into raft ({}): {}",
+          partition->ntp(),
+          ex);
+        // fallthrough - we expect the finish stage to fail as well and we
+        // don't want to abandon the replicate_finished future
+    }
+    enqueued.set_value();
+
+    auto res = co_await std::move(stages.replicate_finished);
+    if (res.has_error()) {
+        co_return res.error();
+    }
+    co_return raft::replicate_result{
+      .last_offset = kafka::offset_cast(res.value().last_offset),
+      .last_term = res.value().last_term,
+    };
+}
 } // namespace
 
 ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
@@ -1017,22 +1081,24 @@ raft::replicate_stages frontend::replicate(
     // Use partition->replicate_in_stages which returns kafka_stages (with
     // kafka-translated offsets), then adapt to raft::replicate_stages.
     // The client's requested acks level is passed through.
+    //
+    // The ticket must be reserved before this call returns: the produce
+    // handler dispatches the producer's next request once the enqueued
+    // stage resolves, and that request has to land behind this one in the
+    // queue.
     if (_partition->get_ntp_config().is_tiered_cloud()) {
-        auto ks = _partition->replicate_in_stages(
-          batch_id, std::move(batch), opts);
+        auto ticket = _ctp_stm_api->producer_queue().reserve(
+          batch_id.pid.get_id());
         raft::replicate_stages out(raft::errc::success);
-        out.request_enqueued = std::move(ks.request_enqueued);
-        out.replicate_finished = ks.replicate_finished.then(
-          [](
-            result<cluster::kafka_result> r) -> result<raft::replicate_result> {
-              if (!r) {
-                  return r.error();
-              }
-              return raft::replicate_result{
-                .last_offset = kafka::offset_cast(r.value().last_offset),
-                .last_term = r.value().last_term,
-              };
-          });
+        ss::promise<> enqueued;
+        out.request_enqueued = enqueued.get_future();
+        out.replicate_finished = do_tiered_replicate(
+          _partition,
+          std::move(ticket),
+          batch_id,
+          std::move(batch),
+          opts,
+          std::move(enqueued));
         return out;
     }
 

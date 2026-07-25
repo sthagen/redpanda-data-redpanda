@@ -13,10 +13,12 @@
 #include "base/format_to.h"
 #include "base/seastarx.h"
 #include "container/chunked_vector.h"
+#include "pandaproxy/schema_registry/types.h"
 #include "strings/string_switch.h"
 
 #include <seastar/core/sstring.hh>
 
+#include <optional>
 #include <string_view>
 
 namespace pandaproxy::schema_registry::rest_client {
@@ -99,22 +101,17 @@ registry_compatibility_level_from_wire(std::string_view sv) {
 
 /// The result of `GET /config`: the registry's global configuration.
 ///
-/// Only `compatibilityLevel` is modeled — as an open enum in \ref level, with
-/// the verbatim wire string kept in \ref raw so a value mapped to unknown is
-/// not lost. The endpoint may carry many other optional fields (validation
-/// flags, metadata, rule sets) that this client does not model; the names of
-/// any such top-level fields present are recorded in \ref unknown_fields, so a
-/// caller can tell config content was dropped without this client having to
-/// model it. This serves the same intent as source_schema_read::unsupported on
-/// the schema-fetch path, but is a simpler representation: bare top-level field
-/// names only, not the structured JSON pointer + type that path records.
-/// Redpanda's own server emits only `compatibilityLevel`, so unknown_fields is
-/// empty against it; a third-party Confluent-compatible registry may populate
-/// it.
+/// Only `compatibilityLevel` is modeled, as an open enum in \ref level with
+/// the verbatim wire string kept in \ref raw. `level` is optional: a subject
+/// config may carry only governance fields (e.g. `compatibilityGroup`). Every
+/// other non-null top-level field is recorded in \ref unsupported as a JSON
+/// pointer + type (mirroring source_schema_read::unsupported) for the
+/// caller's unsupported-feature policy; a null value is treated as absent.
+/// Redpanda's own server emits only `compatibilityLevel`.
 struct config_info {
-    registry_compatibility_level level;
+    std::optional<registry_compatibility_level> level;
     ss::sstring raw;
-    chunked_vector<ss::sstring> unknown_fields;
+    chunked_vector<unsupported_feature> unsupported;
 };
 
 } // namespace pandaproxy::schema_registry::rest_client

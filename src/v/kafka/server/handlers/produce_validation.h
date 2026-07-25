@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "bytes/iobuf.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/server/kafka_probe.h"
 #include "model/batch_compression.h"
@@ -44,8 +45,17 @@ struct validation_args {
     std::optional<std::string_view> client_id;
 };
 
+struct validation_result {
+    std::optional<error_code_and_msg> error;
+
+    // Set iff the batch had to be decompressed in order to validate it.
+    // Callers that need the batch's uncompressed records (e.g. for
+    // broker-side recompression) can reuse this payload to avoid a second
+    // decompression.
+    std::optional<iobuf> decompressed_payload;
+};
+
 // Entry point for batch validation.
-ss::future<std::optional<error_code_and_msg>>
-validate_batch(const validation_args&);
+ss::future<validation_result> validate_batch(const validation_args&);
 
 } // namespace kafka

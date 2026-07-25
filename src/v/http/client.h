@@ -73,6 +73,8 @@ std::string_view content_type_string(content_type type);
 struct downloaded_response {
     boost::beast::http::status status;
     iobuf body;
+    // Response header fields, verbatim from the wire (e.g. Retry-After).
+    boost::beast::http::fields headers;
 };
 
 // Interface to allow testing the http client with mocks

@@ -100,7 +100,9 @@ ss::future<> do_compact(
   l1::metastore* metastore,
   l1::io* io,
   std::chrono::milliseconds min_compaction_lag_ms = 0ms,
-  kafka::offset max_compactible_offset = kafka::offset::max()) {
+  kafka::offset max_compactible_offset = kafka::offset::max(),
+  size_t max_object_size = 128_MiB,
+  size_t commit_interval_bytes = 512_MiB) {
     ss::abort_source as;
     auto state = l1::compaction_job_state::running;
     auto map = compaction::simple_key_offset_map();
@@ -131,7 +133,8 @@ ss::future<> do_compact(
       io,
       metastore,
       as,
-      config::mock_binding<size_t>(128_MiB),
+      config::mock_binding<size_t>(max_object_size),
+      config::mock_binding<size_t>(commit_interval_bytes),
       16_MiB,
       probe,
       logger);
@@ -152,7 +155,9 @@ ss::future<> do_compact_with_throwing_sink(
   l1::throwing_compaction_sink::predicate_t should_roll,
   l1::throwing_compaction_sink::predicate_t should_throw,
   std::chrono::milliseconds min_compaction_lag_ms = 0ms,
-  kafka::offset max_compactible_offset = kafka::offset::max()) {
+  kafka::offset max_compactible_offset = kafka::offset::max(),
+  size_t max_object_size = 128_MiB,
+  size_t commit_interval_bytes = 512_MiB) {
     ss::abort_source as;
     auto state = l1::compaction_job_state::running;
     auto map = compaction::simple_key_offset_map();
@@ -174,8 +179,9 @@ ss::future<> do_compact_with_throwing_sink(
       probe,
       nullptr,
       logger);
-    // Use a very large max_object_size to disable size-based rolls; the
-    // throwing_compaction_sink's should_roll predicate controls rolling.
+    // By default max_object_size is very large to disable size-based rolls,
+    // leaving rolling to the throwing_compaction_sink's should_roll
+    // predicate.
     auto inner_sink = std::make_unique<l1::compaction_sink>(
       tidp,
       dirty_range_intervals,
@@ -185,7 +191,8 @@ ss::future<> do_compact_with_throwing_sink(
       io,
       metastore,
       as,
-      config::mock_binding<size_t>(128_MiB),
+      config::mock_binding<size_t>(max_object_size),
+      config::mock_binding<size_t>(commit_interval_bytes),
       16_MiB,
       probe,
       logger);
@@ -413,6 +420,113 @@ TEST_F(ReducerTestFixture, LinearKeyValueReducerSetStartOffset) {
     ASSERT_TRUE(compaction_info.has_value());
     ASSERT_FLOAT_EQ(compaction_info->dirty_ratio, 0.0);
     ASSERT_TRUE(compaction_info->offsets_response.dirty_ranges.empty());
+}
+
+// Retention can move the start offset under a running compaction job, and
+// the job still commits: it removes records, but its cleaned ranges are all
+// rejected against the start offset it snapshotted before the truncation,
+// so nothing is marked clean. Verify the emptied range is left dirty with
+// the epoch advanced, and that a fresh pass then converges the log.
+TEST_F(ReducerTestFixture, RetentionRaceEmptiesRangeWithoutCleaning) {
+    auto [ntp, tidp] = make_ntidp("test_topic");
+
+    // Three extents, two keys, newest copies at the head:
+    //   [0,1]: a b
+    //   [2,3]: a b
+    //   [4,5]: a b
+    auto add_extent = [&](kafka::offset base, const ss::sstring& sfx) {
+        std::vector<tests::kv_t> kvs;
+        kvs.emplace_back("a", "a" + sfx);
+        kvs.emplace_back("b", "b" + sfx);
+        chunked_circular_buffer<model::record_batch> batches;
+        batches.push_back(
+          tests::batch_from_kvs(
+            kvs,
+            model::offset{base()},
+            model::timestamp::now(),
+            model::compression::none));
+        std::vector<tidp_batches_t> tidp_batches;
+        tidp_batches.emplace_back(tidp, std::move(batches));
+        return make_l1_objects(std::move(tidp_batches));
+    };
+    add_extent(kafka::offset{0}, "0").get();
+    add_extent(kafka::offset{2}, "2").get();
+    add_extent(kafka::offset{4}, "4").get();
+
+    auto info_spec = l1::metastore::compaction_info_spec{
+      .tidp = tidp,
+      .tombstone_removal_upper_bound_ts = model::timestamp::max()};
+
+    // The job snapshots its inputs: start offset 0, the whole log dirty.
+    auto before_truncate = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(before_truncate.has_value());
+    ASSERT_EQ(before_truncate->start_offset, kafka::offset{0});
+    ASSERT_TRUE(before_truncate->offsets_response.dirty_ranges.covers(
+      kafka::offset{0}, kafka::offset{5}));
+    const auto initial_epoch = before_truncate->compaction_epoch;
+
+    // Retention fires mid-job: truncate to 2, deleting extent [0,1].
+    auto sso_res = _metastore.set_start_offset(tidp, kafka::offset{2}).get();
+    ASSERT_TRUE(sso_res.has_value());
+
+    // The job finishes with its pre-truncation snapshot. Dedup rewrites
+    // [2,3] empty -- both records are superseded by the copies at [4,5] --
+    // and the max compactible offset stops it before it reaches [4,5]
+    // itself.
+    do_compact(
+      tidp,
+      ntp,
+      std::move(before_truncate->offsets_response),
+      before_truncate->compaction_epoch,
+      /*pre-truncation start_offset=*/kafka::offset{0},
+      &_metastore,
+      &_io,
+      0ms,
+      /*max_compactible_offset=*/kafka::offset{3})
+      .get();
+
+    // The job's commit went through: the epoch advanced and [2,3]'s records
+    // are gone. Nothing was recorded clean, since the compaction did't read
+    // [0,1] and believed the start offset to be 0.
+    auto after_compact = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(after_compact.has_value());
+    EXPECT_EQ(
+      after_compact->compaction_epoch,
+      l1::metastore::compaction_epoch{initial_epoch() + 1});
+    EXPECT_EQ(after_compact->start_offset, kafka::offset{2});
+    ASSERT_FLOAT_EQ(after_compact->dirty_ratio, 1.0);
+    ASSERT_TRUE(after_compact->offsets_response.dirty_ranges.covers(
+      kafka::offset{2}, kafka::offset{5}));
+    {
+        auto batches = read_all(make_reader(ntp, tidp, kafka::offset{2}));
+        ASSERT_EQ(batches.size(), 1);
+        EXPECT_EQ(batches.front().base_offset(), model::offset{4});
+        EXPECT_EQ(batches.front().record_count(), 2);
+    }
+
+    // A fresh pass converges: [2,3] is deemed clean since it is empty, [4,5]
+    // gets cleaned.
+    auto fresh = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(fresh.has_value());
+    do_compact(
+      tidp,
+      ntp,
+      std::move(fresh->offsets_response),
+      fresh->compaction_epoch,
+      fresh->start_offset,
+      &_metastore,
+      &_io)
+      .get();
+
+    auto final_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(final_info.has_value());
+    EXPECT_FLOAT_EQ(final_info->dirty_ratio, 0.0);
+    EXPECT_TRUE(final_info->offsets_response.dirty_ranges.empty());
+
+    latest_kv_map_t latest_kv;
+    latest_kv.insert_or_assign("a", "a4");
+    latest_kv.insert_or_assign("b", "b4");
+    verify_compacted_log(ntp, tidp, latest_kv, /*records=*/2, /*batches=*/1);
 }
 
 TEST_F(ReducerTestFixture, TombstoneReducer) {
@@ -921,6 +1035,859 @@ TEST_F(ReducerTestFixture, MaxCompactibleOffsetReducer) {
     ASSERT_GT(compaction_info->dirty_ratio, 0.0);
     ASSERT_TRUE(compaction_info->offsets_response.dirty_ranges.covers(
       max_compactible_offset, last_offset));
+}
+
+// The sink commits accumulated output objects as partial compaction commits
+// at source extent boundaries, each bumping the compaction epoch, then
+// records the job's compaction metadata in a final metadata-only commit that
+// bumps it once more. A tiny max object size makes every source extent's
+// output exceed the threshold, so the job issues one partial commit per
+// source extent.
+TEST_F(ReducerTestFixture, IncrementalCommitsAdvanceEpochPerPartialCommit) {
+    auto [ntp, tidp] = make_ntidp("test_topic");
+    constexpr int num_extents = 3;
+    constexpr int batches_per_extent = 10;
+    constexpr int records_per_batch = 5;
+    constexpr int total_records = num_extents * batches_per_extent
+                                  * records_per_batch;
+
+    // Split one contiguous batch stream across several source extents; all
+    // keys are distinct so nothing is deduplicated away and every extent
+    // produces enough output to reach the commit interval.
+    latest_kv_map_t latest_kv_map;
+    auto batches = generate_batches(
+      num_extents * batches_per_extent,
+      /*cardinality=*/total_records,
+      records_per_batch,
+      /*starting_value=*/0,
+      /*produce_tombstones=*/false,
+      &latest_kv_map);
+    for (int i = 0; i < num_extents; ++i) {
+        chunked_circular_buffer<model::record_batch> extent_batches;
+        for (int j = 0; j < batches_per_extent; ++j) {
+            extent_batches.push_back(std::move(batches.front()));
+            batches.pop_front();
+        }
+        std::vector<tidp_batches_t> tidp_batches;
+        tidp_batches.emplace_back(tidp, std::move(extent_batches));
+        make_l1_objects(std::move(tidp_batches)).get();
+    }
+
+    auto info_spec = l1::metastore::compaction_info_spec{
+      .tidp = tidp,
+      .tombstone_removal_upper_bound_ts = model::timestamp::max()};
+    auto compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    auto initial_epoch = compaction_info->compaction_epoch;
+
+    do_compact(
+      tidp,
+      ntp,
+      std::move(compaction_info->offsets_response),
+      compaction_info->compaction_epoch,
+      compaction_info->start_offset,
+      &_metastore,
+      &_io,
+      0ms,
+      kafka::offset::max(),
+      /*max_object_size=*/512,
+      /*commit_interval_bytes=*/512)
+      .get();
+
+    // One partial commit per source extent, plus the final metadata-only
+    // commit.
+    compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    EXPECT_EQ(
+      compaction_info->compaction_epoch(), initial_epoch() + num_extents + 1);
+    EXPECT_TRUE(compaction_info->offsets_response.dirty_ranges.empty());
+
+    // Nothing was lost: every distinct key survives.
+    verify_compacted_log(
+      ntp,
+      tidp,
+      latest_kv_map,
+      total_records,
+      num_extents * batches_per_extent);
+}
+
+// Commit cadence is governed by the commit interval, not the object size:
+// with an interval larger than the job's entire output, no boundary commit
+// fires even though every boundary has multiple finished objects pending,
+// and the whole job commits as one batch at finalize (plus the final
+// metadata-only commit).
+TEST_F(ReducerTestFixture, CommitIntervalGovernsCommitCadence) {
+    auto [ntp, tidp] = make_ntidp("test_topic");
+    constexpr int num_extents = 3;
+    constexpr int batches_per_extent = 8;
+    constexpr int records_per_batch = 5;
+    constexpr int total_records = num_extents * batches_per_extent
+                                  * records_per_batch;
+
+    latest_kv_map_t latest_kv_map;
+    auto batches = generate_batches(
+      num_extents * batches_per_extent,
+      /*cardinality=*/total_records,
+      records_per_batch,
+      /*starting_value=*/0,
+      /*produce_tombstones=*/false,
+      &latest_kv_map);
+    for (int i = 0; i < num_extents; ++i) {
+        chunked_circular_buffer<model::record_batch> extent_batches;
+        for (int j = 0; j < batches_per_extent; ++j) {
+            extent_batches.push_back(std::move(batches.front()));
+            batches.pop_front();
+        }
+        std::vector<tidp_batches_t> tidp_batches;
+        tidp_batches.emplace_back(tidp, std::move(extent_batches));
+        make_l1_objects(std::move(tidp_batches)).get();
+    }
+
+    auto info_spec = l1::metastore::compaction_info_spec{
+      .tidp = tidp,
+      .tombstone_removal_upper_bound_ts = model::timestamp::max()};
+    auto compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    auto initial_epoch = compaction_info->compaction_epoch;
+
+    // Objects roll at 512 bytes, so every boundary has finished objects
+    // pending — but the commit interval is far larger than the job's whole
+    // output, so no boundary commit fires. The job's output lands in one
+    // commit from the finalize path, followed by the metadata-only commit:
+    // exactly two epoch bumps.
+    do_compact(
+      tidp,
+      ntp,
+      std::move(compaction_info->offsets_response),
+      initial_epoch,
+      compaction_info->start_offset,
+      &_metastore,
+      &_io,
+      0ms,
+      kafka::offset::max(),
+      /*max_object_size=*/512,
+      /*commit_interval_bytes=*/1_MiB)
+      .get();
+
+    compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    EXPECT_EQ(compaction_info->compaction_epoch(), initial_epoch() + 2);
+    EXPECT_TRUE(compaction_info->offsets_response.dirty_ranges.empty());
+
+    verify_compacted_log(
+      ntp,
+      tidp,
+      latest_kv_map,
+      total_records,
+      num_extents * batches_per_extent);
+}
+
+// After a partial commit cuts at an extent boundary, the next extent's
+// leading batches may be deduplicated away entirely (all their records
+// superseded later in the log), so the first batch reaching the sink sits
+// past the extent base. The next object must still be anchored at the
+// extent base — a mid-extent leading edge would fail the metastore's
+// span-exact validation and reject every subsequent partial commit.
+TEST_F(ReducerTestFixture, PostCommitObjectAnchorsAtExtentBase) {
+    auto [ntp, tidp] = make_ntidp("test_topic");
+    constexpr int records_per_batch = 5;
+    constexpr int batches_per_extent = 4;
+    constexpr int records_per_extent = records_per_batch * batches_per_extent;
+
+    // Three extents. Extent 2's first batch reuses keys that extent 3's
+    // first batch overwrites, so it is fully deduplicated away; every
+    // other batch has unique keys and survives.
+    latest_kv_map_t latest_kv_map;
+    auto make_extent_batches = [&](
+                                 int extent_idx, bool reused_first_batch_keys) {
+        chunked_circular_buffer<model::record_batch> batches;
+        for (int b = 0; b < batches_per_extent; ++b) {
+            auto base_offset = model::offset(
+              extent_idx * records_per_extent + b * records_per_batch);
+            // The reused key range lives at [1000, 1005); unique keys
+            // equal their record offsets.
+            auto kvs = reused_first_batch_keys && b == 0
+                         ? tests::kv_t::sequence(
+                             /*start=*/extent_idx * records_per_extent,
+                             records_per_batch,
+                             /*val_start=*/extent_idx * records_per_extent,
+                             /*cardinality=*/records_per_batch,
+                             /*produce_tombstones=*/false,
+                             /*base=*/1000)
+                         : tests::kv_t::sequence(
+                             /*start=*/base_offset(),
+                             records_per_batch,
+                             /*val_start=*/base_offset(),
+                             /*cardinality=*/10000);
+            for (const auto& kv : kvs) {
+                latest_kv_map.insert_or_assign(kv.key, kv.val);
+            }
+            batches.push_back(
+              tests::batch_from_kvs(
+                kvs,
+                base_offset,
+                model::timestamp::now(),
+                model::compression::none));
+        }
+        std::vector<tidp_batches_t> tidp_batches;
+        tidp_batches.emplace_back(tidp, std::move(batches));
+        make_l1_objects(std::move(tidp_batches)).get();
+    };
+    make_extent_batches(0, false);
+    make_extent_batches(1, true);
+    make_extent_batches(2, true);
+
+    auto info_spec = l1::metastore::compaction_info_spec{
+      .tidp = tidp,
+      .tombstone_removal_upper_bound_ts = model::timestamp::max()};
+    auto compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    auto initial_epoch = compaction_info->compaction_epoch;
+
+    // Per-boundary commits: extent 1's commit leaves the anchor, extent 2's
+    // first batch is dropped by the filter, and extent 2's commit must
+    // still span exactly from the extent base.
+    do_compact(
+      tidp,
+      ntp,
+      std::move(compaction_info->offsets_response),
+      initial_epoch,
+      compaction_info->start_offset,
+      &_metastore,
+      &_io,
+      0ms,
+      kafka::offset::max(),
+      /*max_object_size=*/512,
+      /*commit_interval_bytes=*/512)
+      .get();
+
+    // Two partial commits (extent 2's output alone stays under the commit
+    // interval, so extents 2 and 3 land together at extent 3's boundary —
+    // still spanning from extent 2's base) plus the metadata-only commit,
+    // and a fully clean log.
+    compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    EXPECT_EQ(compaction_info->compaction_epoch(), initial_epoch() + 3);
+    EXPECT_TRUE(compaction_info->offsets_response.dirty_ranges.empty());
+
+    // Extent 2's first batch is gone; everything else survives.
+    verify_compacted_log(
+      ntp,
+      tidp,
+      latest_kv_map,
+      /*expected_records=*/3 * records_per_extent - records_per_batch,
+      /*expected_batches=*/3 * batches_per_extent - 1);
+}
+
+// A boundary commit cuts coverage; the next object is anchored at the
+// boundary's successor when the next extent is prepared. If that extent is
+// fully deduplicated away (all its keys rewritten in a later extent) and a
+// live extent follows contiguously, the object must stay open across the
+// dead extent and swallow its span: the live extent's batches land in an
+// object based at the dead extent's base, so the next commit replaces both
+// extents exactly.
+TEST_F(ReducerTestFixture, DeadInteriorExtentIsSwallowedAfterCut) {
+    auto [ntp, tidp] = make_ntidp("test_topic");
+    constexpr int records_per_batch = 5;
+    constexpr int batches_per_extent = 4;
+    constexpr int records_per_extent = records_per_batch * batches_per_extent;
+    constexpr int num_extents = 3;
+
+    // Extent 0 [0,19]: unique keys, survives and triggers the boundary
+    // commit. Extent 1 [20,39]: keys 1000..1019 with old values. Extent 2
+    // [40,59]: the same keys with new values, so every record of extent 1
+    // is superseded while extent 2 survives in full.
+    latest_kv_map_t latest_kv_map;
+    for (int extent_idx = 0; extent_idx < num_extents; ++extent_idx) {
+        const bool reused_keys = extent_idx >= 1;
+        chunked_circular_buffer<model::record_batch> batches;
+        for (int b = 0; b < batches_per_extent; ++b) {
+            auto base_offset = model::offset(
+              extent_idx * records_per_extent + b * records_per_batch);
+            auto kvs = reused_keys ? tests::kv_t::sequence(
+                                       /*start=*/b * records_per_batch,
+                                       records_per_batch,
+                                       /*val_start=*/base_offset(),
+                                       /*cardinality=*/records_per_extent,
+                                       /*produce_tombstones=*/false,
+                                       /*base=*/1000)
+                                   : tests::kv_t::sequence(
+                                       /*start=*/base_offset(),
+                                       records_per_batch,
+                                       /*val_start=*/base_offset(),
+                                       /*cardinality=*/10000);
+            for (const auto& kv : kvs) {
+                latest_kv_map.insert_or_assign(kv.key, kv.val);
+            }
+            batches.push_back(
+              tests::batch_from_kvs(
+                kvs,
+                base_offset,
+                model::timestamp::now(),
+                model::compression::none));
+        }
+        std::vector<tidp_batches_t> tidp_batches;
+        tidp_batches.emplace_back(tidp, std::move(batches));
+        make_l1_objects(std::move(tidp_batches)).get();
+    }
+
+    auto info_spec = l1::metastore::compaction_info_spec{
+      .tidp = tidp,
+      .tombstone_removal_upper_bound_ts = model::timestamp::max()};
+    auto compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    auto initial_epoch = compaction_info->compaction_epoch;
+
+    do_compact(
+      tidp,
+      ntp,
+      std::move(compaction_info->offsets_response),
+      initial_epoch,
+      compaction_info->start_offset,
+      &_metastore,
+      &_io,
+      0ms,
+      kafka::offset::max(),
+      /*max_object_size=*/512,
+      /*commit_interval_bytes=*/512)
+      .get();
+
+    // Two data commits — extent 0's boundary cut, then the object spanning
+    // dead extent 1 plus live extent 2 — and the metadata-only commit. A
+    // mis-anchored object would fail span-exact validation and abort the
+    // run instead.
+    compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    EXPECT_EQ(compaction_info->compaction_epoch(), initial_epoch() + 3);
+    EXPECT_TRUE(compaction_info->offsets_response.dirty_ranges.empty());
+
+    // Extent 1's superseded records are gone; extents 0 and 2 survive.
+    verify_compacted_log(
+      ntp,
+      tidp,
+      latest_kv_map,
+      /*expected_records=*/2 * records_per_extent,
+      /*expected_batches=*/2 * batches_per_extent);
+}
+
+// A boundary commit cuts coverage — but the very next extent is skipped by
+// min_compaction_lag_ms (fresh timestamps), so the source jumps with
+// nothing processed since the cut. No object may claim anything between
+// the cut and the jump: the next object must re-anchor at the live
+// extent's base, and the skipped extent must stay dirty with no claims
+// over it.
+TEST_F(ReducerTestFixture, JumpAfterCutReanchorsAtLiveExtent) {
+    auto [ntp, tidp] = make_ntidp("test_topic");
+    constexpr int records_per_batch = 5;
+    constexpr int batches_per_extent = 4;
+    constexpr int records_per_extent = records_per_batch * batches_per_extent;
+    constexpr int num_extents = 3;
+    constexpr auto lag = std::chrono::hours(1);
+
+    // Extents 0 [0,19] and 2 [40,59] are older than the compaction lag;
+    // extent 1 [20,39] is fresh, so the deduplication pass jumps over it.
+    // All keys are unique so every streamed record survives.
+    const auto old_ts = model::timestamp(
+      model::timestamp::now()() - 2 * std::chrono::milliseconds(lag).count());
+    latest_kv_map_t latest_kv_map;
+    for (int extent_idx = 0; extent_idx < num_extents; ++extent_idx) {
+        const auto ts = extent_idx == 1 ? model::timestamp::now() : old_ts;
+        chunked_circular_buffer<model::record_batch> batches;
+        for (int b = 0; b < batches_per_extent; ++b) {
+            auto base_offset = model::offset(
+              extent_idx * records_per_extent + b * records_per_batch);
+            auto kvs = tests::kv_t::sequence(
+              /*start=*/base_offset(),
+              records_per_batch,
+              /*val_start=*/base_offset(),
+              /*cardinality=*/10000);
+            for (const auto& kv : kvs) {
+                latest_kv_map.insert_or_assign(kv.key, kv.val);
+            }
+            batches.push_back(
+              tests::batch_from_kvs(
+                kvs, base_offset, ts, model::compression::none));
+        }
+        std::vector<tidp_batches_t> tidp_batches;
+        tidp_batches.emplace_back(tidp, std::move(batches));
+        make_l1_objects(std::move(tidp_batches)).get();
+    }
+
+    auto info_spec = l1::metastore::compaction_info_spec{
+      .tidp = tidp,
+      .tombstone_removal_upper_bound_ts = model::timestamp::max()};
+    auto compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    auto initial_epoch = compaction_info->compaction_epoch;
+
+    do_compact(
+      tidp,
+      ntp,
+      std::move(compaction_info->offsets_response),
+      initial_epoch,
+      compaction_info->start_offset,
+      &_metastore,
+      &_io,
+      /*min_compaction_lag_ms=*/lag,
+      kafka::offset::max(),
+      /*max_object_size=*/512,
+      /*commit_interval_bytes=*/512)
+      .get();
+
+    // Two data commits — extent 0's boundary cut and extent 2's rewrite —
+    // plus the metadata-only commit; nothing contiguous follows either
+    // cut, so no object is started until the re-anchor at extent 2.
+    compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    EXPECT_EQ(compaction_info->compaction_epoch(), initial_epoch() + 3);
+
+    // Only the range below the skipped extent may be claimed clean; the
+    // skipped extent and everything above it stay dirty.
+    EXPECT_FALSE(compaction_info->offsets_response.dirty_ranges.covers(
+      kafka::offset{0}, kafka::offset{records_per_extent - 1}));
+    EXPECT_TRUE(compaction_info->offsets_response.dirty_ranges.covers(
+      kafka::offset{records_per_extent},
+      kafka::offset{3 * records_per_extent - 1}));
+
+    // Nothing was lost, including the skipped (lag-protected) extent.
+    verify_compacted_log(
+      ntp,
+      tidp,
+      latest_kv_map,
+      /*expected_records=*/num_extents * records_per_extent,
+      /*expected_batches=*/num_extents * batches_per_extent);
+
+    // Once the lag expires, a second pass compacts the skipped extent and
+    // the claims converge over the whole log.
+    do_compact(
+      tidp,
+      ntp,
+      std::move(compaction_info->offsets_response),
+      compaction_info->compaction_epoch,
+      compaction_info->start_offset,
+      &_metastore,
+      &_io,
+      /*min_compaction_lag_ms=*/0ms,
+      kafka::offset::max(),
+      /*max_object_size=*/512,
+      /*commit_interval_bytes=*/512)
+      .get();
+
+    compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    EXPECT_TRUE(compaction_info->offsets_response.dirty_ranges.empty());
+    verify_compacted_log(
+      ntp,
+      tidp,
+      latest_kv_map,
+      /*expected_records=*/num_extents * records_per_extent,
+      /*expected_batches=*/num_extents * batches_per_extent);
+}
+
+// The non-contiguous variant of the dead-tail case below: a boundary
+// commit cuts coverage at extent 0 and extent 1 is fully deduplicated
+// away (all its keys rewritten in extent 3), and then the source jumps
+// over extent 2 — skipped by min_compaction_lag_ms, its timestamps being
+// newer than the extents around it — so prepare_iteration() re-anchors at
+// extent 3 and nothing would replace extent 1, even though the final
+// metadata claims its range clean. The sink must claim the dead span with
+// an (empty) object before the jump.
+TEST_F(ReducerTestFixture, DeadTailExtentIsReplacedBeforeJump) {
+    auto [ntp, tidp] = make_ntidp("test_topic");
+    constexpr int records_per_batch = 5;
+    constexpr int batches_per_extent = 4;
+    constexpr int records_per_extent = records_per_batch * batches_per_extent;
+    constexpr int num_extents = 4;
+    constexpr auto lag = std::chrono::hours(1);
+
+    // Extents 0, 1, 3 are older than the compaction lag; extent 2 is
+    // fresh, so the deduplication pass skips over it. Extent 1's keys are
+    // all rewritten in extent 3, making every one of its records
+    // superseded.
+    const auto old_ts = model::timestamp(
+      model::timestamp::now()() - 2 * std::chrono::milliseconds(lag).count());
+    latest_kv_map_t latest_kv_map;
+    for (int extent_idx = 0; extent_idx < num_extents; ++extent_idx) {
+        const bool reused_keys = extent_idx == 1 || extent_idx == 3;
+        const auto ts = extent_idx == 2 ? model::timestamp::now() : old_ts;
+        chunked_circular_buffer<model::record_batch> batches;
+        for (int b = 0; b < batches_per_extent; ++b) {
+            auto base_offset = model::offset(
+              extent_idx * records_per_extent + b * records_per_batch);
+            auto kvs = reused_keys ? tests::kv_t::sequence(
+                                       /*start=*/b * records_per_batch,
+                                       records_per_batch,
+                                       /*val_start=*/base_offset(),
+                                       /*cardinality=*/records_per_extent,
+                                       /*produce_tombstones=*/false,
+                                       /*base=*/1000)
+                                   : tests::kv_t::sequence(
+                                       /*start=*/base_offset(),
+                                       records_per_batch,
+                                       /*val_start=*/base_offset(),
+                                       /*cardinality=*/10000);
+            for (const auto& kv : kvs) {
+                latest_kv_map.insert_or_assign(kv.key, kv.val);
+            }
+            batches.push_back(
+              tests::batch_from_kvs(
+                kvs, base_offset, ts, model::compression::none));
+        }
+        std::vector<tidp_batches_t> tidp_batches;
+        tidp_batches.emplace_back(tidp, std::move(batches));
+        make_l1_objects(std::move(tidp_batches)).get();
+    }
+
+    auto info_spec = l1::metastore::compaction_info_spec{
+      .tidp = tidp,
+      .tombstone_removal_upper_bound_ts = model::timestamp::max()};
+    auto compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+
+    do_compact(
+      tidp,
+      ntp,
+      std::move(compaction_info->offsets_response),
+      compaction_info->compaction_epoch,
+      compaction_info->start_offset,
+      &_metastore,
+      &_io,
+      /*min_compaction_lag_ms=*/lag,
+      kafka::offset::max(),
+      /*max_object_size=*/512,
+      /*commit_interval_bytes=*/512)
+      .get();
+
+    // Extent 1's superseded records must actually be gone — not merely
+    // claimed clean while the old extent still serves them. Extent 2 is
+    // untouched (too fresh to compact).
+    verify_compacted_log(
+      ntp,
+      tidp,
+      latest_kv_map,
+      /*expected_records=*/(num_extents - 1) * records_per_extent,
+      /*expected_batches=*/(num_extents - 1) * batches_per_extent);
+
+    // The skipped extent held back every claim at or above it: only the
+    // range below it was marked clean, and everything from the skipped
+    // extent up stays dirty — including extent 3, which was rewritten but
+    // may not be claimed across the gap.
+    compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    EXPECT_FALSE(compaction_info->offsets_response.dirty_ranges.covers(
+      kafka::offset{0}, kafka::offset{2 * records_per_extent - 1}));
+    EXPECT_TRUE(compaction_info->offsets_response.dirty_ranges.covers(
+      kafka::offset{2 * records_per_extent},
+      kafka::offset{4 * records_per_extent - 1}));
+
+    // Once the lag expires, a second pass compacts the skipped extent and
+    // the claims converge: the whole log is clean and the data unchanged.
+    do_compact(
+      tidp,
+      ntp,
+      std::move(compaction_info->offsets_response),
+      compaction_info->compaction_epoch,
+      compaction_info->start_offset,
+      &_metastore,
+      &_io,
+      /*min_compaction_lag_ms=*/0ms,
+      kafka::offset::max(),
+      /*max_object_size=*/512,
+      /*commit_interval_bytes=*/512)
+      .get();
+
+    compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    EXPECT_TRUE(compaction_info->offsets_response.dirty_ranges.empty());
+    verify_compacted_log(
+      ntp,
+      tidp,
+      latest_kv_map,
+      /*expected_records=*/(num_extents - 1) * records_per_extent,
+      /*expected_batches=*/(num_extents - 1) * batches_per_extent);
+}
+
+// A boundary commit cuts coverage at an extent boundary and leaves the
+// anchor for the next object. If every extent after that boundary is fully
+// deduplicated away — here, a trailing extent of expired tombstones — the
+// anchor is never consumed and nothing replaces those extents. Yet
+// finish_iteration() recorded them as processed, so the final metadata
+// claims their range clean and their tombstones removed while the old
+// extent still physically serves them, and the range is never compacted
+// again. The sink must claim the dead span with an (empty) object before
+// coverage ends.
+TEST_F(ReducerTestFixture, DeadTailExtentIsReplacedAtJobEnd) {
+    auto [ntp, tidp] = make_ntidp("test_topic");
+    constexpr int records_per_batch = 5;
+    constexpr int batches_per_extent = 4;
+    constexpr int records_per_extent = records_per_batch * batches_per_extent;
+    constexpr int num_extents = 4;
+
+    // Extents 0-2: unique live keys. Extent 3 [60,79]: only tombstones.
+    latest_kv_map_t latest_kv_map;
+    for (int extent_idx = 0; extent_idx < num_extents; ++extent_idx) {
+        const bool tombstones = extent_idx == num_extents - 1;
+        chunked_circular_buffer<model::record_batch> batches;
+        for (int b = 0; b < batches_per_extent; ++b) {
+            auto base_offset = model::offset(
+              extent_idx * records_per_extent + b * records_per_batch);
+            auto kvs = tests::kv_t::sequence(
+              /*start=*/base_offset(),
+              records_per_batch,
+              /*val_start=*/base_offset(),
+              /*cardinality=*/10000,
+              tombstones);
+            for (const auto& kv : kvs) {
+                latest_kv_map.insert_or_assign(kv.key, kv.val);
+            }
+            batches.push_back(
+              tests::batch_from_kvs(
+                kvs,
+                base_offset,
+                model::timestamp::now(),
+                model::compression::none));
+        }
+        std::vector<tidp_batches_t> tidp_batches;
+        tidp_batches.emplace_back(tidp, std::move(batches));
+        make_l1_objects(std::move(tidp_batches)).get();
+    }
+
+    auto info_spec = l1::metastore::compaction_info_spec{
+      .tidp = tidp,
+      .tombstone_removal_upper_bound_ts = model::timestamp::max()};
+    auto compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+
+    // Record extent 3's range as cleaned-with-tombstones so that, with
+    // tombstone_removal_upper_bound_ts=max, the job sees its tombstones as
+    // removable and drops every one of its records.
+    chunked_vector<l1::metastore::compaction_update::cleaned_range> cleaned;
+    cleaned.push_back(
+      l1::metastore::compaction_update::cleaned_range{
+        .base_offset = kafka::offset{3 * records_per_extent},
+        .last_offset = kafka::offset{4 * records_per_extent - 1},
+        .has_tombstones = true});
+    l1::metastore::compaction_map_t seed;
+    seed.emplace(
+      tidp,
+      l1::metastore::compaction_update{
+        .new_cleaned_ranges = std::move(cleaned),
+        .cleaned_at = model::timestamp::now(),
+        .expected_compaction_epoch = compaction_info->compaction_epoch});
+    ASSERT_TRUE(_metastore.commit_compaction_metadata(seed).get());
+
+    compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    ASSERT_TRUE(
+      compaction_info->offsets_response.removable_tombstone_ranges.covers(
+        kafka::offset{3 * records_per_extent},
+        kafka::offset{4 * records_per_extent - 1}));
+
+    // Every live extent's output crosses the commit interval at its
+    // boundary, so extent 2's boundary commit leaves the anchor at extent
+    // 3's base; extent 3 then contributes nothing and the job ends.
+    do_compact(
+      tidp,
+      ntp,
+      std::move(compaction_info->offsets_response),
+      compaction_info->compaction_epoch,
+      compaction_info->start_offset,
+      &_metastore,
+      &_io,
+      0ms,
+      kafka::offset::max(),
+      /*max_object_size=*/512,
+      /*commit_interval_bytes=*/512)
+      .get();
+
+    // The log is fully clean: nothing dirty, no removable tombstones left
+    // (the dead range's cleaned-with-tombstones entry was erased), and the
+    // empty object's extent is a first-class replacement in the state.
+    compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    EXPECT_TRUE(compaction_info->offsets_response.dirty_ranges.empty());
+    EXPECT_TRUE(
+      compaction_info->offsets_response.removable_tombstone_ranges.empty());
+
+    // Extent 3's expired tombstones must actually be gone — not merely
+    // claimed removed while the old extent still serves them.
+    verify_compacted_log(
+      ntp,
+      tidp,
+      latest_kv_map,
+      /*expected_records=*/(num_extents - 1) * records_per_extent,
+      /*expected_batches=*/(num_extents - 1) * batches_per_extent);
+}
+
+// A partial commit rejected by the metastore (stale compaction epoch, e.g.
+// a competing job committed after this job read its snapshot) aborts the
+// run: no extents are replaced and no compaction metadata is recorded, so
+// the log stays fully dirty for the retry.
+TEST_F(ReducerTestFixture, StaleEpochAbortsWithoutMetadata) {
+    auto [ntp, tidp] = make_ntidp("test_topic");
+    constexpr int num_extents = 3;
+    constexpr int batches_per_extent = 10;
+    constexpr int records_per_batch = 5;
+    constexpr int total_records = num_extents * batches_per_extent
+                                  * records_per_batch;
+
+    latest_kv_map_t latest_kv_map;
+    auto batches = generate_batches(
+      num_extents * batches_per_extent,
+      /*cardinality=*/total_records,
+      records_per_batch,
+      /*starting_value=*/0,
+      /*produce_tombstones=*/false,
+      &latest_kv_map);
+    for (int i = 0; i < num_extents; ++i) {
+        chunked_circular_buffer<model::record_batch> extent_batches;
+        for (int j = 0; j < batches_per_extent; ++j) {
+            extent_batches.push_back(std::move(batches.front()));
+            batches.pop_front();
+        }
+        std::vector<tidp_batches_t> tidp_batches;
+        tidp_batches.emplace_back(tidp, std::move(extent_batches));
+        make_l1_objects(std::move(tidp_batches)).get();
+    }
+
+    auto info_spec = l1::metastore::compaction_info_spec{
+      .tidp = tidp,
+      .tombstone_removal_upper_bound_ts = model::timestamp::max()};
+    auto compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    auto initial_epoch = compaction_info->compaction_epoch;
+
+    // A competing job bumps the epoch after this job read its snapshot.
+    l1::metastore::compaction_map_t bump;
+    bump.emplace(
+      tidp,
+      l1::metastore::compaction_update{
+        .expected_compaction_epoch = initial_epoch});
+    auto bump_res = _metastore.commit_compaction_metadata(bump).get();
+    ASSERT_TRUE(bump_res.has_value());
+
+    // The first partial commit is rejected as stale and aborts the run.
+    EXPECT_THROW(
+      do_compact(
+        tidp,
+        ntp,
+        std::move(compaction_info->offsets_response),
+        initial_epoch,
+        compaction_info->start_offset,
+        &_metastore,
+        &_io,
+        0ms,
+        kafka::offset::max(),
+        /*max_object_size=*/512,
+        /*commit_interval_bytes=*/512)
+        .get(),
+      std::runtime_error);
+
+    // Only the competing bump moved the epoch; the rejected commit replaced
+    // nothing and recorded no metadata, so the log is still fully dirty.
+    compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    EXPECT_EQ(compaction_info->compaction_epoch(), initial_epoch() + 1);
+    EXPECT_TRUE(compaction_info->offsets_response.dirty_ranges.covers(
+      kafka::offset{0}, kafka::offset{total_records - 1}));
+
+    // Nothing was lost: every record is still readable.
+    verify_compacted_log(
+      ntp,
+      tidp,
+      latest_kv_map,
+      total_records,
+      num_extents * batches_per_extent);
+}
+
+// A job that fails after a partial commit has landed keeps the committed
+// prefix durable but must not record compaction metadata: the extents the
+// partial commit replaced stay replaced, while every cleaned range stays
+// dirty so the retry recompacts them.
+TEST_F(ReducerTestFixture, AbortAfterPartialCommitSkipsMetadata) {
+    auto [ntp, tidp] = make_ntidp("test_topic");
+    constexpr int num_extents = 3;
+    constexpr int batches_per_extent = 10;
+    constexpr int records_per_batch = 5;
+    constexpr int total_records = num_extents * batches_per_extent
+                                  * records_per_batch;
+
+    latest_kv_map_t latest_kv_map;
+    auto batches = generate_batches(
+      num_extents * batches_per_extent,
+      /*cardinality=*/total_records,
+      records_per_batch,
+      /*starting_value=*/0,
+      /*produce_tombstones=*/false,
+      &latest_kv_map);
+    for (int i = 0; i < num_extents; ++i) {
+        chunked_circular_buffer<model::record_batch> extent_batches;
+        for (int j = 0; j < batches_per_extent; ++j) {
+            extent_batches.push_back(std::move(batches.front()));
+            batches.pop_front();
+        }
+        std::vector<tidp_batches_t> tidp_batches;
+        tidp_batches.emplace_back(tidp, std::move(extent_batches));
+        make_l1_objects(std::move(tidp_batches)).get();
+    }
+
+    auto info_spec = l1::metastore::compaction_info_spec{
+      .tidp = tidp,
+      .tombstone_removal_upper_bound_ts = model::timestamp::max()};
+    auto compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    auto initial_epoch = compaction_info->compaction_epoch;
+
+    // Throw partway through the second extent: the first extent's boundary
+    // commit has landed by then, and the job dies before finishing.
+    int batch_count = 0;
+    EXPECT_THROW(
+      do_compact_with_throwing_sink(
+        tidp,
+        ntp,
+        std::move(compaction_info->offsets_response),
+        initial_epoch,
+        compaction_info->start_offset,
+        &_metastore,
+        &_io,
+        /*should_roll=*/[] { return false; },
+        /*should_throw=*/
+        [&batch_count] { return ++batch_count == batches_per_extent + 5; },
+        0ms,
+        kafka::offset::max(),
+        /*max_object_size=*/512,
+        /*commit_interval_bytes=*/512)
+        .get(),
+      std::runtime_error);
+
+    // Exactly one partial commit landed (one epoch bump), and no compaction
+    // metadata was recorded, so the whole log is still dirty for the retry.
+    compaction_info = _metastore.get_compaction_info(info_spec).get();
+    ASSERT_TRUE(compaction_info.has_value());
+    EXPECT_EQ(compaction_info->compaction_epoch(), initial_epoch() + 1);
+    EXPECT_TRUE(compaction_info->offsets_response.dirty_ranges.covers(
+      kafka::offset{0}, kafka::offset{total_records - 1}));
+
+    // The committed prefix was durably replaced: the first extent's range is
+    // now backed by more, smaller extents.
+    auto extents = _metastore
+                     .get_extent_metadata_forwards(
+                       tidp,
+                       kafka::offset{0},
+                       kafka::offset::max(),
+                       std::numeric_limits<size_t>::max(),
+                       l1::metastore::include_object_metadata::no)
+                     .get();
+    ASSERT_TRUE(extents.has_value());
+    EXPECT_GT(extents->extents.size(), static_cast<size_t>(num_extents));
+
+    // Nothing was lost: every record is still readable.
+    verify_compacted_log(
+      ntp,
+      tidp,
+      latest_kv_map,
+      total_records,
+      num_extents * batches_per_extent);
 }
 
 // Tests the exceptional path in compaction_sink::finalize() where the inflight

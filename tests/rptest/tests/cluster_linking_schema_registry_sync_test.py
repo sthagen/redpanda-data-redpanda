@@ -13,17 +13,21 @@
 # while a sync is in flight and schemas added after a sync (picked up by the
 # next full sync). The layered diamond DAG mirrors the reconciler
 # `concurrent_stress` unit test at a larger scale, so the concurrent fetch/import
-# path is exercised against a real registry. Plaintext, default context, no auth
-# (auth/TLS coverage is tracked separately).
+# path is exercised against a real registry. That suite runs plaintext, default
+# context, no auth; source-SR authentication and TLS coverage lives in the
+# SchemaRegistrySyncAuthMixin leaves below (HTTP Basic, https, mTLS).
 
 import json
+import socket
 from typing import Any
 
 import google.protobuf.duration_pb2
 import google.protobuf.field_mask_pb2
+from connectrpc.errors import ConnectError, ConnectErrorCode
 from ducktape.utils.util import wait_until
 
 from rptest.clients.admin.proto.redpanda.core.admin.v2 import shadow_link_pb2
+from rptest.clients.admin.proto.redpanda.core.common.v1 import tls_pb2
 from rptest.clients.rpk import RpkTool
 from rptest.services.admin import Admin
 from rptest.services.cluster import TestContext, cluster
@@ -33,10 +37,19 @@ from rptest.services.multi_cluster_services import (
     SecondaryClusterSpec,
     ServiceType,
 )
-from rptest.services.redpanda import SchemaRegistryConfig
-from rptest.tests.cluster_linking_test_base import ShadowLinkTestBase
+from rptest.services.redpanda import (
+    MetricsEndpoint,
+    RedpandaService,
+    SchemaRegistryConfig,
+    SecurityConfig,
+)
+from rptest.services.tls import Certificate, TLSCertManager
+from rptest.tests.cluster_linking_test_base import (
+    ClusterLinkingTLSProvider,
+    ShadowLinkTestBase,
+)
 from rptest.tests.schema_registry_test import SchemaRegistryRedpandaClient
-from rptest.util import firewall_blocked
+from rptest.util import expect_exception, firewall_blocked
 
 NS = "com.acme"
 LINK_NAME = "sr-sync"
@@ -56,6 +69,7 @@ class SchemaRegistrySyncMixin:
 
     # Members supplied by ShadowLinkTestBase once mixed into a leaf.
     logger: Any
+    source_cluster_service: Any
     target_cluster_service: Any
     create_default_link_request: Any
     create_link_with_request: Any
@@ -133,10 +147,18 @@ class SchemaRegistrySyncMixin:
         subject: str,
         schema: dict,
         references: list[dict] | None = None,
+        metadata: dict | None = None,
+        rule_set: dict | None = None,
     ) -> int:
         payload: dict[str, Any] = {"schema": json.dumps(schema)}
         if references:
             payload["references"] = references
+        # Confluent-only Data Contract fields Redpanda does not model. A source
+        # that carries them lets a test drive the unsupported-feature policy.
+        if metadata is not None:
+            payload["metadata"] = metadata
+        if rule_set is not None:
+            payload["ruleSet"] = rule_set
         resp = client.post_subjects_subject_versions(
             subject=subject, data=json.dumps(payload)
         )
@@ -212,6 +234,9 @@ class SchemaRegistrySyncMixin:
         source_filter_subjects: list[str] | None = None,
         source_filter_contexts: list[str] | None = None,
         exact_context_map: dict[str, str] | None = None,
+        feature_policy: shadow_link_pb2.UnsupportedSchemaFeaturePolicy.ValueType
+        | None = None,
+        max_source_requests_per_second: int | None = None,
     ) -> str:
         # Create a shadow link that syncs only the Schema Registry, in API mode,
         # pointing at the source cluster's SR endpoint (or an explicit URL, e.g.
@@ -233,6 +258,10 @@ class SchemaRegistrySyncMixin:
                 seconds=full_sync_interval_sec
             ),
         )
+        if max_source_requests_per_second is not None:
+            api.max_source_requests_per_second = max_source_requests_per_second
+        if feature_policy is not None:
+            api.unsupported_schema_feature_policy = feature_policy
         if source_filter_subjects is not None:
             api.source_filter.subjects.extend(source_filter_subjects)
         if source_filter_contexts is not None:
@@ -242,11 +271,33 @@ class SchemaRegistrySyncMixin:
                 api.destination.exact.mappings.add(
                     source=source, destination=destination
                 )
+        self._maybe_apply_source_sr_credentials(api)
         req.shadow_link.configurations.schema_registry_sync_options.shadow_schema_registry_api.CopyFrom(
             api
         )
+        self._maybe_apply_source_kafka_credentials(
+            req.shadow_link.configurations.client_options
+        )
         self.create_link_with_request(req=req)
         return source_url
+
+    def _maybe_apply_source_sr_credentials(
+        self,
+        api: "shadow_link_pb2.SchemaRegistrySyncOptions.ShadowSchemaRegistryApi",
+    ) -> None:
+        # Hook for auth/TLS leaves to attach source-SR credentials to the link
+        # request. The plaintext no-auth suite leaves this a no-op; the auth
+        # leaves (see SchemaRegistrySyncAuthMixin) override it to set
+        # `auth_options.basic` and/or `tls_settings`.
+        pass
+
+    def _maybe_apply_source_kafka_credentials(
+        self, client_options: "shadow_link_pb2.ShadowLinkClientOptions"
+    ) -> None:
+        # Hook for auth/TLS leaves to add the Kafka-level source credentials the
+        # link needs when the source cluster runs SASL/TLS. No-op for the
+        # plaintext no-auth suite.
+        pass
 
     # --- verification ------------------------------------------------------
 
@@ -339,11 +390,69 @@ class SchemaRegistrySyncMixin:
 
     # --- status-counter checks ---------------------------------------------
 
+    SR_SYNC_METRIC_COUNTERS = (
+        "subject_versions_changed",
+        "compatibility_configs_changed",
+        "modes_changed",
+        "unsupported_features_removed",
+        "errors",
+    )
+
+    def _sr_sync_metric_totals(
+        self, metrics_endpoint: MetricsEndpoint
+    ) -> dict[str, float] | None:
+        """Cluster-wide sums of the shadow-link Schema Registry counters for
+        LINK_NAME from the given metrics endpoint, keyed by counter name, or
+        None while any counter has no series (e.g. no leader yet)."""
+        patterns = {
+            counter: f"shadow_link_schema_registry_{counter}"
+            for counter in self.SR_SYNC_METRIC_COUNTERS
+        }
+        samples = self.target_cluster_service.metrics_samples(
+            sample_patterns=list(patterns.values()), metrics_endpoint=metrics_endpoint
+        )
+        totals: dict[str, float] = {}
+        for counter, pattern in patterns.items():
+            if pattern not in samples:
+                return None
+            values = [
+                s.value
+                for s in samples[pattern].samples
+                if s.labels["shadow_link_name"] == LINK_NAME
+            ]
+            if not values:
+                return None
+            totals[counter] = sum(values)
+        return totals
+
+    def _versions_changed_metric(self, metrics_endpoint: MetricsEndpoint) -> float:
+        """The cluster-wide subject_versions_changed counter, or -1 while the
+        series is absent (distinguishable from a real 0 so wait_until
+        predicates can wait for either state)."""
+        totals = self._sr_sync_metric_totals(metrics_endpoint)
+        return totals["subject_versions_changed"] if totals is not None else -1.0
+
+    def _verify_prometheus_counters(self, expected_versions: int):
+        # Both metrics endpoints must agree with the admin API's
+        # totals_since_task_start. The counters read the task's live status at
+        # scrape time, so once the admin totals have converged no extra wait is
+        # needed.
+        for endpoint in (MetricsEndpoint.METRICS, MetricsEndpoint.PUBLIC_METRICS):
+            totals = self._sr_sync_metric_totals(endpoint)
+            assert totals is not None, f"no SR sync series on {endpoint}"
+            self.logger.info(f"[{endpoint}] SR sync counters: {totals}")
+            assert totals["subject_versions_changed"] == expected_versions, totals
+            assert totals["errors"] == 0, totals
+            for name in self.EXPECTED_ZERO_COUNTERS:
+                assert totals[name] == 0, totals
+
     # Counters expected to stay zero in the override-free DAG tests: those DAGs
-    # register no mode or compatibility overrides, so mode/config replication is
-    # a no-op, and unsupported-feature handling is unimplemented. A test that
-    # sets overrides (test_schema_registry_api_sync_compatibility) asserts the
-    # compatibility counter advances.
+    # register no mode or compatibility overrides and carry no unsupported
+    # fields, so mode/config replication and unsupported-feature handling are
+    # no-ops there. Tests that do exercise them
+    # (test_schema_registry_api_sync_compatibility, the
+    # test_schema_registry_api_sync_unsupported_* suite) assert their counters
+    # advance.
     EXPECTED_ZERO_COUNTERS = (
         "compatibility_configs_changed",
         "modes_changed",
@@ -415,7 +524,7 @@ class SchemaRegistrySyncMixin:
         assert lfs.HasField("start_time") and lfs.HasField("finish_time"), lfs
         assert lfs.finish_time.ToNanoseconds() >= lfs.start_time.ToNanoseconds(), lfs
 
-        # Mapped-but-unimplemented counters must be zero (flagged above).
+        # Counters this suite does not exercise must stay zero (flagged above).
         totals = sr.totals_since_task_start
         # The cumulative summary carries the task start time (stamped once on the
         # task's first run) and, being open-ended, has no finish time.
@@ -427,7 +536,9 @@ class SchemaRegistrySyncMixin:
                 f"unexpected {name}={getattr(totals, name)}"
             )
 
-        # Cross-check the rpk `shadow status` rendering against the admin API.
+        # Cross-check the prometheus counters and the rpk `shadow status`
+        # rendering against the admin API.
+        self._verify_prometheus_counters(expected_versions)
         self._verify_rpk_status(expected_subjects, expected_versions)
 
     def _log_counters(self, source: str, sr):
@@ -694,6 +805,56 @@ class SchemaRegistrySyncMixin:
         # The in-source subject is untouched by the purge.
         assert self._schema_view(dest, keep, 1) is not None
 
+    def _test_schema_registry_api_sync_context_delete(self):
+        # A whole source context is deleted (Confluent-style: empty it, then
+        # DELETE /contexts). The destination must converge: the context's
+        # subjects purged and the context itself tombstoned so it no longer
+        # lists, while a default-context subject is left untouched.
+        src = self._make_source_client()
+        dest = SchemaRegistryRedpandaClient(self.target_cluster_service)
+
+        prod_orders = ":.prod:orders-value"
+        keep = "keep-value"  # default context
+
+        self._register(
+            src, prod_orders, self._record("Orders", [{"name": "v", "type": "string"}])
+        )
+        self._register(
+            src, keep, self._record("Keep", [{"name": "v", "type": "string"}])
+        )
+
+        self._create_sr_link()
+
+        # Both subjects replicate and the .prod context materializes on the
+        # destination.
+        self._wait_synced(src, dest, [(prod_orders, 1), (keep, 1)])
+        wait_until(
+            lambda: ".prod" in set(dest.get_contexts().json()),
+            timeout_sec=60,
+            backoff_sec=1,
+            err_msg="the .prod context did not materialize on the destination",
+        )
+
+        # Delete the whole .prod context at the source: hard-delete its only
+        # subject to empty it (soft then permanent, as the source requires), then
+        # DELETE /contexts/.prod.
+        assert src.delete_subject(prod_orders).status_code == 200
+        assert src.delete_subject(prod_orders, permanent=True).status_code == 200
+        assert src.delete_context(".prod").status_code in (200, 204)
+
+        # The next full sync purges the .prod subject and tombstones the context,
+        # so the destination's context listing drops back to the default context.
+        wait_until(
+            lambda: ".prod" not in set(dest.get_contexts().json()),
+            timeout_sec=90,
+            backoff_sec=1,
+            err_msg="source context deletion did not propagate to the destination",
+        )
+
+        # The default-context subject is untouched; the .prod subject is gone.
+        assert self._schema_view(dest, keep, 1) is not None
+        assert self._schema_view(dest, prod_orders, 1) is None
+
     def _test_schema_registry_api_sync_context_remap(self):
         src = self._make_source_client()
         dest = SchemaRegistryRedpandaClient(self.target_cluster_service)
@@ -886,6 +1047,14 @@ class SchemaRegistrySyncMixin:
             err_msg="out-of-scope reference did not surface as a counted error",
         )
 
+        # The counted error is also exported through the errors counter on
+        # both prometheus endpoints (the value tests above only ever see it at
+        # zero).
+        for endpoint in (MetricsEndpoint.METRICS, MetricsEndpoint.PUBLIC_METRICS):
+            totals = self._sr_sync_metric_totals(endpoint)
+            assert totals is not None, f"no SR sync series on {endpoint}"
+            assert totals["errors"] >= 1, totals
+
         # The referrer never imported; the in-scope independent subject did.
         dest_subjects = set(dest.get_subjects().json())
         assert "ok-value" in dest_subjects, dest_subjects
@@ -970,8 +1139,40 @@ class SchemaRegistrySyncMixin:
             self._register(src, subject, self._large_schema(i, body))
             pairs.append((subject, 1))
 
-        self._create_sr_link()
+        # Effectively unthrottled: at the default 30 req/s the periodic full
+        # syncs saturate the 2s interval on slow CI hardware, so teardown
+        # always lands mid-sync and can hang node shutdown on an unabortable
+        # destination write racing raft shutdown (issue #31108). A fast sync
+        # restores the idle-at-teardown profile this test always ran with;
+        # drop the override once #31108 is fixed. Rate-limiting behavior
+        # itself is covered by test_schema_registry_api_sync_teardown_mid_sync.
+        self._create_sr_link(max_source_requests_per_second=1000)
         self._wait_synced(src, dest, pairs)
+
+    def _test_schema_registry_api_sync_teardown_mid_sync(self):
+        src = self._make_source_client()
+        dest = SchemaRegistryRedpandaClient(self.target_cluster_service)
+
+        # Enough subjects that a full sync at 2 requests/s takes far longer
+        # than the 2s full-sync interval, so the task is effectively always
+        # mid-sync from here on.
+        pairs: list[Pair] = []
+        for i in range(16):
+            subject = f"subj-{i}-value"
+            self._register(src, subject, self._leaf_schema(i))
+            pairs.append((subject, 1))
+
+        # The per-link cap doubles as coverage that the admin field reaches
+        # the reader's rate limiter: at the default rate this sync finishes in
+        # a couple of seconds, so _wait_synced only passes this slowly because
+        # the field applied.
+        self._create_sr_link(max_source_requests_per_second=2)
+        self._wait_synced(src, dest, pairs)
+        # The regression under test fires at teardown: stopping a node while
+        # the throttled sync is mid-flight used to deadlock cluster_link
+        # shutdown (the manager drained its work queue and gate before
+        # aborting the tasks they were blocked on) until the 30s node-stop
+        # timeout killed the node. Success here is simply a clean teardown.
 
     def _test_schema_registry_api_sync_survives_leadership_change(self):
         src = self._make_source_client()
@@ -1008,6 +1209,16 @@ class SchemaRegistrySyncMixin:
         )
         before_start = (
             self._admin_sr_status().totals_since_task_start.start_time.ToNanoseconds()
+        )
+        # The first instance exports its totals as prometheus counters from the
+        # leader broker (summed cluster-wide; only the leader has the series).
+        before_changed = (
+            self._admin_sr_status().totals_since_task_start.subject_versions_changed
+        )
+        assert before_changed >= expected_versions
+        assert (
+            self._versions_changed_metric(MetricsEndpoint.PUBLIC_METRICS)
+            == before_changed
         )
 
         # Move _schemas/0 leadership to another destination broker. The sync
@@ -1057,6 +1268,17 @@ class SchemaRegistrySyncMixin:
             timeout_sec=90,
             backoff_sec=1,
             err_msg="new leader did not re-derive counters after the bounce",
+        )
+
+        # The cluster-wide metric drops to the new instance's 0: the old
+        # leader unregistered its series on stop (a lingering stale series
+        # would keep the sum at the pre-bounce value), and the new leader
+        # exports the reset totals. -1 (no series anywhere) must not pass.
+        wait_until(
+            lambda: self._versions_changed_metric(MetricsEndpoint.PUBLIC_METRICS) == 0,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="prometheus counter did not follow leadership to the new broker",
         )
 
         # The new leader keeps syncing: a subject added now is imported by it,
@@ -1122,6 +1344,144 @@ class SchemaRegistrySyncMixin:
             err_msg="reused instance did not reset state on regaining leadership",
         )
 
+        # Same series check for the return leg: B unregistered on stop and the
+        # reused instance on A re-registered with its reset totals.
+        wait_until(
+            lambda: self._versions_changed_metric(MetricsEndpoint.PUBLIC_METRICS) == 0,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="prometheus counter did not follow leadership back to the original broker",
+        )
+
+    # --- unsupported-feature policy ----------------------------------------
+    # Confluent-only: only a Confluent source accepts the unsupported fields
+    # (schema metadata.tags, config compatibilityGroup) on registration, so a
+    # Redpanda source cannot seed them. The destination models neither, so the
+    # sync surfaces them and applies the configured policy.
+
+    def _schema_tags(self, i: int) -> dict:
+        # A metadata.tags block: Redpanda models only metadata.properties, so
+        # this surfaces "/metadata/tags" as an unsupported schema feature.
+        return {"tags": {f"{NS}.Leaf{i}": ["PII"]}}
+
+    def _set_source_config(
+        self, client: SchemaRegistryRedpandaClient, subject: str, body: dict
+    ) -> None:
+        resp = client.set_config_subject(subject, json.dumps(body))
+        assert resp.status_code == 200, f"set config {subject} failed: {resp.text}"
+
+    def _wait_totals(self, predicate: Any, err_msg: str, timeout_sec: int = 90):
+        # Waits until the cumulative counters satisfy `predicate`, then returns
+        # the status for logging and further assertions.
+        def ready() -> bool:
+            return predicate(self._admin_sr_status().totals_since_task_start)
+
+        wait_until(ready, timeout_sec=timeout_sec, backoff_sec=1, err_msg=err_msg)
+        return self._admin_sr_status()
+
+    def _test_schema_registry_api_sync_unsupported_schema_remove(self):
+        src = self._make_source_client()
+        dest = SchemaRegistryRedpandaClient(self.target_cluster_service)
+        # A clean subject and one carrying an unsupported metadata.tags block.
+        self._register(src, "clean-value", self._leaf_schema(1))
+        self._register(
+            src, "tagged-value", self._leaf_schema(2), metadata=self._schema_tags(2)
+        )
+        self._create_sr_link(
+            feature_policy=shadow_link_pb2.UNSUPPORTED_SCHEMA_FEATURE_POLICY_REMOVE
+        )
+        # Both import (the tagged one as its supported projection); the removed
+        # feature is counted and no error is raised.
+        self._wait_synced(src, dest, [("clean-value", 1), ("tagged-value", 1)])
+        sr = self._wait_totals(
+            lambda t: t.unsupported_features_removed >= 1 and t.errors == 0,
+            "REMOVE did not count an unsupported schema feature",
+        )
+        self._log_counters("admin API", sr)
+
+    def _test_schema_registry_api_sync_unsupported_schema_fail(self):
+        src = self._make_source_client()
+        dest = SchemaRegistryRedpandaClient(self.target_cluster_service)
+        self._register(src, "clean-value", self._leaf_schema(1))
+        self._register(
+            src, "tagged-value", self._leaf_schema(2), metadata=self._schema_tags(2)
+        )
+        self._create_sr_link(
+            feature_policy=shadow_link_pb2.UNSUPPORTED_SCHEMA_FEATURE_POLICY_FAIL
+        )
+        # The clean subject syncs; the tagged one is a per-item error, skipped.
+        self._wait_synced(src, dest, [("clean-value", 1)])
+        sr = self._wait_totals(
+            lambda t: t.errors >= 1 and t.unsupported_features_removed == 0,
+            "FAIL did not count the unsupported schema as an error",
+        )
+        self._log_counters("admin API", sr)
+        assert self._schema_view(dest, "tagged-value", 1) is None, (
+            "FAIL must not import a schema carrying unsupported features"
+        )
+
+    def _test_schema_registry_api_sync_unsupported_config_remove(self):
+        src = self._make_source_client()
+        dest = SchemaRegistryRedpandaClient(self.target_cluster_service)
+        self._register(src, "cfg-value", self._leaf_schema(1))
+        # Subject config with an unsupported governance field
+        # (compatibilityGroup) alongside the supported compatibilityLevel.
+        self._set_source_config(
+            src,
+            "cfg-value",
+            {"compatibility": "FULL", "compatibilityGroup": "app.major.version"},
+        )
+        # A governance-only subject config (no compatibility level set at all):
+        # the sync must treat it as "no override" plus policy input rather than
+        # fail the config read, so the whole run stays error-free.
+        self._register(src, "gov-value", self._leaf_schema(2))
+        self._set_source_config(
+            src, "gov-value", {"compatibilityGroup": "app.major.version"}
+        )
+        self._create_sr_link(
+            feature_policy=shadow_link_pb2.UNSUPPORTED_SCHEMA_FEATURE_POLICY_REMOVE
+        )
+        self._wait_synced(src, dest, [("cfg-value", 1), ("gov-value", 1)])
+        # Each full sync re-reads both configs and re-counts their dropped
+        # field (+2 per sync), even once the writes are no-ops; >= 3 therefore
+        # proves a second sync counted, pinning the per-sync semantics.
+        sr = self._wait_totals(
+            lambda t: t.unsupported_features_removed >= 3 and t.errors == 0,
+            "REMOVE did not keep counting unsupported config features",
+        )
+        self._log_counters("admin API", sr)
+        # The supported compatibilityLevel is still synced to the destination.
+        resp = dest.get_config_subject("cfg-value")
+        assert (
+            resp.status_code == 200 and resp.json()["compatibilityLevel"] == "FULL"
+        ), f"REMOVE must still sync the compat level: {resp.status_code} {resp.text}"
+
+    def _test_schema_registry_api_sync_unsupported_config_fail(self):
+        src = self._make_source_client()
+        dest = SchemaRegistryRedpandaClient(self.target_cluster_service)
+        self._register(src, "cfg-value", self._leaf_schema(1))
+        self._set_source_config(
+            src,
+            "cfg-value",
+            {"compatibility": "FULL", "compatibilityGroup": "app.major.version"},
+        )
+        self._create_sr_link(
+            feature_policy=shadow_link_pb2.UNSUPPORTED_SCHEMA_FEATURE_POLICY_FAIL
+        )
+        # The clean schema still imports; the config carrying the unsupported
+        # field is a per-item error and its write is skipped.
+        self._wait_synced(src, dest, [("cfg-value", 1)])
+        sr = self._wait_totals(
+            lambda t: t.errors >= 1 and t.unsupported_features_removed == 0,
+            "FAIL did not count the unsupported config as an error",
+        )
+        self._log_counters("admin API", sr)
+        # The subject config write is skipped: no FULL override lands.
+        resp = dest.get_config_subject("cfg-value")
+        assert (
+            resp.status_code != 200 or resp.json().get("compatibilityLevel") != "FULL"
+        ), f"FAIL must not sync the unsupported config: {resp.status_code} {resp.text}"
+
 
 class SchemaRegistrySyncE2ETest(ShadowLinkTestBase, SchemaRegistrySyncMixin):
     """Redpanda source: a secondary Redpanda cluster provides the source Schema
@@ -1140,6 +1500,14 @@ class SchemaRegistrySyncE2ETest(ShadowLinkTestBase, SchemaRegistrySyncMixin):
             ),
             # Destination (primary) cluster Schema Registry.
             schema_registry_config=SchemaRegistryConfig(),
+            # The sync task runs on whichever destination broker leads
+            # _schemas/0, and totals_since_task_start (admin counters and the
+            # prometheus series) resets whenever leadership moves. With the
+            # destination fully synced a fresh instance imports nothing, so a
+            # balancer-initiated move would strand every exact-value counter
+            # wait/assert at 0. Leadership movement is exercised explicitly by
+            # test_schema_registry_api_sync_survives_leadership_change.
+            extra_rp_conf={"enable_leader_balancer": False},
             *args,
             **kwargs,
         )
@@ -1168,6 +1536,10 @@ class SchemaRegistrySyncE2ETest(ShadowLinkTestBase, SchemaRegistrySyncMixin):
         self._test_schema_registry_api_sync_context_remap()
 
     @cluster(num_nodes=6)
+    def test_schema_registry_api_sync_context_delete(self):
+        self._test_schema_registry_api_sync_context_delete()
+
+    @cluster(num_nodes=6)
     def test_schema_registry_api_sync_out_of_scope_reference(self):
         self._test_schema_registry_api_sync_out_of_scope_reference()
 
@@ -1182,6 +1554,12 @@ class SchemaRegistrySyncE2ETest(ShadowLinkTestBase, SchemaRegistrySyncMixin):
     @cluster(num_nodes=6)
     def test_schema_registry_api_sync_survives_leadership_change(self):
         self._test_schema_registry_api_sync_survives_leadership_change()
+
+    # Redpanda-source only: the teardown behavior under test is
+    # vendor-agnostic, so one leaf suffices.
+    @cluster(num_nodes=6)
+    def test_schema_registry_api_sync_teardown_mid_sync(self):
+        self._test_schema_registry_api_sync_teardown_mid_sync()
 
 
 class ConfluentSchemaRegistrySyncE2ETest(ShadowLinkTestBase, SchemaRegistrySyncMixin):
@@ -1218,6 +1596,9 @@ class ConfluentSchemaRegistrySyncE2ETest(ShadowLinkTestBase, SchemaRegistrySyncM
             # + 1 kafka + 1 SR). A one-broker source is fine here -- the SR's
             # _schemas topic is RF=1.
             secondary_cluster_args=SecondaryClusterArgs(num_brokers=1),
+            # Keep _schemas/0 leadership stable for the exact-value counter
+            # asserts; same rationale as SchemaRegistrySyncE2ETest.
+            extra_rp_conf={"enable_leader_balancer": False},
             *args,
             **kwargs,
         )
@@ -1287,3 +1668,381 @@ class ConfluentSchemaRegistrySyncE2ETest(ShadowLinkTestBase, SchemaRegistrySyncM
     @cluster(num_nodes=5)
     def test_schema_registry_api_sync_context_remap(self):
         self._test_schema_registry_api_sync_context_remap()
+
+    @cluster(num_nodes=5)
+    def test_schema_registry_api_sync_context_delete(self):
+        self._test_schema_registry_api_sync_context_delete()
+
+    @cluster(num_nodes=5)
+    def test_schema_registry_api_sync_unsupported_schema_remove(self):
+        self._test_schema_registry_api_sync_unsupported_schema_remove()
+
+    @cluster(num_nodes=5)
+    def test_schema_registry_api_sync_unsupported_schema_fail(self):
+        self._test_schema_registry_api_sync_unsupported_schema_fail()
+
+    @cluster(num_nodes=5)
+    def test_schema_registry_api_sync_unsupported_config_remove(self):
+        self._test_schema_registry_api_sync_unsupported_config_remove()
+
+    @cluster(num_nodes=5)
+    def test_schema_registry_api_sync_unsupported_config_fail(self):
+        self._test_schema_registry_api_sync_unsupported_config_fail()
+
+
+class _CredentialedSRClient(SchemaRegistryRedpandaClient):
+    """A SchemaRegistryRedpandaClient that bakes the source-SR credentials into
+    every request, so the sync mixin's seeding/verification helpers reach an
+    authenticated source over TLS without threading kwargs through each call.
+
+    SchemaRegistryRedpandaClient.request() already forwards tls_enabled/auth/
+    cert/verify to `requests`; this subclass only supplies them as per-request
+    defaults (a caller can still override any of them per call)."""
+
+    def __init__(
+        self,
+        redpanda: RedpandaService,
+        *,
+        tls: bool = False,
+        ca: str | None = None,
+        cert: tuple[str, str] | None = None,
+        auth: tuple[str, str] | None = None,
+    ):
+        super().__init__(redpanda)
+        self._defaults: dict[str, Any] = {}
+        if tls:
+            self._defaults["tls_enabled"] = True
+        if ca is not None:
+            self._defaults["verify"] = ca  # CA bundle path, for https verify
+        if cert is not None:
+            self._defaults["cert"] = cert  # (crt, key) paths, for mTLS
+        if auth is not None:
+            self._defaults["auth"] = auth  # (username, password), for HTTP Basic
+
+    def request(self, verb: str, path: str, **kwargs: Any):  # type: ignore[override]
+        for k, v in self._defaults.items():
+            kwargs.setdefault(k, v)
+        return super().request(verb, path, **kwargs)
+
+    def base_uri(self) -> str:
+        scheme = "https" if self._defaults.get("tls_enabled") else "http"
+        return f"{scheme}://{self.redpanda.nodes[0].account.hostname}:8081"
+
+
+class SchemaRegistrySyncAuthMixin(SchemaRegistrySyncMixin):
+    """Source-SR authentication / TLS coverage: exercises the real HTTP source
+    reader auth path -- HTTP Basic, https (server TLS), and mTLS -- against a
+    Redpanda source Schema Registry. (No-auth http is the control, covered by
+    SchemaRegistrySyncE2ETest.)
+
+    A plain mixin (like SchemaRegistrySyncMixin) providing the source-security
+    wiring and shared test bodies; each concrete leaf below inherits
+    (ShadowLinkTestBase, this) and sets USE_TLS / REQUIRE_CLIENT_AUTH /
+    USE_BASIC. A small DAG keeps each mode fast -- the reconciler ordering is
+    covered at scale by SchemaRegistrySyncE2ETest; the point here is transport.
+
+    Topology: 3 (destination Redpanda) + 1 (source Redpanda) = 4 nodes. A
+    single-broker source is fine -- the SR `_schemas` topic is RF=1, as the
+    Confluent leaf already relies on."""
+
+    # Small reference DAG (top -> mid -> leaf); just enough to prove references
+    # replicate over the authenticated connection. Overrides the E2E scale.
+    LEAVES = 4
+    MIDS = 2
+    TOPS = 1
+
+    # Selected by the concrete leaf to pick the source-SR security posture.
+    USE_TLS = False
+    REQUIRE_CLIENT_AUTH = False  # mTLS: source SR demands a client cert
+    USE_BASIC = False  # HTTP Basic auth (delegated to source-cluster SASL)
+
+    def _auth_secondary_args(self, test_context: TestContext) -> SecondaryClusterArgs:
+        # Build the source (secondary) cluster args from the leaf's flags. Called
+        # from the leaf __init__ before super().__init__, so the source cluster
+        # is constructed with the right SR security posture. Also seeds the
+        # per-test credential state consumed lazily on first use.
+        self.test_context = test_context
+        # TLSCertManager owns the source CA; created here (like the topic-syncing
+        # TLS tests) because the source cluster's tls_provider must be wired
+        # before the cluster is constructed.
+        self.tls: TLSCertManager | None = None
+        self._client_cert: Certificate | None = None
+        self._link_auth: tuple[str, str] | None = None
+        self._link_tls: tls_pb2.TLSSettings | None = None  # source SR connection
+        self._kafka_tls: tls_pb2.TLSSettings | None = None  # source Kafka connection
+        self._creds_loaded = False
+
+        source_security = SecurityConfig()
+        source_sr_config = SchemaRegistryConfig()
+        source_sr_config.mode_mutability = True
+
+        if self.USE_TLS:
+            self.tls = TLSCertManager(self.logger)
+            source_security.tls_provider = ClusterLinkingTLSProvider(self.tls)
+            # Setting a tls_provider enables TLS on ALL source listeners, so the
+            # link's Kafka connection to the source uses TLS too. Keep that Kafka
+            # listener server-TLS-only; mTLS (require_client_auth) is scoped to
+            # the SR listener alone, so the negative test exercises SR client-cert
+            # enforcement rather than the Kafka handshake. SR server cert/
+            # truststore are staged automatically (RedpandaService.write_tls_certs).
+            source_security.require_client_auth = False
+            source_sr_config.require_client_auth = self.REQUIRE_CLIENT_AUTH
+
+        if self.USE_BASIC:
+            source_security.enable_sasl = True
+            source_security.endpoint_authn_method = "sasl"
+            source_sr_config.authn_method = "http_basic"
+
+        return SecondaryClusterArgs(
+            num_brokers=1,
+            schema_registry_config=source_sr_config,
+            security=source_security,
+        )
+
+    def _ca_pem(self) -> str:
+        assert self.tls is not None
+        with open(self.tls.ca.crt, encoding="utf-8") as f:
+            return f.read()
+
+    def _ensure_source_credentials(self) -> None:
+        # Materialize the source CA/client cert and Basic creds once the source
+        # cluster is up. Lazy so leaves need no setUp override.
+        if self._creds_loaded:
+            return
+        if self.tls is not None:
+            ca = self._ca_pem()
+            # Kafka connection: server TLS only (CA to validate the source).
+            self._kafka_tls = tls_pb2.TLSSettings(
+                enabled=True, tls_pem_settings=tls_pb2.TLSPEMSettings(ca=ca)
+            )
+            # SR connection: same CA, plus a client cert/key for mTLS.
+            sr_pem = tls_pb2.TLSPEMSettings(ca=ca)
+            if self.REQUIRE_CLIENT_AUTH:
+                # A client cert signed by the source CA, presented by the reader
+                # (and the seeding client) for mutual TLS to the SR listener.
+                self._client_cert = self.tls.create_cert(
+                    socket.gethostname(),
+                    name="sr-source-reader-client",
+                    common_name="sr-source-reader-client",
+                )
+                with open(self._client_cert.crt, encoding="utf-8") as f:
+                    sr_pem.cert = f.read()
+                with open(self._client_cert.key, encoding="utf-8") as f:
+                    sr_pem.key = f.read()
+            self._link_tls = tls_pb2.TLSSettings(enabled=True, tls_pem_settings=sr_pem)
+        if self.USE_BASIC:
+            # HTTP Basic against the source SR authenticates as a source-cluster
+            # SASL principal; the bootstrapped superuser exists and can write.
+            creds = self.source_cluster_service.SUPERUSER_CREDENTIALS
+            self._link_auth = (creds.username, creds.password)
+        self._creds_loaded = True
+
+    # --- hooks consumed by SchemaRegistrySyncMixin --------------------------
+
+    def _make_source_client(self) -> SchemaRegistryRedpandaClient:
+        self._ensure_source_credentials()
+        cert = None
+        if self._client_cert is not None:
+            cert = (self._client_cert.crt, self._client_cert.key)
+        ca = self.tls.ca.crt if (self._link_tls is not None and self.tls) else None
+        return _CredentialedSRClient(
+            self.source_cluster_service,
+            tls=self._link_tls is not None,
+            ca=ca,
+            cert=cert,
+            auth=self._link_auth,
+        )
+
+    def _maybe_apply_source_sr_credentials(
+        self,
+        api: "shadow_link_pb2.SchemaRegistrySyncOptions.ShadowSchemaRegistryApi",
+    ) -> None:
+        if self._link_auth is not None:
+            api.auth_options.basic.username = self._link_auth[0]
+            api.auth_options.basic.password = self._link_auth[1]
+        if self._link_tls is not None:
+            api.tls_settings.CopyFrom(self._link_tls)
+
+    def _maybe_apply_source_kafka_credentials(
+        self, client_options: "shadow_link_pb2.ShadowLinkClientOptions"
+    ) -> None:
+        # Enabling TLS/SASL on the source also affects the link's Kafka connection
+        # to the source (used by the create preflight); without matching Kafka
+        # credentials the preflight fails with broker_not_available. Supply them
+        # here so the preflight reaches the SR check. These are the Kafka-level
+        # credentials, kept independent of the source-SR credentials
+        # (_link_auth/_link_tls): the negative test sabotages the SR credentials
+        # to prove the *SR* layer rejects the reader, so the Kafka connection must
+        # stay valid.
+        if self._kafka_tls is not None:
+            client_options.tls_settings.CopyFrom(self._kafka_tls)
+        if self.USE_BASIC:
+            creds = self.source_cluster_service.SUPERUSER_CREDENTIALS
+            client_options.authentication_configuration.scram_configuration.CopyFrom(
+                shadow_link_pb2.ScramConfig(
+                    username=creds.username,
+                    password=creds.password,
+                    scram_mechanism=shadow_link_pb2.SCRAM_MECHANISM_SCRAM_SHA_256,
+                )
+            )
+
+    # --- shared test bodies -------------------------------------------------
+
+    def _run_auth_sync_smoke(self) -> None:
+        # Seed a small reference DAG on the authenticated source SR, create the
+        # link with matching credentials, and confirm the DAG replicates to the
+        # destination with no reported errors -- i.e. the real source-reader
+        # auth/TLS path works end to end.
+        src = self._make_source_client()
+        dest = SchemaRegistryRedpandaClient(self.target_cluster_service)
+
+        initial = self._seed_initial_dag(src)
+        source_sr_url = self._create_sr_link()
+        self.logger.info(f"source SR: {source_sr_url}; seeded {len(initial)} subjects")
+
+        self._wait_synced(src, dest, initial)
+
+        # Assert the most recently completed full sync was error-free. Using the
+        # per-sync counter rather than the monotonic lifetime total tolerates a
+        # transient error during startup (e.g. the reader racing a not-yet-ready
+        # source SR) while still catching errors in the sync that did the work.
+        def clean_full_sync() -> bool:
+            sr = self._admin_sr_status()
+            return sr.HasField("last_full_sync") and sr.last_full_sync.errors == 0
+
+        wait_until(
+            clean_full_sync,
+            timeout_sec=60,
+            backoff_sec=1,
+            err_msg="no error-free full sync completed after the DAG replicated",
+        )
+        self._log_counters("admin API", self._admin_sr_status())
+
+    def _run_auth_sync_rejects_bad_credentials(self) -> None:
+        # Negative control proving the source SR actually enforces credentials
+        # (and that the matching positive test is not a false positive): write
+        # one schema with valid credentials (which also confirms the source SR is
+        # up and the good-cred client is accepted), then attempt to create the
+        # link with the mode's credential sabotaged. The link-creation preflight
+        # queries the source SR and must reject -- Basic: a wrong password -> 401;
+        # mTLS: no client cert -> the server's require_client_auth fails the TLS
+        # handshake -- so create_shadow_link raises FAILED_PRECONDITION and no
+        # link is created.
+        src = self._make_source_client()  # valid creds, baked at construction
+        self._add_leaf(src, 0)  # asserts a 200 on register, i.e. good creds work
+
+        if self.USE_BASIC:
+            assert self._link_auth is not None
+            self._link_auth = (self._link_auth[0], "definitely-not-the-password")
+        elif self.REQUIRE_CLIENT_AUTH:
+            # Keep only the CA: the reader can validate the server but has no
+            # client cert to satisfy the source's require_client_auth.
+            self._link_tls = tls_pb2.TLSSettings(
+                enabled=True, tls_pem_settings=tls_pb2.TLSPEMSettings(ca=self._ca_pem())
+            )
+        else:
+            raise AssertionError("no credential to sabotage for this mode")
+
+        def rejected_at_sr(e: ConnectError) -> bool:
+            # The create preflight probes both the source Kafka and the source
+            # SR, and a Kafka-level failure ALSO surfaces as FAILED_PRECONDITION
+            # (broker_not_available). Require that the rejection is the SR check,
+            # not the Kafka one -- otherwise a regression in the link's Kafka
+            # credentials would make this negative pass for the wrong reason.
+            return (
+                e.code == ConnectErrorCode.FAILED_PRECONDITION
+                and "broker_not_available" not in str(e).lower()
+                and "schema registry" in str(e).lower()
+            )
+
+        with expect_exception(ConnectError, rejected_at_sr):
+            self._create_sr_link()
+
+
+class SchemaRegistrySyncBasicAuthTest(ShadowLinkTestBase, SchemaRegistrySyncAuthMixin):
+    """HTTP Basic auth over plaintext http to the source Schema Registry."""
+
+    USE_BASIC = True
+
+    def __init__(self, test_context: TestContext, *args: Any, **kwargs: Any):
+        super().__init__(
+            test_context,
+            secondary_cluster_args=self._auth_secondary_args(test_context),
+            schema_registry_config=SchemaRegistryConfig(),
+            *args,
+            **kwargs,
+        )
+
+    @cluster(num_nodes=4)
+    def test_basic_auth_sync(self):
+        self._run_auth_sync_smoke()
+
+    @cluster(num_nodes=4)
+    def test_basic_auth_rejects_bad_credentials(self):
+        self._run_auth_sync_rejects_bad_credentials()
+
+
+class SchemaRegistrySyncTlsTest(ShadowLinkTestBase, SchemaRegistrySyncAuthMixin):
+    """https (server-side TLS, no client cert, no auth) to the source SR."""
+
+    USE_TLS = True
+
+    def __init__(self, test_context: TestContext, *args: Any, **kwargs: Any):
+        super().__init__(
+            test_context,
+            secondary_cluster_args=self._auth_secondary_args(test_context),
+            schema_registry_config=SchemaRegistryConfig(),
+            *args,
+            **kwargs,
+        )
+
+    @cluster(num_nodes=4)
+    def test_tls_sync(self):
+        self._run_auth_sync_smoke()
+
+
+class SchemaRegistrySyncMtlsTest(ShadowLinkTestBase, SchemaRegistrySyncAuthMixin):
+    """https with mutual TLS: the source SR requires a client certificate."""
+
+    USE_TLS = True
+    REQUIRE_CLIENT_AUTH = True
+
+    def __init__(self, test_context: TestContext, *args: Any, **kwargs: Any):
+        super().__init__(
+            test_context,
+            secondary_cluster_args=self._auth_secondary_args(test_context),
+            schema_registry_config=SchemaRegistryConfig(),
+            *args,
+            **kwargs,
+        )
+
+    @cluster(num_nodes=4)
+    def test_mtls_sync(self):
+        self._run_auth_sync_smoke()
+
+    @cluster(num_nodes=4)
+    def test_mtls_rejects_missing_client_cert(self):
+        self._run_auth_sync_rejects_bad_credentials()
+
+
+class SchemaRegistrySyncTlsBasicAuthTest(
+    ShadowLinkTestBase, SchemaRegistrySyncAuthMixin
+):
+    """https server TLS plus HTTP Basic auth -- the common Confluent Cloud
+    posture (an API key/secret sent over TLS)."""
+
+    USE_TLS = True
+    USE_BASIC = True
+
+    def __init__(self, test_context: TestContext, *args: Any, **kwargs: Any):
+        super().__init__(
+            test_context,
+            secondary_cluster_args=self._auth_secondary_args(test_context),
+            schema_registry_config=SchemaRegistryConfig(),
+            *args,
+            **kwargs,
+        )
+
+    @cluster(num_nodes=4)
+    def test_tls_basic_auth_sync(self):
+        self._run_auth_sync_smoke()

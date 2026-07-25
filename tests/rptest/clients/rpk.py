@@ -720,6 +720,7 @@ class RpkTool:
         schema_key_id: int | None = None,
         proto_msg: str | None = None,
         proto_key_msg: str | None = None,
+        schema_context: str | None = None,
         tombstone: bool = False,
     ) -> int:
         if timeout is None:
@@ -762,6 +763,10 @@ class RpkTool:
             use_schema_registry = True
         if proto_key_msg is not None:
             cmd += ["--schema-key-type", proto_key_msg]
+            use_schema_registry = True
+        if schema_context is not None:
+            # "" or "." selects the default context; a name (e.g. ".team") selects that context.
+            cmd += [f"--schema-context={schema_context}"]
             use_schema_registry = True
         if tombstone:
             cmd += ["--tombstone"]
@@ -944,6 +949,20 @@ class RpkTool:
                 pass
         return res
 
+    def describe_storage(self, topic: str, timeout: int | None = None) -> str:
+        """Run `rpk topic describe-storage <topic>` and return the raw output.
+
+        The command talks to both the Kafka API (topic metadata) and the admin
+        API (cloud storage status), so the admin endpoints are passed too.
+        """
+        cmd = [
+            "describe-storage",
+            topic,
+            "--api-urls",
+            self._redpanda.admin_endpoints(),
+        ]
+        return self._run_topic(cmd, timeout=timeout)
+
     def alter_topic_config(self, topic: str, set_key: str, set_value: Any) -> None:
         cmd = ["alter-config", topic, "--set", f"{set_key}={set_value}", "--no-confirm"]
         out = self._run_topic(cmd)
@@ -985,6 +1004,7 @@ class RpkTool:
         format: str | None = None,
         timeout: float | None = None,
         use_schema_registry: str | None = None,
+        schema_context: str | None = None,
         read_committed: bool = False,
         fetch_max_wait: float | None = None,
     ) -> str:
@@ -1012,6 +1032,8 @@ class RpkTool:
             cmd += ["--use-schema-registry=" + use_schema_registry]
         elif format is not None:
             cmd += ["-f", format]
+        if schema_context is not None:
+            cmd += [f"--schema-context={schema_context}"]
         if read_committed:
             cmd += ["--read-committed"]
 
@@ -2206,9 +2228,16 @@ class RpkTool:
         return self._run_registry(cmd)
 
     def create_schema(
-        self, subject, schema_path, references=None, id=None, version=None
+        self, subject, schema_path, references=None, id=None, version=None, context=None
     ):
-        cmd = ["schema", "create", subject, "--schema", schema_path]
+        # --schema-context / --skip-context-check are persistent flags on the `registry`
+        # group, so they precede the subcommand. We skip the admin-API context-support check
+        # because the test harness only wires up the Schema Registry connection, not the admin
+        # API (and the cluster has qualified subjects enabled regardless).
+        cmd = []
+        if context is not None:
+            cmd += ["--schema-context", context, "--skip-context-check"]
+        cmd += ["schema", "create", subject, "--schema", schema_path]
 
         if references is not None:
             cmd += ["--references", references]

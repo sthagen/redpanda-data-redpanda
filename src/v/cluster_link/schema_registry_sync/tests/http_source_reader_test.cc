@@ -15,12 +15,15 @@
 #include "http/client.h"
 #include "pandaproxy/schema_registry/rest_client/client.h"
 #include "pandaproxy/schema_registry/types.h"
+#include "test_utils/async.h"
 
 #include <seastar/core/abort_source.hh>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <deque>
 #include <memory>
 #include <optional>
 
@@ -110,6 +113,62 @@ TEST(http_source_reader, list_contexts_enumerates_all_contexts) {
         pps::default_context, pps::context{".dev"}, pps::context{".prod"}));
 }
 
+// Stopping the reader while a request is in flight aborts the request rather
+// than waiting for it out: mirroring_task::stop() stops the reader before
+// joining the run fibers, relying on exactly this to unwedge fibers parked in
+// reader-internal waits (rate-limiter token/pause queues, pool slots).
+TEST(http_source_reader, stop_aborts_in_flight_requests) {
+    std::deque<ss::promise<http::downloaded_response>> parked;
+    auto reader = reader_over([&](mock_client& m) {
+        ON_CALL(m, request_and_collect_response(_, _, _))
+          .WillByDefault([&](
+                           bh::request_header<>&&,
+                           std::optional<iobuf>,
+                           ss::lowres_clock::duration) {
+              parked.emplace_back();
+              return parked.back().get_future();
+          });
+        // Like the real transport, shutdown fails the requests it is
+        // servicing.
+        ON_CALL(m, shutdown_and_stop()).WillByDefault([&] {
+            for (auto& request : parked) {
+                request.set_exception(
+                  std::make_exception_ptr(ss::abort_requested_exception{}));
+            }
+            parked.clear();
+            return ss::make_ready_future<>();
+        });
+    });
+    ss::abort_source as;
+    auto req = reader.list_contexts(as);
+    RPTEST_REQUIRE_EVENTUALLY(5s, [&] { return !parked.empty(); });
+
+    reader.stop().get();
+    auto res = req.get();
+    ASSERT_FALSE(res.has_value());
+    EXPECT_EQ(res.error().kind, srs::source_error_kind::source_unavailable);
+}
+
+// A reader call after stop() must fail fast instead of lazily rebuilding the
+// client: the reconcile engine's fibers can still be unwinding when the
+// reader is stopped, and a rebuilt client would never be shut down.
+TEST(http_source_reader, calls_after_stop_fail_without_rebuild) {
+    srs::http_source_connection conn{
+      .address = net::unresolved_address("example.invalid", 8081),
+      .endpoint = "http://example.invalid:8081",
+    };
+    srs::http_source_reader reader{std::move(conn)};
+    reader.stop().get();
+
+    ss::abort_source as;
+    auto res = reader.list_contexts(as).get();
+    ASSERT_FALSE(res.has_value());
+    EXPECT_EQ(res.error().kind, srs::source_error_kind::source_unavailable);
+    EXPECT_THAT(res.error().message, HasSubstr("stopped"));
+    // stop() stays idempotent.
+    reader.stop().get();
+}
+
 // stop() is idempotent: the task teardown can stop the reader more than once
 // (an in-flight reconciler stopping the task before link teardown stops it
 // again). A second stop() must not double-close the rest_client's gate, which
@@ -134,6 +193,43 @@ TEST(http_source_reader, stop_is_idempotent) {
     reader.stop().get();
 
     EXPECT_EQ(shutdowns, 1);
+}
+
+// The reader does not serialize requests: the reconcile engine's fibers drive
+// it concurrently, and in-flight requests are bounded by the pooled transport
+// underneath (here a single injected mock, so two requests overlapping on it
+// proves the reader itself imposes no serialization).
+TEST(http_source_reader, requests_run_concurrently) {
+    int inflight = 0;
+    int max_inflight = 0;
+    std::deque<ss::promise<http::downloaded_response>> parked;
+    auto reader = reader_over([&](mock_client& m) {
+        EXPECT_CALL(m, request_and_collect_response(_, _, _))
+          .WillRepeatedly([&](
+                            bh::request_header<>&&,
+                            std::optional<iobuf>,
+                            ss::lowres_clock::duration) {
+              ++inflight;
+              max_inflight = std::max(max_inflight, inflight);
+              parked.emplace_back();
+              return parked.back().get_future().finally(
+                [&inflight] { --inflight; });
+          });
+    });
+    ss::abort_source as;
+    auto first = reader.list_contexts(as);
+    auto second = reader.list_contexts(as);
+    RPTEST_REQUIRE_EVENTUALLY(5s, [&] { return parked.size() == 2; });
+    EXPECT_EQ(max_inflight, 2);
+
+    for (auto& request : parked) {
+        request.set_value(
+          http::downloaded_response{
+            .status = bh::status::ok, .body = iobuf::from(R"(["."])")});
+    }
+    ASSERT_TRUE(first.get().has_value());
+    ASSERT_TRUE(second.get().has_value());
+    reader.stop().get();
 }
 
 // The rest_client scopes GET /subjects to the requested context (a mock that
@@ -173,15 +269,9 @@ TEST(http_source_reader, read_subject_version_returns_schema) {
     EXPECT_THAT(
       res,
       Optional(AllOf(
+        Field("id", &pps::source_schema_read::id, pps::schema_id{100001}),
         Field(
-          "schema",
-          &pps::source_schema_read::schema,
-          AllOf(
-            Field("id", &pps::stored_schema::id, pps::schema_id{100001}),
-            Field(
-              "version",
-              &pps::stored_schema::version,
-              pps::schema_version{3}))),
+          "version", &pps::source_schema_read::version, pps::schema_version{3}),
         Field(
           "unsupported", &pps::source_schema_read::unsupported, IsEmpty()))));
 }
@@ -434,8 +524,10 @@ TEST(http_source_reader, read_config_narrows_and_classifies) {
                      .get();
         reader.stop().get();
         ASSERT_TRUE(res.has_value());
-        ASSERT_TRUE(res->has_value());
-        EXPECT_EQ(**res, pps::compatibility_level::full_transitive);
+        ASSERT_TRUE(res->compatibility.has_value());
+        EXPECT_EQ(
+          *res->compatibility, pps::compatibility_level::full_transitive);
+        EXPECT_TRUE(res->unsupported.empty());
     }
     {
         auto reader = reader_over([](mock_client& m) {
@@ -449,7 +541,7 @@ TEST(http_source_reader, read_config_narrows_and_classifies) {
                      .get();
         reader.stop().get();
         ASSERT_TRUE(res.has_value());
-        EXPECT_FALSE(res->has_value());
+        EXPECT_FALSE(res->compatibility.has_value());
     }
     {
         auto reader = reader_over([](mock_client& m) {
@@ -464,6 +556,26 @@ TEST(http_source_reader, read_config_narrows_and_classifies) {
         reader.stop().get();
         ASSERT_FALSE(res.has_value());
         EXPECT_EQ(res.error().kind, srs::source_error_kind::operation_failed);
+    }
+    {
+        // Governance-only subject config: no compatibility level, only an
+        // unsupported field. The read succeeds ("no override") and carries the
+        // field for the policy instead of failing the parse.
+        auto reader = reader_over([](mock_client& m) {
+            EXPECT_CALL(m, request_and_collect_response(_, _, _))
+              .WillOnce(respond(
+                bh::status::ok,
+                R"({"compatibilityGroup":"app.major.version"})"));
+        });
+        ss::abort_source as;
+        auto res = reader
+                     .read_config(pps::context_subject::unqualified("s1"), as)
+                     .get();
+        reader.stop().get();
+        ASSERT_TRUE(res.has_value());
+        EXPECT_FALSE(res->compatibility.has_value());
+        ASSERT_EQ(res->unsupported.size(), size_t{1});
+        EXPECT_EQ(res->unsupported[0].json_pointer, "/compatibilityGroup");
     }
 }
 

@@ -20,6 +20,7 @@
 #include "ssx/future-util.h"
 
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 
 namespace cloud_topics::l1 {
 
@@ -29,6 +30,7 @@ l1_object_sink::l1_object_sink(
   metastore* metastore,
   ss::abort_source& as,
   config::binding<size_t> max_object_size,
+  config::binding<size_t> commit_interval_bytes,
   size_t upload_part_size,
   prefix_logger& ctxlog,
   object_builder::options opts)
@@ -37,6 +39,7 @@ l1_object_sink::l1_object_sink(
   , _metastore(metastore)
   , _as(as)
   , _max_object_size(std::move(max_object_size))
+  , _commit_interval_bytes(std::move(commit_interval_bytes))
   , _ctxlog(ctxlog)
   , _upload_part_size(upload_part_size)
   , _opts(opts) {}
@@ -57,6 +60,9 @@ ss::future<> l1_object_sink::init_metadata_builder() {
 
 ss::future<>
 l1_object_sink::initialize_builder(kafka::offset object_base_offset) {
+    if (!_metadata_builder) {
+        co_await init_metadata_builder();
+    }
     auto oid_res = co_await _metadata_builder->create_object_for(_tp);
     if (!oid_res.has_value()) {
         auto msg = fmt::format("Failed to create object: {}", oid_res.error());
@@ -73,7 +79,7 @@ l1_object_sink::initialize_builder(kafka::offset object_base_offset) {
         auto msg = fmt::format(
           "Failed to create multipart upload for object {}: {}",
           oid,
-          static_cast<int>(upload_res.error()));
+          upload_res.error());
         vlog(_ctxlog.warn, "{}", msg);
         throw std::runtime_error(msg);
     }
@@ -95,7 +101,6 @@ ss::future<> l1_object_sink::discard_object(
     (co_await ss::coroutine::as_future(upload->abort())).ignore_ready_future();
     (co_await ss::coroutine::as_future(builder->close())).ignore_ready_future();
     std::ignore = _metadata_builder->remove_pending_object(oid);
-    _any_object_failed = true;
 }
 
 ss::future<> l1_object_sink::flush(kafka::offset object_last_offset) {
@@ -119,8 +124,13 @@ ss::future<> l1_object_sink::flush(kafka::offset object_last_offset) {
                                         : ss::log_level::warn,
           "Exception creating object_info: {}.",
           e);
-        co_return co_await discard_object(
-          std::move(upload), std::move(builder), oid);
+        co_await discard_object(std::move(upload), std::move(builder), oid);
+        // A discarded object would leave a hole in the offset span of the
+        // next commit, which the metastore would reject; abort the run.
+        co_await ss::coroutine::return_exception_ptr(std::move(e));
+        // Unreachable: return_exception_ptr() completes the coroutine. The
+        // explicit co_return terminates the branch for static analysis.
+        co_return;
     }
 
     // close() completes the multipart upload via the stream's data sink.
@@ -137,8 +147,7 @@ ss::future<> l1_object_sink::flush(kafka::offset object_last_offset) {
             co_await upload->abort();
         }
         std::ignore = _metadata_builder->remove_pending_object(oid);
-        _any_object_failed = true;
-        co_return;
+        co_await ss::coroutine::return_exception_ptr(std::move(e));
     }
 
     // Upload succeeded — register the object with the metadata builder.
@@ -172,31 +181,49 @@ ss::future<> l1_object_sink::flush(kafka::offset object_last_offset) {
 
     auto add_res = _metadata_builder->add(oid, std::move(ntp_md));
     if (!add_res.has_value()) {
-        vlog(
-          _ctxlog.warn,
+        auto msg = fmt::format(
           "Failed to add object {} to metadata builder: {}",
           oid,
           add_res.error());
+        vlog(_ctxlog.warn, "{}", msg);
         std::ignore = _metadata_builder->remove_pending_object(oid);
-        _any_object_failed = true;
-        co_return;
+        co_await ss::coroutine::return_exception(std::runtime_error(msg));
     }
 
     auto finish_res = _metadata_builder->finish(
       oid, object_info.footer_offset, object_info.size_bytes);
     if (!finish_res.has_value()) {
-        vlog(
-          _ctxlog.warn,
+        auto msg = fmt::format(
           "Failed to finish object {} in metadata builder: {}",
           oid,
           finish_res.error());
+        vlog(_ctxlog.warn, "{}", msg);
         std::ignore = _metadata_builder->remove_pending_object(oid);
-        _any_object_failed = true;
-        co_return;
+        co_await ss::coroutine::return_exception(std::runtime_error(msg));
     }
 
-    ++_output_objects;
-    _output_bytes += object_info.size_bytes;
+    ++_pending_objects;
+    _pending_bytes += object_info.size_bytes;
+}
+
+ss::future<ss::stop_iteration>
+l1_object_sink::operator()(model::record_batch b) {
+    auto next_offset = model::offset_cast(b.base_offset());
+    auto prev_offset = kafka::prev_offset(next_offset);
+
+    if (
+      _inflight_object
+      && _inflight_object->builder->file_size() >= _max_object_size()) {
+        co_await flush(prev_offset);
+    }
+
+    if (!_inflight_object) {
+        co_await initialize_builder(next_offset);
+    }
+
+    co_await _inflight_object->builder->add_batch(std::move(b));
+
+    co_return ss::stop_iteration::no;
 }
 
 ss::future<> l1_object_sink::prepare_iteration(kafka::offset next_extent_base) {
@@ -205,13 +232,18 @@ ss::future<> l1_object_sink::prepare_iteration(kafka::offset next_extent_base) {
         auto prev_extent_last_offset
           = _processed_extents.make_reverse_stream().next().last_offset;
         if (next_extent_base == kafka::next_offset(prev_extent_last_offset)) {
-            co_return;
+            if (_inflight_object) {
+                co_return;
+            }
+            // Intentional fallthrough.
+        } else {
+            // Passed extents are non-contiguous. Force a roll of the
+            // currently built L1 object with the previous extent's last
+            // offset, and start a new L1 object with the new extent's base
+            // offset.
+            co_await flush(prev_extent_last_offset);
+            // Intentional fallthrough.
         }
-        // Passed extents are non-contiguous. Force a roll of the
-        // currently built L1 object with previous extent's last offset, and
-        // start a new L1 object with the new extent's base offset.
-        co_await flush(prev_extent_last_offset);
-        // Intentional fallthrough.
     }
     co_await initialize_builder(next_extent_base);
 }
@@ -219,12 +251,33 @@ ss::future<> l1_object_sink::prepare_iteration(kafka::offset next_extent_base) {
 ss::future<> l1_object_sink::finish_iteration(
   kafka::offset prev_extent_base, kafka::offset prev_extent_last) {
     _processed_extents.insert(prev_extent_base, prev_extent_last);
-    co_return;
+    ++_processed_extent_count;
+    // Accumulate output until at least one commit interval's worth is
+    // pending, then cut the inflight object at this extent boundary and
+    // commit everything finished so far.
+    auto uncommitted_bytes
+      = _pending_bytes
+        + (_inflight_object ? _inflight_object->builder->file_size() : 0);
+    if (uncommitted_bytes < _commit_interval_bytes()) {
+        co_return;
+    }
+    co_await flush(prev_extent_last);
+    co_await commit_finished_objects();
 }
 
-ss::future<bool> l1_object_sink::finalize_inflight(bool success) {
+ss::future<> l1_object_sink::commit_finished_objects() {
+    if (!_metadata_builder || _metadata_builder->is_empty()) {
+        // Everything finished has already been committed.
+        co_return;
+    }
+    co_await commit_objects(std::exchange(_metadata_builder, nullptr));
+    _pending_objects = 0;
+    _pending_bytes = 0;
+}
+
+ss::future<> l1_object_sink::finalize_inflight(bool success) {
     if (!_metadata_builder) {
-        co_return false;
+        co_return;
     }
 
     if (_inflight_object) {
@@ -259,14 +312,11 @@ ss::future<bool> l1_object_sink::finalize_inflight(bool success) {
         }
     }
 
-    if (_metadata_builder->is_empty()) {
-        vlog(
-          _ctxlog.debug,
-          "Finalized job without any built or uploaded objects.");
-        co_return false;
+    // The flush above cut the last object at the last processed extent
+    // boundary; commit whatever finished output has not been committed yet.
+    if (success) {
+        co_await commit_finished_objects();
     }
-
-    co_return true;
 }
 
 } // namespace cloud_topics::l1

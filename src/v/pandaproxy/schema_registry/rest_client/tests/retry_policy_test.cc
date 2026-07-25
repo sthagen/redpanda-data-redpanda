@@ -12,6 +12,7 @@
 #include "pandaproxy/schema_registry/rest_client/retry_policy.h"
 
 #include <seastar/core/future.hh>
+#include <seastar/core/sleep.hh>
 
 #include <gtest/gtest.h>
 
@@ -101,6 +102,12 @@ TEST(default_retry_policy, abort_exception) {
     ASSERT_EQ(gate_failure.kind, r::error_kind::aborted);
     auto abort_failure = throw_and_catch(ss::abort_requested_exception{});
     ASSERT_EQ(abort_failure.kind, r::error_kind::aborted);
+    // The rate-limiting transport sleeps out server-imposed pauses; an
+    // aborted sleep is a shutdown, not a request failure. sleep_aborted
+    // derives from abort_requested_exception, so the abort classification
+    // covers it; this pins that inheritance-dependent behavior.
+    auto sleep_failure = throw_and_catch(ss::sleep_aborted{});
+    ASSERT_EQ(sleep_failure.kind, r::error_kind::aborted);
 }
 
 TEST(default_retry_policy, nested_exception) {

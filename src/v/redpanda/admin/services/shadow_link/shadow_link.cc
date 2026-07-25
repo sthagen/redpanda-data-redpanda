@@ -32,7 +32,7 @@ void check_sr_api_sync_supported(
     if (!feature_table.is_active(features::feature::shadow_link_sr_api_sync)) {
         throw serde::pb::rpc::failed_precondition_exception(
           "Schema Registry API sync mode cannot be configured until the "
-          "cluster is fully upgraded");
+          "upgrade is finalized");
     }
 }
 
@@ -44,8 +44,7 @@ void check_role_sync_supported(
     }
     if (!feature_table.is_active(features::feature::shadow_link_role_sync)) {
         throw serde::pb::rpc::failed_precondition_exception(
-          "Role sync cannot be configured until the cluster is fully "
-          "upgraded");
+          "Role sync cannot be configured until the upgrade is finalized");
     }
 }
 } // namespace

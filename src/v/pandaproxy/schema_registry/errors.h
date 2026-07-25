@@ -261,6 +261,12 @@ inline error_info context_not_empty(const context& ctx) {
       fmt::format("The specified context '{}' is not empty.", ctx())};
 }
 
+inline error_info cannot_delete_default_context() {
+    return error_info{
+      error_code::subject_version_operation_not_permitted,
+      "Cannot delete the default context"};
+}
+
 inline error_info context_invalid(std::string_view ctx) {
     return error_info{
       error_code::context_invalid,

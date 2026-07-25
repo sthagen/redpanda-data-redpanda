@@ -102,16 +102,19 @@ class LargeControllerSnapshotTest(RedpandaTest):
             # to common ones
             admin = Admin(self.redpanda, default_node=seed_nodes[0])
             rpk = RpkTool(self.redpanda)
+            # In FIPS mode the admin API rejects SCRAM passwords shorter than 14
+            # characters, so keep this at/above that minimum.
+            password = "p4ssw0rd_p4ssw0rd"
             for un in names:
                 # Both calls get a single retry if they fail
                 try:
                     admin.create_user(
-                        username=un, password="p4ssw0rd", algorithm="SCRAM-SHA-256"
+                        username=un, password=password, algorithm="SCRAM-SHA-256"
                     )
                 except Exception as e:
                     self.logger.info(f"Error during creation of {un}: {e}")
                     admin.create_user(
-                        username=un, password="p4ssw0rd", algorithm="SCRAM-SHA-256"
+                        username=un, password=password, algorithm="SCRAM-SHA-256"
                     )
                 try:
                     rpk.acl_create_allow_cluster(username=un, op="describe")

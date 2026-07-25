@@ -51,7 +51,7 @@ inline void cpu() {
 
 ss::future<> disk(const ss::sstring& path);
 
-void memory(bool ignore);
+void memory(size_t reservation_required_per_shard, bool developer_mode_enabled);
 
 ss::future<> systemd_raw_message(ss::sstring out);
 

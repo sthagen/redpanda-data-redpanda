@@ -149,7 +149,7 @@ public:
     /// registry_compatibility_level::unknown with the verbatim string in
     /// config_info::raw. Any other top-level config fields present (validation
     /// flags, metadata, rule sets — which Redpanda's own server does not emit)
-    /// are named in config_info::unknown_fields rather than modeled. The
+    /// are surfaced in config_info::unsupported rather than modeled. The
     /// `defaultToGlobal` query parameter is omitted: on the subject-less global
     /// endpoint it has no observable effect.
     ss::future<std::expected<config_info, domain_error>>

@@ -118,6 +118,7 @@ type describeSchemaRegistrySyncOptions struct {
 // metadata (not the password).
 type describeShadowSchemaRegistryAPI struct {
 	SourceURL                      string                            `json:"source_url" yaml:"source_url"`
+	Paused                         bool                              `json:"paused" yaml:"paused"`
 	AuthOptions                    *describeAuthenticationConfig     `json:"auth_options,omitempty" yaml:"auth_options,omitempty"`
 	TLSSettings                    *TLSSettings                      `json:"tls_settings,omitempty" yaml:"tls_settings,omitempty"`
 	TailInterval                   string                            `json:"tail_interval" yaml:"tail_interval"`
@@ -593,6 +594,7 @@ func printSchemaRegistrySync(opts *adminv2.SchemaRegistrySyncOptions) {
 	if api == nil {
 		return
 	}
+	tw.Print("PAUSED", api.GetPaused())
 	tw.Print("SOURCE URL", api.GetSourceUrl())
 	tw.Print("TAIL INTERVAL", api.GetEffectiveTailInterval().AsDuration().String())
 	tw.Print("FULL SYNC INTERVAL", api.GetEffectiveFullSyncInterval().AsDuration().String())
@@ -925,6 +927,7 @@ func buildDescribeShadowSchemaRegistryAPI(api *adminv2.SchemaRegistrySyncOptions
 	}
 	d := &describeShadowSchemaRegistryAPI{
 		SourceURL:                      api.GetSourceUrl(),
+		Paused:                         api.GetPaused(),
 		TLSSettings:                    adminTLSToCfg(api.GetTlsSettings()),
 		TailInterval:                   api.GetEffectiveTailInterval().AsDuration().String(),
 		FullSyncInterval:               api.GetEffectiveFullSyncInterval().AsDuration().String(),

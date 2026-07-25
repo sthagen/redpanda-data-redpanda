@@ -10,6 +10,9 @@
 #include "syschecks/syschecks.h"
 
 #include "base/seastarx.h"
+#include "base/units.h"
+#include "base/vassert.h"
+#include "utils/human.h"
 #include "version/version.h"
 
 #include <seastar/core/coroutine.hh>
@@ -75,17 +78,38 @@ ss::future<> disk(const ss::sstring& path) {
     });
 }
 
-void memory(bool ignore) {
-    static const uint64_t kMinMemory = 1 << 30;
+void memory(
+  size_t reservation_required_per_shard, bool developer_mode_enabled) {
+    static constexpr size_t kRecommendedMemory = 1_GiB;
+    static constexpr size_t kBaselineMemory = 128_MiB;
+    // The total amount of memory required per shard is the amount of memory
+    // reservations memory_groups has reported, plus some flat amount we think
+    // `redpanda` requires at a baseline.
+    size_t required_per_shard = reservation_required_per_shard
+                                + kBaselineMemory;
+    dassert(
+      kRecommendedMemory > required_per_shard,
+      "The amount of memory Redpanda recommends ({}) is less than is actually "
+      "required ({}) - we need to re-evaluate our recommended value.",
+      human::bytes(kRecommendedMemory),
+      human::bytes(required_per_shard));
     const auto shard_mem = ss::memory::stats().total_memory();
-    if (shard_mem >= kMinMemory) {
-        return;
-    }
-    auto line = fmt::format(
-      "Memory: '{}' below recommended: '{}'", shard_mem, kMinMemory);
-    checklog.error(line.c_str());
-    if (!ignore) {
+    if (shard_mem < required_per_shard && !developer_mode_enabled) {
+        auto line = fmt::format(
+          "Memory: '{}' below required: '{}'",
+          human::bytes(shard_mem),
+          human::bytes(required_per_shard));
+        checklog.error(line.c_str());
         throw std::runtime_error(line);
+    }
+    if (shard_mem < kRecommendedMemory) {
+        auto line = fmt::format(
+          "Memory: '{}' below recommended: '{}'",
+          human::bytes(shard_mem),
+          human::bytes(kRecommendedMemory));
+        auto log_lvl = developer_mode_enabled ? ss::log_level::warn
+                                              : ss::log_level::error;
+        checklog.log(log_lvl, line.c_str());
     }
 }
 

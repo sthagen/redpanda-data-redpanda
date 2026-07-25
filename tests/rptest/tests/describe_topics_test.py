@@ -278,7 +278,7 @@ class DescribeTopicsTest(RedpandaTest):
             ),
             "min.cleanable.dirty.ratio": ConfigProperty(
                 config_type="DOUBLE",
-                value="0.2",
+                value="0.5",
                 doc_string='The minimum ratio between the number of bytes in "dirty" segments and '
                 "the total number of bytes in closed segments that must be reached "
                 "before a partition's log is eligible for compaction in a compact topic. "

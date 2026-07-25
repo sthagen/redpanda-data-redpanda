@@ -11,6 +11,7 @@
 #include "bytes/iobuf_parser.h"
 #include "gmock/gmock.h"
 #include "model/metadata.h"
+#include "serde/rw/rw.h"
 
 #include <gtest/gtest.h>
 
@@ -713,4 +714,103 @@ TEST(IcebergModeLayout, NestedNeedsExtendedClusterFeature) {
 TEST(IcebergModeLayout, FlatDoesNotNeedExtendedClusterFeature) {
     EXPECT_FALSE(
       model::iceberg_mode::key_value.needs_extended_cluster_feature());
+}
+
+// --- needs_extended_cluster_feature vs wire discriminant invariant ---
+//
+// Any config that serializes to wire discriminant 4 (the new canonical-string
+// format) MUST report needs_extended_cluster_feature() == true. Otherwise the
+// feature gate lets it through during an unfinalized upgrade, and a downgraded
+// node will fail to deserialize the controller-log record.
+
+namespace {
+
+// Returns the leading wire discriminant written by write_nested().
+int32_t wire_discriminant(const model::iceberg_mode& m) {
+    iobuf buf;
+    write_nested(buf, m);
+    iobuf_parser parser{buf.share(0, buf.size_bytes())};
+    int32_t disc{0};
+    serde::read_nested(parser, disc, 0UL);
+    return disc;
+}
+
+// Wire discriminant 4 is the canonical-string envelope introduced in v26.2.1.
+constexpr int32_t wire_disc_canonical_string = 4;
+
+} // namespace
+
+// The direct regression test for the value:mode=string gate hole.
+TEST(IcebergModeGateInvariant, ValueModeStringNeedsExtended) {
+    enabled e{};
+    e.value.mode = sm::string;
+    model::iceberg_mode m{std::move(e)};
+    EXPECT_EQ(wire_discriminant(m), wire_disc_canonical_string);
+    EXPECT_TRUE(m.needs_extended_cluster_feature());
+}
+
+TEST(IcebergModeGateInvariant, KeyModeStringNeedsExtended) {
+    enabled e{};
+    e.key.mode = sm::string;
+    model::iceberg_mode m{std::move(e)};
+    EXPECT_EQ(wire_discriminant(m), wire_disc_canonical_string);
+    EXPECT_TRUE(m.needs_extended_cluster_feature());
+}
+
+TEST(IcebergModeGateInvariant, HeadersStringNeedsExtended) {
+    enabled e{};
+    e.headers.value_type = hsm::string;
+    model::iceberg_mode m{std::move(e)};
+    EXPECT_EQ(wire_discriminant(m), wire_disc_canonical_string);
+    EXPECT_TRUE(m.needs_extended_cluster_feature());
+}
+
+TEST(IcebergModeGateInvariant, NestedLayoutNeedsExtended) {
+    enabled e{};
+    e.value.mode = sm::schema_id_prefix;
+    e.value.layout = vl::nested;
+    model::iceberg_mode m{std::move(e)};
+    EXPECT_EQ(wire_discriminant(m), wire_disc_canonical_string);
+    EXPECT_TRUE(m.needs_extended_cluster_feature());
+}
+
+TEST(IcebergModeGateInvariant, AllExtendedNeedsExtended) {
+    enabled e{};
+    e.key.mode = sm::string;
+    e.value.mode = sm::string;
+    e.headers.value_type = hsm::string;
+    model::iceberg_mode m{std::move(e)};
+    EXPECT_EQ(wire_discriminant(m), wire_disc_canonical_string);
+    EXPECT_TRUE(m.needs_extended_cluster_feature());
+}
+
+// Configs using legacy discriminants (0–3) must NOT require the extended
+// feature, confirming the predicate doesn't over-gate.
+TEST(IcebergModeGateInvariant, LegacyConfigsDoNotNeedExtended) {
+    // disabled (disc 0)
+    EXPECT_LT(
+      wire_discriminant(model::iceberg_mode::disabled),
+      wire_disc_canonical_string);
+    EXPECT_FALSE(
+      model::iceberg_mode::disabled.needs_extended_cluster_feature());
+
+    // key_value (disc 1)
+    EXPECT_LT(
+      wire_discriminant(model::iceberg_mode::key_value),
+      wire_disc_canonical_string);
+    EXPECT_FALSE(
+      model::iceberg_mode::key_value.needs_extended_cluster_feature());
+
+    // value_schema_id_prefix (disc 2)
+    EXPECT_LT(
+      wire_discriminant(model::iceberg_mode::value_schema_id_prefix),
+      wire_disc_canonical_string);
+    EXPECT_FALSE(
+      model::iceberg_mode::value_schema_id_prefix
+        .needs_extended_cluster_feature());
+
+    // value_schema_latest (disc 3)
+    auto vsl = model::iceberg_mode::value_schema_latest("", "");
+    EXPECT_LT(wire_discriminant(vsl), wire_disc_canonical_string);
+    EXPECT_FALSE(vsl.needs_extended_cluster_feature());
 }

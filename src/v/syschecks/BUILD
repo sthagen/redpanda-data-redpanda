@@ -15,6 +15,7 @@ redpanda_cc_library(
     deps = [
         "//src/v/base",
         "//src/v/ssx:sformat",
+        "//src/v/utils:human",
         "//src/v/version",
         "@seastar",
     ],

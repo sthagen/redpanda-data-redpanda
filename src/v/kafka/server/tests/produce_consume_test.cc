@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "bytes/iobuf_parser.h"
 #include "container/chunked_vector.h"
 #include "kafka/client/transport.h"
 #include "kafka/protocol/errors.h"
@@ -17,6 +18,7 @@
 #include "kafka/server/snc_quota_manager.h"
 #include "kafka/server/tests/delete_records_utils.h"
 #include "kafka/server/tests/produce_consume_utils.h"
+#include "model/batch_compression.h"
 #include "model/compression.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -1387,4 +1389,336 @@ FIXTURE_TEST(test_produce_unset_timestamps_relaxed, prod_consume_fixture) {
         BOOST_REQUIRE_EQUAL(
           batch.header().max_timestamp, model::timestamp::missing());
     }
+}
+
+namespace {
+
+// Fetch all record batches for the partition, starting at offset 0, until an
+// empty fetch response indicates the log has been drained. Fetch returns
+// stored batches verbatim, so the returned batch headers reflect the on-disk
+// batches.
+std::vector<model::record_batch> fetch_stored_batches(
+  kafka::client::transport& transport, const model::ntp& ntp) {
+    std::vector<model::record_batch> batches;
+    auto fetch_offset = model::offset{0};
+    while (true) {
+        kafka::fetch_request::topic topic;
+        topic.topic = ntp.tp.topic;
+        kafka::fetch_request::partition partition{
+          .partition = ntp.tp.partition,
+          .fetch_offset = fetch_offset,
+          .log_start_offset = model::offset{0},
+          .partition_max_bytes = 100_MiB};
+        topic.partitions.emplace_back(std::move(partition));
+        kafka::fetch_request req;
+        req.data.min_bytes = 1;
+        req.data.max_bytes = 100_MiB;
+        req.data.max_wait_ms = 100ms;
+        req.data.topics.push_back(std::move(topic));
+        auto fetch_resp
+          = transport.dispatch(std::move(req), kafka::api_version(4)).get();
+        BOOST_REQUIRE_EQUAL(
+          fetch_resp.data.error_code, kafka::error_code::none);
+
+        bool made_progress = false;
+        for (auto& topic_resp : fetch_resp.data.responses) {
+            for (auto& partition_resp : topic_resp.partitions) {
+                BOOST_REQUIRE_EQUAL(
+                  partition_resp.error_code, kafka::error_code::none);
+                BOOST_REQUIRE(partition_resp.records.has_value());
+                while (!partition_resp.records->is_end_of_stream()) {
+                    auto batch_adapter
+                      = partition_resp.records.value().consume_batch();
+                    if (!batch_adapter.batch.has_value()) {
+                        break;
+                    }
+                    made_progress = true;
+                    fetch_offset = model::next_offset(
+                      batch_adapter.batch->last_offset());
+                    batches.push_back(std::move(batch_adapter.batch).value());
+                }
+            }
+        }
+        if (!made_progress) {
+            break;
+        }
+    }
+    return batches;
+}
+
+std::vector<kv_t> kvs_from_batch(const model::record_batch& batch) {
+    auto iterable = batch.compressed() ? model::decompress_batch_sync(batch)
+                                       : batch.copy();
+    std::vector<kv_t> kvs;
+    for (const auto& r : iterable.copy_records()) {
+        iobuf_const_parser key_buf(r.key());
+        auto key = key_buf.read_string(key_buf.bytes_left());
+        iobuf_const_parser val_buf(r.value());
+        kvs.emplace_back(key, val_buf.read_string(val_buf.bytes_left()));
+    }
+    return kvs;
+}
+
+} // namespace
+
+// Batches produced to a topic whose `compression.type` names a codec (or
+// `none`) are recompressed by the broker to match it, while a value of
+// `producer` retains the codec set by the client.
+FIXTURE_TEST(test_broker_side_compression, prod_consume_fixture) {
+    scoped_config cfg;
+    cfg.get("kafka_produce_enable_batch_compression").set_value(true);
+    wait_for_controller_leadership().get();
+
+    const model::topic_namespace zstd_tp_ns{
+      model::ns("kafka"), model::topic("compress-zstd")};
+    const model::topic_namespace none_tp_ns{
+      model::ns("kafka"), model::topic("compress-none")};
+    const model::topic_namespace producer_tp_ns{
+      model::ns("kafka"), model::topic("compress-producer")};
+
+    auto make_topic = [this](
+                        const model::topic_namespace& tp_ns,
+                        model::compression compression_type) {
+        cluster::topic_properties props;
+        props.compression = compression_type;
+        add_topic(tp_ns, 1, props).get();
+        wait_for_leader(model::ntp(tp_ns.ns, tp_ns.tp, model::partition_id(0)))
+          .get();
+    };
+    make_topic(zstd_tp_ns, model::compression::zstd);
+    make_topic(none_tp_ns, model::compression::none);
+    make_topic(producer_tp_ns, model::compression::producer);
+
+    auto producer = tests::kafka_produce_transport(make_kafka_client().get());
+    producer.start().get();
+    auto deferred_p_close = ss::defer([&producer] { producer.stop().get(); });
+
+    // One batch per client-side codec, to each topic. Two rounds: one in
+    // `relaxed` validation mode, in which compressed batches are not
+    // decompressed for validation and recompression performs its own
+    // decompression, and one in `strict` mode, in which recompression reuses
+    // the batch decompressed on the validation path.
+    const auto records = kv_t::sequence(0, 3);
+    auto produce_all_codecs = [&](const model::topic& topic) {
+        for (auto c : model::all_batch_compression_types) {
+            producer
+              .produce_to_partition(
+                topic,
+                model::partition_id(0),
+                records,
+                model::timestamp::now(),
+                c)
+              .get();
+        }
+    };
+    for (auto mode :
+         {model::kafka_batch_validation_mode::relaxed,
+          model::kafka_batch_validation_mode::strict}) {
+        cfg.get("kafka_produce_batch_validation").set_value(mode);
+        produce_all_codecs(zstd_tp_ns.tp);
+        produce_all_codecs(none_tp_ns.tp);
+        produce_all_codecs(producer_tp_ns.tp);
+    }
+
+    auto transport = make_kafka_client().get();
+    transport.connect().get();
+    auto deferred_t_close = ss::defer([&transport] { transport.stop().get(); });
+
+    // `expected_codec` unset means the client's codec is expected to have
+    // been retained (the `producer` policy).
+    auto check_topic = [&](
+                         const model::topic_namespace& tp_ns,
+                         std::optional<model::compression> expected_codec) {
+        auto batches = fetch_stored_batches(
+          transport, model::ntp(tp_ns.ns, tp_ns.tp, model::partition_id(0)));
+        BOOST_REQUIRE_EQUAL(
+          batches.size(), 2 * model::all_batch_compression_types.size());
+        for (size_t i = 0; i < batches.size(); ++i) {
+            const auto& batch = batches[i];
+            const auto client_codec = model::all_batch_compression_types
+              [i % model::all_batch_compression_types.size()];
+            BOOST_TEST_INFO(
+              "topic " << tp_ns.tp << ", client codec " << client_codec);
+            BOOST_CHECK_EQUAL(
+              batch.header().attrs.compression(),
+              expected_codec.value_or(client_codec));
+            BOOST_CHECK_EQUAL(
+              batch.record_count(), static_cast<int32_t>(records.size()));
+            BOOST_CHECK(kvs_from_batch(batch) == records);
+        }
+    };
+    check_topic(zstd_tp_ns, model::compression::zstd);
+    check_topic(none_tp_ns, model::compression::none);
+    check_topic(producer_tp_ns, std::nullopt);
+}
+
+// With `kafka_produce_enable_batch_compression` disabled, the topic's
+// `compression.type` is ignored on the produce path and the client's codec is
+// retained.
+FIXTURE_TEST(test_broker_side_compression_disabled, prod_consume_fixture) {
+    scoped_config cfg;
+    cfg.get("kafka_produce_enable_batch_compression").set_value(false);
+    wait_for_controller_leadership().get();
+
+    cluster::topic_properties props;
+    props.compression = model::compression::zstd;
+    add_topic(test_tp_ns, 1, props).get();
+    auto ntp = model::ntp(test_tp_ns.ns, test_tp_ns.tp, model::partition_id(0));
+    wait_for_leader(ntp).get();
+
+    auto producer = tests::kafka_produce_transport(make_kafka_client().get());
+    producer.start().get();
+    auto deferred_p_close = ss::defer([&producer] { producer.stop().get(); });
+
+    const auto records = kv_t::sequence(0, 3);
+    producer
+      .produce_to_partition(
+        ntp.tp.topic,
+        ntp.tp.partition,
+        records,
+        model::timestamp::now(),
+        model::compression::gzip)
+      .get();
+
+    auto transport = make_kafka_client().get();
+    transport.connect().get();
+    auto deferred_t_close = ss::defer([&transport] { transport.stop().get(); });
+
+    auto batches = fetch_stored_batches(transport, ntp);
+    BOOST_REQUIRE_EQUAL(batches.size(), 1);
+    BOOST_CHECK_EQUAL(
+      batches.front().header().attrs.compression(), model::compression::gzip);
+    BOOST_CHECK(kvs_from_batch(batches.front()) == records);
+}
+
+// The broker-set `max_timestamp` and timestamp type of a `LogAppendTime`
+// topic must be carried into the recompressed batch.
+FIXTURE_TEST(test_broker_side_compression_append_time, prod_consume_fixture) {
+    scoped_config cfg;
+    cfg.get("kafka_produce_enable_batch_compression").set_value(true);
+    wait_for_controller_leadership().get();
+
+    cluster::topic_properties props;
+    props.compression = model::compression::zstd;
+    props.timestamp_type = model::timestamp_type::append_time;
+    add_topic(test_tp_ns, 1, props).get();
+    auto ntp = model::ntp(test_tp_ns.ns, test_tp_ns.tp, model::partition_id(0));
+    wait_for_leader(ntp).get();
+
+    auto producer = tests::kafka_produce_transport(make_kafka_client().get());
+    producer.start().get();
+    auto deferred_p_close = ss::defer([&producer] { producer.stop().get(); });
+
+    const auto records = kv_t::sequence(0, 3);
+    // A client timestamp in the past, distinguishable from broker time.
+    const auto client_ts = model::timestamp(42);
+    const auto broker_time_before = model::timestamp::now();
+    producer
+      .produce_to_partition(
+        ntp.tp.topic,
+        ntp.tp.partition,
+        records,
+        client_ts,
+        model::compression::gzip)
+      .get();
+
+    auto transport = make_kafka_client().get();
+    transport.connect().get();
+    auto deferred_t_close = ss::defer([&transport] { transport.stop().get(); });
+
+    auto batches = fetch_stored_batches(transport, ntp);
+    BOOST_REQUIRE_EQUAL(batches.size(), 1);
+    const auto& header = batches.front().header();
+    BOOST_CHECK_EQUAL(header.attrs.compression(), model::compression::zstd);
+    BOOST_CHECK(
+      header.attrs.timestamp_type() == model::timestamp_type::append_time);
+    BOOST_CHECK_GE(header.max_timestamp, broker_time_before);
+    BOOST_CHECK(kvs_from_batch(batches.front()) == records);
+}
+
+// A compressed batch produced with `max_timestamp` unset is decompressed on
+// the validation path, which then computes and sets the `max_timestamp` on
+// the batch header. Recompression reuses the decompressed payload and must
+// carry the updated header into the stored batch.
+FIXTURE_TEST(
+  test_broker_side_compression_unset_max_timestamp, prod_consume_fixture) {
+    scoped_config cfg;
+    cfg.get("kafka_produce_enable_batch_compression").set_value(true);
+    cfg.get("kafka_produce_batch_validation")
+      .set_value(model::kafka_batch_validation_mode::relaxed);
+    wait_for_controller_leadership().get();
+
+    cluster::topic_properties props;
+    props.compression = model::compression::zstd;
+    add_topic(test_tp_ns, 1, props).get();
+    auto ntp = model::ntp(test_tp_ns.ns, test_tp_ns.tp, model::partition_id(0));
+    wait_for_leader(ntp).get();
+
+    auto producer = tests::kafka_produce_transport(make_kafka_client().get());
+    producer.start().get();
+    auto deferred_p_close = ss::defer([&producer] { producer.stop().get(); });
+
+    const auto records = kv_t::sequence(0, 3);
+    const auto first_ts = model::timestamp::now();
+    auto batch = tests::batch_from_kvs(
+      records, model::offset(0), first_ts, model::compression::gzip);
+    // Unset the max timestamp, forcing validation to decompress the batch to
+    // compute it from the records (all carrying `first_ts`).
+    batch.set_max_timestamp(
+      model::timestamp_type::create_time, model::timestamp::missing());
+    producer
+      .produce_to_partition(ntp.tp.topic, ntp.tp.partition, std::move(batch))
+      .get();
+
+    auto transport = make_kafka_client().get();
+    transport.connect().get();
+    auto deferred_t_close = ss::defer([&transport] { transport.stop().get(); });
+
+    auto batches = fetch_stored_batches(transport, ntp);
+    BOOST_REQUIRE_EQUAL(batches.size(), 1);
+    const auto& header = batches.front().header();
+    BOOST_CHECK_EQUAL(header.attrs.compression(), model::compression::zstd);
+    BOOST_CHECK_EQUAL(header.max_timestamp, first_ts);
+    BOOST_CHECK(kvs_from_batch(batches.front()) == records);
+}
+
+// A batch that claims to be compressed but whose payload cannot be
+// decompressed is rejected with `corrupt_message` when the topic requires
+// recompression.
+FIXTURE_TEST(test_broker_side_compression_corrupt_batch, prod_consume_fixture) {
+    scoped_config cfg;
+    cfg.get("kafka_produce_enable_batch_compression").set_value(true);
+    wait_for_controller_leadership().get();
+
+    cluster::topic_properties props;
+    props.compression = model::compression::zstd;
+    add_topic(test_tp_ns, 1, props).get();
+    auto ntp = model::ntp(test_tp_ns.ns, test_tp_ns.tp, model::partition_id(0));
+    wait_for_leader(ntp).get();
+
+    auto producer = tests::kafka_produce_transport(make_kafka_client().get());
+    producer.start().get();
+    auto deferred_p_close = ss::defer([&producer] { producer.stop().get(); });
+
+    // Build an uncompressed batch and flip its gzip compression bits on
+    // without compressing the payload, keeping the checksums valid.
+    auto batch = tests::batch_from_kvs(
+      kv_t::sequence(0, 3),
+      model::offset(0),
+      model::timestamp::now(),
+      model::compression::none);
+    auto header = batch.header();
+    header.attrs |= model::compression::gzip;
+    auto payload = std::move(batch).release_data();
+    header.reset_size_checksum_metadata(payload);
+    auto corrupt_batch = model::record_batch(
+      header, std::move(payload), model::record_batch::tag_ctor_ng{});
+
+    auto produced = producer.produce_to_partition(
+      ntp.tp.topic, ntp.tp.partition, std::move(corrupt_batch));
+    BOOST_REQUIRE_EXCEPTION(
+      produced.get(), std::runtime_error, [](const std::runtime_error& e) {
+          return std::string_view(e.what()).find("corrupt_message")
+                 != std::string_view::npos;
+      });
 }

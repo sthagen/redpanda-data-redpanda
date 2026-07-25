@@ -778,7 +778,7 @@ public:
         /// Returns true if this config can be fully represented by the legacy
         /// wire discriminants (0–3).
         bool is_legacy_compatible() const noexcept {
-            return layout == value_layout::flat;
+            return layout == value_layout::flat && mode != schema_mode::string;
         }
     };
 

@@ -11,11 +11,13 @@
 
 #pragma once
 
+#include "cluster_link/schema_registry_sync/probe.h"
 #include "cluster_link/schema_registry_sync/reconciler.h"
 #include "cluster_link/schema_registry_sync/source_reader.h"
 #include "cluster_link/task.h"
 #include "container/chunked_hash_map.h"
 #include "schema/registry.h"
+#include "ssx/mutex.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/util/noncopyable_function.hh>
@@ -72,6 +74,8 @@ public:
     ~mirroring_task() override = default;
 
     void update_config(const model::metadata& link_metadata) override;
+
+    ss::future<cl_result<void>> start() override;
 
     ss::future<cl_result<void>> stop() noexcept override;
 
@@ -187,13 +191,48 @@ private:
       ppsr::schema_version version,
       bool was_active);
 
+    /// Tombstones every destination context this link owns and holds in scope
+    /// as a whole that no longer exists at the source (`contexts`). The
+    /// context's subjects must already have been purged; a not-yet-empty
+    /// context (e.g. a reference-blocked version survived the purge) is left
+    /// for the next full sync. Matches Confluent's DELETE /contexts: only the
+    /// context marker is removed, leaving any context-level mode/config
+    /// overrides untouched.
+    ss::future<> delete_source_absent_contexts(
+      const chunked_hash_set<ppsr::context>& contexts,
+      const ss::noncopyable_function<bool(const ppsr::context_subject&)>&
+        in_scope,
+      ss::abort_source& as);
+
     /// Replicates one target's (subject or context-only) source mode and
     /// compatibility config onto the destination: writes the source's own
     /// override when it has one, deletes the destination override otherwise.
     ss::future<> sync_mode_and_config(
       const ppsr::context_subject& target,
+      model::schema_registry_sync_config::unsupported_feature_policy
+        feature_policy,
       ss::abort_source& as,
       std::optional<source_error>& unavailable);
+
+    /// Under FAIL, records unsupported config fields as a per-item error and
+    /// returns true so the caller skips the config write; a no-op (false)
+    /// otherwise. Config-path analogue of the reconciler's helper.
+    bool fail_if_contains_unsupported(
+      const ppsr::context_subject& target,
+      model::schema_registry_sync_config::unsupported_feature_policy
+        feature_policy,
+      const chunked_vector<ppsr::unsupported_feature>& unsupported);
+
+    /// Under REMOVE, logs the unsupported config fields and counts them in
+    /// `unsupported_features_removed`; a no-op otherwise. Called once per
+    /// completed config sync -- a static source config re-counts every full
+    /// sync, mirroring FAIL's per-sync errors -- but not after a failed write,
+    /// which is counted as an error instead.
+    void count_if_contains_unsupported_removed(
+      const ppsr::context_subject& target,
+      model::schema_registry_sync_config::unsupported_feature_policy
+        feature_policy,
+      const chunked_vector<ppsr::unsupported_feature>& unsupported);
 
     // Requires a sync in progress (`current_sync` engaged).
     void record_error(std::string_view what);
@@ -201,6 +240,8 @@ private:
     [[nodiscard]] state_transition make_unavailable(const ss::sstring& reason);
     [[nodiscard]] state_transition make_active();
     [[nodiscard]] state_transition make_faulted(const ss::sstring& reason);
+
+    model::schema_registry_sync_status get_live_sync_status() const;
 
     model::schema_registry_sync_config _config;
     // Source->destination context remapping for the current run, rebuilt from
@@ -210,11 +251,20 @@ private:
     schema::registry* _destination;
     source_reader_factory* _source_factory;
     std::unique_ptr<source_reader> _reader;
+    // Serializes stopping and replacing _reader. stop() (reader-first, while
+    // run_impl is still live) and reset_reader() (run by run_impl on a config
+    // change) both stop the reader and then free it via reassignment; without
+    // serialization one can free the reader while the other's stop() is
+    // suspended mid-shutdown, a use-after-free. Held only around the
+    // stop+reassign, never across the run-fiber join, so it cannot deadlock
+    // with task::stop().
+    ssx::mutex _reader_lifecycle{"cluster_link/sr_source/reader_lifecycle"};
     inventory _destination_inventory;
     model::schema_registry_sync_status _status;
     // Live counters for the in-flight reconcile; reflected by get_status_report
     // for mid-sync progress, then folded into _status at end of run.
     reconcile_stats _reconcile_stats;
+    probe _probe;
     std::optional<ss::lowres_clock::time_point> _last_full_sync;
     // Set by update_config, consumed by run_impl to force a full scan. A flag
     // (rather than mutating _status/_last_full_sync in update_config) avoids

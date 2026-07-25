@@ -129,7 +129,7 @@ redpanda_thread_fixture::redpanda_thread_fixture(
         app.wire_up_bootstrap_services();
         app.hydrate_cluster_config(make_minimal_cfg());
         app.bootstrap_from_kvstore();
-        app.establish_cluster_view();
+        app.establish_cluster_view(app_signal->abort_source());
         app.check_environment();
         app.wire_up_and_start(
           *app_signal,
@@ -358,7 +358,7 @@ void redpanda_thread_fixture::restart(should_wipe w) {
     app.wire_up_bootstrap_services();
     app.hydrate_cluster_config(make_minimal_cfg());
     app.bootstrap_from_kvstore();
-    app.establish_cluster_view();
+    app.establish_cluster_view(app_signal->abort_source());
     app.check_environment();
     app.wire_up_and_start(
       *app_signal,

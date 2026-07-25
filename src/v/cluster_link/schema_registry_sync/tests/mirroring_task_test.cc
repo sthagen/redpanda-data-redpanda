@@ -9,21 +9,27 @@
  * by the Apache License, Version 2.0
  */
 
+#include "cluster_link/link_probe.h"
 #include "cluster_link/schema_registry_sync/mirroring_task.h"
+#include "cluster_link/schema_registry_sync/probe.h"
 #include "cluster_link/schema_registry_sync/source_reader.h"
 #include "cluster_link/schema_registry_sync/tests/sr_sync_test_fixtures.h"
 #include "cluster_link/tests/deps.h"
 #include "container/chunked_vector.h"
+#include "metrics/metrics.h"
 #include "model/namespace.h"
 #include "pandaproxy/schema_registry/types.h"
 #include "schema/tests/fake_registry.h"
 #include "test_utils/async.h"
+#include "test_utils/metrics.h"
 #include "test_utils/test.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/sleep.hh>
 
 #include <gmock/gmock.h>
+
+#include <array>
 
 using namespace std::chrono_literals;
 
@@ -34,6 +40,21 @@ namespace {
 static const model::name_t link_name{"test_sr_link"};
 constexpr auto tail_interval = 1s;
 constexpr auto wait_interval = 5s;
+
+// Reads one of the probe's counter series for the test link on the current
+// shard (the shard leading `_schemas/0` in these tests). `counter` is the
+// name suffix after "schema_registry_"; `handle` selects the internal or
+// public registry. nullopt when the series is not registered.
+std::optional<uint64_t> sr_sync_metric(std::string_view counter, int handle) {
+    return test_utils::find_metric_value<uint64_t>(
+      fmt::format(
+        "{}_schema_registry_{}", link_probe::shadow_link_group, counter),
+      handle,
+      {{link_probe::shadow_link_name.name(), link_name()}});
+}
+
+const auto both_metric_handles = std::to_array(
+  {ss::metrics::default_handle(), metrics::public_metrics_handle});
 
 model::metadata get_default_metadata() {
     model::metadata metadata{
@@ -306,6 +327,154 @@ TEST_F(mirroring_task_test, fail_policy_counts_unsupported_and_syncs_rest) {
     EXPECT_EQ(status->last_full_sync->unsupported_features_removed, 0);
     EXPECT_EQ(index_of(_registry.get_all(), "a"), -1);
     EXPECT_GE(index_of(_registry.get_all(), "b"), 0);
+}
+
+TEST_F(mirroring_task_test, remove_policy_counts_unsupported_config) {
+    // The config path applies the same policy as the schema path. Under REMOVE,
+    // an unsupported config field (e.g. defaultRuleSet) is counted and logged;
+    // only the supported projection (compatibilityLevel) is synced.
+    auto a = ppsr::context_subject::unqualified("a");
+    _source_state.add(a, 1);
+    _source_state.configs.emplace(a, ppsr::compatibility_level::full);
+    _source_state.set_config_unsupported(
+      a, {{.json_pointer = "/defaultRuleSet"}});
+
+    auto metadata = get_default_metadata();
+    metadata.configuration.schema_registry_sync_cfg.api_mode()->feature_policy
+      = model::schema_registry_sync_config::unsupported_feature_policy::remove;
+
+    lead_schema_registry();
+    fixture()->upsert_link(std::move(metadata)).get();
+
+    auto status = wait_for_sync_status([](const auto& s) {
+                      return s.last_full_sync.has_value()
+                             && !s.current_sync.has_value();
+                  }).get();
+    ASSERT_TRUE(status.has_value());
+    EXPECT_EQ(status->last_full_sync->unsupported_features_removed, 1);
+    EXPECT_EQ(status->totals_since_task_start.unsupported_features_removed, 1);
+    // The compatibility level is still synced under REMOVE.
+    EXPECT_EQ(status->last_full_sync->compatibility_configs_changed, 1);
+    ASSERT_TRUE(_registry.configs().contains(a));
+    EXPECT_EQ(_registry.configs().at(a), ppsr::compatibility_level::full);
+    EXPECT_EQ(status->last_full_sync->errors, 0);
+
+    // A second full sync re-reads and re-drops the same fields: the count is
+    // per completed sync (mirroring FAIL's per-sync errors), so the total
+    // advances even though the config write itself is a no-op.
+    const auto first_start = status->last_full_sync->start_time;
+    auto metadata2 = get_default_metadata();
+    metadata2.configuration.schema_registry_sync_cfg.api_mode()->feature_policy
+      = model::schema_registry_sync_config::unsupported_feature_policy::remove;
+    fixture()->upsert_link(std::move(metadata2)).get();
+    auto second = wait_for_sync_status([&](const auto& s) {
+                      return s.last_full_sync.has_value()
+                             && s.last_full_sync->start_time != first_start
+                             && !s.current_sync.has_value();
+                  }).get();
+    ASSERT_TRUE(second.has_value());
+    EXPECT_EQ(second->totals_since_task_start.unsupported_features_removed, 2);
+    EXPECT_EQ(second->last_full_sync->unsupported_features_removed, 1);
+    EXPECT_EQ(second->totals_since_task_start.errors, 0);
+}
+
+TEST_F(mirroring_task_test, remove_policy_counts_unsupported_config_no_level) {
+    // A governance-only source config (unsupported fields, no compatibility
+    // override): the destination write is a no-op delete, but the dropped
+    // fields are still counted -- REMOVE must not ignore them silently.
+    auto a = ppsr::context_subject::unqualified("a");
+    _source_state.add(a, 1);
+    _source_state.set_config_unsupported(
+      a, {{.json_pointer = "/compatibilityGroup"}});
+
+    auto metadata = get_default_metadata();
+    metadata.configuration.schema_registry_sync_cfg.api_mode()->feature_policy
+      = model::schema_registry_sync_config::unsupported_feature_policy::remove;
+
+    lead_schema_registry();
+    fixture()->upsert_link(std::move(metadata)).get();
+
+    auto status = wait_for_sync_status([](const auto& s) {
+                      return s.last_full_sync.has_value()
+                             && !s.current_sync.has_value();
+                  }).get();
+    ASSERT_TRUE(status.has_value());
+    EXPECT_EQ(status->last_full_sync->unsupported_features_removed, 1);
+    EXPECT_EQ(status->last_full_sync->errors, 0);
+    // No compatibility override lands on the destination.
+    EXPECT_FALSE(_registry.configs().contains(a));
+}
+
+TEST_F(mirroring_task_test, fail_policy_skips_unsupported_config) {
+    // Under FAIL, an unsupported config field is a counted per-item error and
+    // the subject's config is not synced; the rest of the sync proceeds and the
+    // task stays active (the clean schema still imports).
+    auto a = ppsr::context_subject::unqualified("a");
+    _source_state.add(a, 1);
+    _source_state.configs.emplace(a, ppsr::compatibility_level::full);
+    _source_state.set_config_unsupported(
+      a, {{.json_pointer = "/defaultRuleSet"}});
+
+    auto metadata = get_default_metadata();
+    metadata.configuration.schema_registry_sync_cfg.api_mode()->feature_policy
+      = model::schema_registry_sync_config::unsupported_feature_policy::fail;
+
+    lead_schema_registry();
+    fixture()->upsert_link(std::move(metadata)).get();
+
+    auto status = wait_for_sync_status([](const auto& s) {
+                      return s.last_full_sync.has_value()
+                             && !s.current_sync.has_value();
+                  }).get();
+    ASSERT_TRUE(status.has_value());
+    EXPECT_EQ(status->last_full_sync->errors, 1);
+    EXPECT_EQ(status->last_full_sync->unsupported_features_removed, 0);
+    // The config write is skipped: no compatibility change, no destination
+    // config.
+    EXPECT_EQ(status->last_full_sync->compatibility_configs_changed, 0);
+    EXPECT_FALSE(_registry.configs().contains(a));
+    // The clean schema itself still imports.
+    EXPECT_GE(index_of(_registry.get_all(), "a"), 0);
+}
+
+// Fixture whose destination wraps `_registry` so a test can make write_config
+// fail, exercising the REMOVE no-count-on-failed-write path the plain fake
+// cannot.
+class mirroring_task_config_write_failure_test : public mirroring_task_test {
+protected:
+    schema::registry* dest() override { return &_failing_config; }
+    failing_config_registry _failing_config{&_registry};
+};
+
+TEST_F(
+  mirroring_task_config_write_failure_test,
+  remove_policy_does_not_count_unsupported_config_on_write_failure) {
+    // REMOVE counts a removed config feature only after the config write lands;
+    // a write that fails is a per-item error and must not report the feature as
+    // removed (mirrors the schema-body path's no-count-on-failed-import).
+    auto a = ppsr::context_subject::unqualified("a");
+    _source_state.add(a, 1);
+    _source_state.configs.emplace(a, ppsr::compatibility_level::full);
+    _source_state.set_config_unsupported(
+      a, {{.json_pointer = "/defaultRuleSet"}});
+    _failing_config.fail_config(
+      a, ppsr::error_code::schema_invalid, "config write rejected");
+
+    auto metadata = get_default_metadata();
+    metadata.configuration.schema_registry_sync_cfg.api_mode()->feature_policy
+      = model::schema_registry_sync_config::unsupported_feature_policy::remove;
+
+    lead_schema_registry();
+    fixture()->upsert_link(std::move(metadata)).get();
+
+    auto status = wait_for_sync_status([](const auto& s) {
+                      return s.last_full_sync.has_value()
+                             && !s.current_sync.has_value();
+                  }).get();
+    ASSERT_TRUE(status.has_value());
+    // The failed write is counted as an error, not as a removed feature.
+    EXPECT_EQ(status->last_full_sync->errors, 1);
+    EXPECT_EQ(status->last_full_sync->unsupported_features_removed, 0);
 }
 
 TEST_F(mirroring_task_test, source_unavailable_then_recovers) {
@@ -1090,6 +1259,272 @@ TEST_F(mirroring_task_test, follows_partition_leadership) {
     EXPECT_FALSE(task->detail.has_value());
 }
 
+TEST_F(mirroring_task_test, exports_sync_totals_on_both_metric_endpoints) {
+    // Three subject versions imported by the first full sync; the probe's
+    // counters must mirror totals_since_task_start on both the internal and
+    // the public registry, labelled with the link name.
+    _source_state.add(ppsr::context_subject::unqualified("a"), 1);
+    _source_state.add(ppsr::context_subject::unqualified("b"), 1);
+    _source_state.add(ppsr::context_subject::unqualified("c"), 1);
+
+    lead_schema_registry();
+    fixture()->upsert_link(get_default_metadata()).get();
+
+    auto status = wait_for_sync_status([](const auto& s) {
+                      return s.last_full_sync.has_value()
+                             && !s.current_sync.has_value();
+                  }).get();
+    ASSERT_TRUE(status.has_value());
+    ASSERT_EQ(status->totals_since_task_start.subject_versions_changed, 3);
+
+    for (auto handle : both_metric_handles) {
+        EXPECT_EQ(
+          sr_sync_metric("subject_versions_changed", handle),
+          std::optional<uint64_t>{3});
+        // The other counters have not moved, but their series exist.
+        EXPECT_EQ(
+          sr_sync_metric("compatibility_configs_changed", handle),
+          std::optional<uint64_t>{0});
+        EXPECT_EQ(
+          sr_sync_metric("modes_changed", handle), std::optional<uint64_t>{0});
+        EXPECT_EQ(
+          sr_sync_metric("unsupported_features_removed", handle),
+          std::optional<uint64_t>{0});
+        EXPECT_EQ(sr_sync_metric("errors", handle), std::optional<uint64_t>{0});
+    }
+}
+
+TEST_F(mirroring_task_test, metric_series_survive_pause_and_drop_on_stop) {
+    _source_state.add(ppsr::context_subject::unqualified("orders-value"), 1);
+
+    lead_schema_registry();
+    fixture()->upsert_link(get_default_metadata()).get();
+    auto status = wait_for_sync_status([](const auto& s) {
+                      return s.totals_since_task_start.subject_versions_changed
+                             == 1;
+                  }).get();
+    ASSERT_TRUE(status.has_value());
+
+    // Pausing (config-disabled while still leading) keeps the task's totals,
+    // so the series must stay registered and keep their values.
+    auto paused = get_default_metadata();
+    paused.configuration.schema_registry_sync_cfg.api_mode()->is_enabled
+      = model::enabled_t::no;
+    fixture()->update_link(model::id_t{0}, std::move(paused)).get();
+    ASSERT_TRUE(wait_for_task_state(model::task_state::paused).get());
+    for (auto handle : both_metric_handles) {
+        EXPECT_EQ(
+          sr_sync_metric("subject_versions_changed", handle),
+          std::optional<uint64_t>{1});
+    }
+
+    // Resuming re-enters start(), whose probe setup must be idempotent.
+    fixture()->update_link(model::id_t{0}, get_default_metadata()).get();
+    ASSERT_TRUE(wait_for_task_state(model::task_state::active).get());
+    for (auto handle : both_metric_handles) {
+        EXPECT_EQ(
+          sr_sync_metric("subject_versions_changed", handle),
+          std::optional<uint64_t>{1});
+    }
+
+    // Losing `_schemas/0` leadership stops the task; a stopped task's totals
+    // are reset, so a lingering series would export misleading zeros -- the
+    // series must be removed outright. The state flips to stopped before the
+    // runner drains and the probe clears, so poll rather than assert.
+    unlead_schema_registry();
+    ASSERT_TRUE(wait_for_task_state(model::task_state::stopped).get());
+    for (auto handle : both_metric_handles) {
+        ::tests::cooperative_spin_wait_with_timeout(wait_interval, [handle] {
+            return !sr_sync_metric("subject_versions_changed", handle)
+                      .has_value();
+        }).get();
+    }
+}
+
+TEST_F(mirroring_task_test, totals_reset_across_leadership_tenures) {
+    // stop() resets the sync state after dropping the series; a task that
+    // regains `_schemas/0` leadership (A->B->A) re-registers the series and
+    // must export the new tenure's totals only. A scrape after the reset must
+    // read the reassigned _status, not anything bound at first setup.
+    auto subject = ppsr::context_subject::unqualified("orders-value");
+    _source_state.add(subject, 1);
+
+    lead_schema_registry();
+    fixture()->upsert_link(get_default_metadata()).get();
+    auto first = wait_for_sync_status([](const auto& s) {
+                     return s.totals_since_task_start.subject_versions_changed
+                            == 1;
+                 }).get();
+    ASSERT_TRUE(first.has_value());
+
+    unlead_schema_registry();
+    ASSERT_TRUE(wait_for_task_state(model::task_state::stopped).get());
+
+    // v2 appears while not leading; the second tenure's first full sync
+    // imports only the missing version, so its totals are exactly 1.
+    _source_state.add(subject, 2);
+    lead_schema_registry();
+    auto second = wait_for_sync_status([](const auto& s) {
+                      return s.last_full_sync.has_value()
+                             && !s.current_sync.has_value();
+                  }).get();
+    ASSERT_TRUE(second.has_value());
+    EXPECT_EQ(second->totals_since_task_start.subject_versions_changed, 1);
+
+    // 2 would mean the first tenure's totals leaked through the reset.
+    for (auto handle : both_metric_handles) {
+        EXPECT_EQ(
+          sr_sync_metric("subject_versions_changed", handle),
+          std::optional<uint64_t>{1});
+    }
+}
+
+TEST_F(mirroring_task_test, metric_values_are_fetched_live_on_scrape) {
+    model::schema_registry_sync_summary totals;
+    srs::probe probe;
+    probe.setup(link_name, [&totals] { return totals; });
+
+    const auto counters = std::to_array<std::pair<std::string_view, uint64_t>>(
+      {{"subject_versions_changed", 1},
+       {"compatibility_configs_changed", 2},
+       {"modes_changed", 3},
+       {"unsupported_features_removed", 4},
+       {"errors", 5}});
+
+    for (auto handle : both_metric_handles) {
+        for (const auto& counter : counters) {
+            EXPECT_EQ(
+              sr_sync_metric(counter.first, handle),
+              std::optional<uint64_t>{0});
+        }
+    }
+
+    totals.subject_versions_changed = 1;
+    totals.compatibility_configs_changed = 2;
+    totals.modes_changed = 3;
+    totals.unsupported_features_removed = 4;
+    totals.errors = 5;
+    for (auto handle : both_metric_handles) {
+        for (const auto& [name, value] : counters) {
+            EXPECT_EQ(
+              sr_sync_metric(name, handle), std::optional<uint64_t>{value});
+        }
+    }
+
+    probe.clear();
+}
+
+// Fixture whose destination parks an import mid-reconcile, so a test can
+// observe the task while _reconcile_stats holds counts not yet folded into
+// _status.
+class mirroring_task_blocking_import_test : public mirroring_task_test {
+public:
+    // A parked import holds the runner's gate; the task stop in the base
+    // teardown would wait on it forever, so release first.
+    ss::future<> TearDownAsync() override {
+        release();
+        co_await mirroring_task_test::TearDownAsync();
+    }
+
+protected:
+    schema::registry* dest() override { return &_blocking; }
+
+    void release() {
+        if (!_released) {
+            _released = true;
+            _blocking.unblock();
+        }
+    }
+
+    blocking_import_registry _blocking{&_registry, /*block_after=*/1};
+
+private:
+    bool _released{false};
+};
+
+TEST_F(
+  mirroring_task_blocking_import_test,
+  metrics_include_in_flight_reconcile_stats) {
+    // The reconciler counts each import in _reconcile_stats, which is folded
+    // into _status only at end of run. Parking the second import mid-reconcile
+    // pins that the exported counters include the in-flight stats. Only
+    // EXPECTs between park and release, so the parked import is always
+    // released.
+    _source_state.add(ppsr::context_subject::unqualified("a"), 1);
+    _source_state.add(ppsr::context_subject::unqualified("b"), 1);
+
+    lead_schema_registry();
+    fixture()->upsert_link(get_default_metadata()).get();
+
+    _blocking.entered().get();
+    // entered() races the forwarded import's completion continuation; poll
+    // the report (which shares the live fold) until the count shows.
+    auto status
+      = wait_for_sync_status([](const auto& s) {
+            return s.current_sync.has_value()
+                   && s.totals_since_task_start.subject_versions_changed == 1;
+        }).get();
+    EXPECT_TRUE(status.has_value());
+
+    for (auto handle : both_metric_handles) {
+        EXPECT_EQ(
+          sr_sync_metric("subject_versions_changed", handle),
+          std::optional<uint64_t>{1});
+    }
+
+    release();
+    auto done = wait_for_sync_status([](const auto& s) {
+                    return s.last_full_sync.has_value()
+                           && !s.current_sync.has_value();
+                }).get();
+    EXPECT_TRUE(done.has_value());
+    for (auto handle : both_metric_handles) {
+        EXPECT_EQ(
+          sr_sync_metric("subject_versions_changed", handle),
+          std::optional<uint64_t>{2});
+    }
+}
+
+TEST_F(
+  mirroring_task_blocking_import_test,
+  scrape_during_stop_drain_exports_last_totals) {
+    // Losing leadership flips the task to stopped immediately, but the series
+    // are only dropped once the runner's gate drains; a parked import wedges
+    // stop() in exactly that window. A scrape landing there must still export
+    // the last live totals -- reading them through the status report instead
+    // would hit the optional that get_status_report() leaves disengaged while
+    // stopped.
+    _source_state.add(ppsr::context_subject::unqualified("a"), 1);
+    _source_state.add(ppsr::context_subject::unqualified("b"), 1);
+
+    lead_schema_registry();
+    fixture()->upsert_link(get_default_metadata()).get();
+
+    _blocking.entered().get();
+    auto status
+      = wait_for_sync_status([](const auto& s) {
+            return s.current_sync.has_value()
+                   && s.totals_since_task_start.subject_versions_changed == 1;
+        }).get();
+    EXPECT_TRUE(status.has_value());
+
+    unlead_schema_registry();
+    ASSERT_TRUE(wait_for_task_state(model::task_state::stopped).get());
+    for (auto handle : both_metric_handles) {
+        EXPECT_EQ(
+          sr_sync_metric("subject_versions_changed", handle),
+          std::optional<uint64_t>{1});
+    }
+
+    release();
+    // The drain completes, stop() drops the series and resets the totals.
+    ::tests::cooperative_spin_wait_with_timeout(wait_interval, [] {
+        return !sr_sync_metric(
+                  "subject_versions_changed", ss::metrics::default_handle())
+                  .has_value();
+    }).get();
+}
+
 TEST_F(mirroring_task_test, destination_inventory_spans_contexts_and_deleted) {
     auto a = ppsr::context_subject::unqualified("a");
     auto c = ppsr::context_subject{ppsr::context{".b"}, ppsr::subject{"c"}};
@@ -1117,6 +1552,53 @@ TEST_F(mirroring_task_test, destination_inventory_spans_contexts_and_deleted) {
 
     EXPECT_THAT(inv.active, testing::UnorderedElementsAre(a_v1, c_v1));
     EXPECT_THAT(inv.all, testing::UnorderedElementsAre(a_v1, c_v1, a_v2));
+}
+
+TEST_F(mirroring_task_test, deletes_source_absent_context) {
+    // The destination holds a subject under .prod, materializing that context;
+    // the source has no .prod context at all. The whole context is a deletion:
+    // its subject is purged, then the now-empty context is tombstoned so it no
+    // longer lists. A default-context subject present at the source is synced
+    // and left alone, showing the phase deletes only the source-absent context.
+    auto prod_orders = ppsr::context_subject{
+      ppsr::context{".prod"}, ppsr::subject{"orders-value"}};
+    _registry.import_schema(make_schema(prod_orders, 1, R"({"v":1})")).get();
+    auto keep = ppsr::context_subject::unqualified("keep-value");
+    _source_state.add(keep, 1);
+
+    lead_schema_registry();
+    fixture()->upsert_link(get_default_metadata()).get();
+
+    auto status = wait_for_sync_status([](const auto& s) {
+                      return s.last_full_sync.has_value()
+                             && !s.current_sync.has_value();
+                  }).get();
+    // Present, error-free, and exactly two subject-version changes: keep-value
+    // imported (+1) and the source-absent .prod subject purged (+1).
+    ASSERT_THAT(
+      status,
+      testing::Optional(
+        testing::Field(
+          &model::schema_registry_sync_status::last_full_sync,
+          testing::Optional(
+            testing::AllOf(
+              testing::Field(&model::schema_registry_sync_summary::errors, 0),
+              testing::Field(
+                &model::schema_registry_sync_summary::subject_versions_changed,
+                2))))));
+
+    // The .prod subject was purged; only keep-value remains.
+    EXPECT_THAT(
+      _registry.get_all(),
+      testing::ElementsAre(
+        testing::Field(
+          &ppsr::stored_schema::schema,
+          testing::Property(&ppsr::subject_schema::sub, keep))));
+
+    // .prod is tombstoned: only the default context is still materialized.
+    EXPECT_THAT(
+      _registry.list_contexts().get(),
+      testing::ElementsAre(ppsr::default_context));
 }
 
 // Fixture whose destination wraps `_registry` so a test can make permanent
@@ -1198,6 +1680,42 @@ TEST_F(
     EXPECT_EQ(status->last_full_sync->subject_versions_changed, 1);
     EXPECT_EQ(status->last_full_sync->errors, 1);
     EXPECT_EQ(_deferring.permanent_delete_attempts(stuck), 1);
+}
+
+TEST_F(mirroring_task_delete_retry_test, defers_delete_of_non_empty_context) {
+    // The .prod context is source-absent, but its only subject's purge is
+    // permanently blocked, so the context never empties. delete_context is
+    // skipped (context_not_empty) rather than counted as an extra error or
+    // faulted, leaving the context listed for a later full sync to retry.
+    auto prod_orders = ppsr::context_subject{
+      ppsr::context{".prod"}, ppsr::subject{"orders-value"}};
+    _registry.import_schema(make_schema(prod_orders, 1, R"({"v":1})")).get();
+    _deferring.reject_forever(prod_orders);
+
+    lead_schema_registry();
+    fixture()->upsert_link(get_default_metadata()).get();
+
+    auto status = wait_for_sync_status([](const auto& s) {
+                      return s.last_full_sync.has_value()
+                             && !s.current_sync.has_value();
+                  }).get();
+    // The single error is the stuck purge; the skipped context delete adds
+    // none.
+    ASSERT_THAT(
+      status,
+      testing::Optional(
+        testing::Field(
+          &model::schema_registry_sync_status::last_full_sync,
+          testing::Optional(
+            testing::Field(&model::schema_registry_sync_summary::errors, 1)))));
+
+    // .prod is not deleted: it stays listed alongside the default context, so a
+    // later full sync retries it. A still-listed non-empty context also implies
+    // its blocked subject survived.
+    EXPECT_THAT(
+      _registry.list_contexts().get(),
+      testing::UnorderedElementsAre(
+        ppsr::default_context, ppsr::context{".prod"}));
 }
 
 } // namespace cluster_link::tests

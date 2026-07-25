@@ -171,6 +171,10 @@ var Comments = map[string]string{
 	"redpanda.core.admin.v2.SchemaRegistrySyncOptions.ShadowSchemaRegistryApi.max_source_requests_per_second": `Maximum request rate, in requests per second, for calls to the source
  Schema Registry. If unset or zero, a default rate limit of 30
  requests/s is used.`,
+	"redpanda.core.admin.v2.SchemaRegistrySyncOptions.ShadowSchemaRegistryApi.paused": `Allows the user to pause the Schema Registry sync task. If paused,
+ the task enters the 'paused' state and stops replicating schemas from
+ the source, and the per-context client write protection on the
+ contexts this link owns is lifted.`,
 	"redpanda.core.admin.v2.SchemaRegistrySyncOptions.ShadowSchemaRegistryApi.source_filter": `Filter for specific Schema Registry contexts and subjects to select
  for replication. If unset or empty, the whole source Schema Registry
  is replicated.`,

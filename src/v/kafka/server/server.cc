@@ -211,6 +211,10 @@ server::server(
           return container().local().fetch_units_manager();
       },
       config::shard_local_cfg().kafka_max_message_size_upper_limit_bytes.bind())
+  , _fetch_read_coalescer(
+      // ~0.5 MB/shard when coalescing is enabled.
+      {.cache_size = 1024, .small_size = 128},
+      config::shard_local_cfg().kafka_fetch_read_coalescing_enabled.bind())
   , _probe(std::make_unique<class kafka_probe>())
   , _sasl_probe(std::make_unique<class sasl_probe>())
   , _read_dist_probe(std::make_unique<read_distribution_probe>())

@@ -12,7 +12,6 @@
 #include "container/chunked_hash_map.h"
 #include "model/fundamental.h"
 #include "random/generators.h"
-#include "test_utils/scoped_config.h"
 
 #include <gtest/gtest.h>
 
@@ -32,7 +31,6 @@ TEST_F(SchedulerTestFixture, TestSchedulerMultithread) {
     int num_rounds = 50;
 #endif
 
-    scoped_config cfg;
     cfg.get("cloud_topics_compaction_interval_ms").set_value(100ms);
     ss::abort_source as;
     chunked_hash_set<ss::shard_id> paused_workers;

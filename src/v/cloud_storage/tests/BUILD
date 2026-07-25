@@ -73,7 +73,6 @@ redpanda_cc_btest(
         "segment_meta_cstore_test.cc",
     ],
     deps = [
-        ":common",
         "//src/v/base",
         "//src/v/cloud_storage:segment_meta_cstore",
         "//src/v/cloud_storage:types",

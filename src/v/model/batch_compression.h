@@ -21,6 +21,25 @@ namespace model {
 /// Throws if the batch is not compressed.
 ss::future<model::record_batch> decompress_batch(const model::record_batch&);
 
+/// \brief Decompress only the records payload of a compressed batch.
+///
+/// Cheaper than `decompress_batch()` when a well-formed uncompressed batch is
+/// not needed: no header is rebuilt and no checksum is computed. Throws if
+/// the batch is not compressed.
+ss::future<iobuf> decompress_payload(const model::record_batch&);
+
+/// \brief Build a batch compressed per `target` from an uncompressed records
+/// payload and the header of the batch the payload originated from.
+///
+/// The originating batch may have been compressed with any codec: `header`'s
+/// compression bits are cleared and re-set per `target` (`none` produces an
+/// uncompressed batch), and its size and checksum metadata are recomputed,
+/// exactly once, over the final payload.
+ss::future<model::record_batch> recompress_batch(
+  model::compression target,
+  model::record_batch_header header,
+  iobuf uncompressed_payload);
+
 /// \brief synchronous batch decompression
 model::record_batch decompress_batch_sync(const model::record_batch&);
 

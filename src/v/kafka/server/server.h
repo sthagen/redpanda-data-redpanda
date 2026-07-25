@@ -21,6 +21,7 @@
 #include "kafka/server/fetch_memory_units.h"
 #include "kafka/server/fetch_metadata_cache.h"
 #include "kafka/server/fetch_pid_controller.h"
+#include "kafka/server/fetch_read_coalescer.h"
 #include "kafka/server/fetch_session_cache.h"
 #include "kafka/server/fwd.h"
 #include "kafka/server/handlers/fetch/replica_selector.h"
@@ -239,6 +240,10 @@ public:
         return _fetch_units_manager;
     }
 
+    fetch_read_coalescer& read_coalescer() noexcept {
+        return _fetch_read_coalescer;
+    }
+
     ss::future<> revoke_credentials(std::string_view name);
 
     // Returns a default scheduling group that is intended to be used for
@@ -311,6 +316,7 @@ private:
     security::krb5::configurator _krb_configurator;
     ssx::semaphore _memory_fetch_sem;
     fetch_memory_units_manager _fetch_units_manager;
+    fetch_read_coalescer _fetch_read_coalescer;
 
     handler_probe_manager _handler_probes;
     metrics::internal_metric_groups _metrics;

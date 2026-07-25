@@ -20,6 +20,8 @@
 #include "net/tls_certificate_probe.h"
 #include "net/transport.h"
 #include "pandaproxy/schema_registry/rest_client/error.h"
+#include "pandaproxy/schema_registry/rest_client/pooled_client.h"
+#include "pandaproxy/schema_registry/rest_client/rate_limited_client.h"
 #include "utils/retry_chain_node.h"
 
 #include <seastar/core/coroutine.hh>
@@ -42,6 +44,12 @@ namespace {
 // retries_exhausted, which the reader maps to source_unavailable.
 constexpr auto request_timeout = 30s;
 constexpr auto request_backoff = 100ms;
+
+// Upper bound on pooled connections to the source registry. The pool is sized
+// to schema_registry_sync_parallelism (the reconciler's fan-out), capped here
+// so a large parallelism setting does not hold as many sockets open against
+// the source.
+constexpr size_t max_source_connections = 8;
 
 // Map a rest_client failure onto a source_error. A source that is unreachable
 // or rejecting every request is source_unavailable and parks the link; a 404 is
@@ -169,7 +177,26 @@ http_source_reader::http_source_reader(std::unique_ptr<rc::client> client)
   : _client(std::move(client)) {}
 
 ss::future<source_result<rc::client*>>
-http_source_reader::ensure_client(ss::abort_source&) {
+http_source_reader::ensure_client(ss::abort_source& as) {
+    // Checked before the fast path: stop() nulls _client, and a call arriving
+    // after stop (fibers may still be unwinding when the reader is stopped)
+    // must fail rather than rebuild a client nothing would ever stop.
+    if (_stopped) {
+        co_return std::unexpected(
+          source_error{
+            .kind = source_error_kind::source_unavailable,
+            .message = "source reader is stopped"});
+    }
+    if (_client) {
+        co_return _client.get();
+    }
+    auto build = co_await ss::get_units(_build, 1, as);
+    if (_stopped) {
+        co_return std::unexpected(
+          source_error{
+            .kind = source_error_kind::source_unavailable,
+            .message = "source reader is stopped"});
+    }
     if (_client) {
         co_return _client.get();
     }
@@ -193,8 +220,23 @@ http_source_reader::ensure_client(ss::abort_source&) {
                 cfg.tls_sni_hostname = _conn->address.host();
             }
         }
+        // Enough connections for the reconciler's fan-out; each http::client
+        // connects lazily on first use, so idle pool slots cost no sockets.
+        auto pool_size = std::min(
+          config::shard_local_cfg().schema_registry_sync_parallelism(),
+          max_source_connections);
+        std::vector<std::unique_ptr<http::abstract_client>> transports;
+        transports.reserve(pool_size);
+        for (size_t i = 0; i < pool_size; ++i) {
+            transports.push_back(std::make_unique<http::client>(cfg));
+        }
+        // Limiter over pool: a request pays for dispatch (rate cap and any
+        // server-imposed Retry-After pause) before competing for a
+        // connection.
         _client = std::make_unique<rc::client>(
-          std::make_unique<http::client>(cfg),
+          std::make_unique<rc::rate_limited_client>(
+            std::make_unique<rc::pooled_client>(std::move(transports)),
+            _conn->max_requests_per_sec),
           _conn->endpoint,
           _conn->auth,
           ppsr::qualified_subjects_enabled::yes);
@@ -211,7 +253,6 @@ http_source_reader::ensure_client(ss::abort_source&) {
 
 ss::future<source_result<chunked_vector<ppsr::context>>>
 http_source_reader::list_contexts(ss::abort_source& as) {
-    auto units = co_await ss::get_units(_inflight, 1, as);
     auto client = co_await ensure_client(as);
     if (!client.has_value()) {
         co_return std::unexpected(std::move(client.error()));
@@ -228,7 +269,6 @@ http_source_reader::list_contexts(ss::abort_source& as) {
 
 ss::future<source_result<chunked_vector<ppsr::context_subject>>>
 http_source_reader::list_subjects(ppsr::context ctx, ss::abort_source& as) {
-    auto units = co_await ss::get_units(_inflight, 1, as);
     auto client = co_await ensure_client(as);
     if (!client.has_value()) {
         co_return std::unexpected(std::move(client.error()));
@@ -252,7 +292,6 @@ http_source_reader::list_subject_versions(
   ppsr::context_subject sub,
   ppsr::include_deleted include_deleted,
   ss::abort_source& as) {
-    auto units = co_await ss::get_units(_inflight, 1, as);
     auto client = co_await ensure_client(as);
     if (!client.has_value()) {
         co_return std::unexpected(std::move(client.error()));
@@ -271,7 +310,6 @@ http_source_reader::read_subject_version(
   ppsr::context_subject sub,
   ppsr::schema_version version,
   ss::abort_source& as) {
-    auto units = co_await ss::get_units(_inflight, 1, as);
     auto client = co_await ensure_client(as);
     if (!client.has_value()) {
         co_return std::unexpected(std::move(client.error()));
@@ -285,16 +323,16 @@ http_source_reader::read_subject_version(
     if (!res.has_value()) {
         co_return std::unexpected(to_source_error(std::move(res.error())));
     }
-    // Carry the read through unchanged: the schema plus any unsupported fields
-    // the source served but Redpanda cannot store. The reconciler applies the
-    // configured unsupported-feature policy to
-    // `source_schema_read::unsupported`.
+    // Carry the read through unchanged: the schema, any unsupported fields the
+    // source served but Redpanda cannot store, and whether the source reported
+    // the `deleted` flag. The reconciler applies the configured
+    // unsupported-feature policy to `source_schema_read::unsupported` and
+    // prefers the reported `deleted` over its listing-derived fallback.
     co_return std::move(res.value());
 }
 
 ss::future<source_result<std::optional<ppsr::mode>>>
 http_source_reader::read_mode(ppsr::context_subject sub, ss::abort_source& as) {
-    auto units = co_await ss::get_units(_inflight, 1, as);
     auto client = co_await ensure_client(as);
     if (!client.has_value()) {
         co_return std::unexpected(std::move(client.error()));
@@ -325,10 +363,8 @@ http_source_reader::read_mode(ppsr::context_subject sub, ss::abort_source& as) {
     co_return narrowed;
 }
 
-ss::future<source_result<std::optional<ppsr::compatibility_level>>>
-http_source_reader::read_config(
+ss::future<source_result<source_config_read>> http_source_reader::read_config(
   ppsr::context_subject sub, ss::abort_source& as) {
-    auto units = co_await ss::get_units(_inflight, 1, as);
     auto client = co_await ensure_client(as);
     if (!client.has_value()) {
         co_return std::unexpected(std::move(client.error()));
@@ -342,33 +378,44 @@ http_source_reader::read_config(
                      sub, rtc, ppsr::default_to_global::no);
     if (!res.has_value()) {
         if (std::holds_alternative<rc::subject_config_not_found>(res.error())) {
-            co_return std::optional<ppsr::compatibility_level>{std::nullopt};
+            co_return source_config_read{.compatibility = std::nullopt};
         }
         co_return std::unexpected(to_source_error(std::move(res.error())));
     }
-    auto narrowed = narrow_compat(res.value().level);
-    if (!narrowed.has_value()) {
-        co_return std::unexpected(
-          source_error{
-            .kind = source_error_kind::operation_failed,
-            .message = fmt::format(
-              "source compatibility level '{}' of {} is not supported by the "
-              "destination",
-              res.value().raw,
-              sub)});
+    // A governance-only config (no compatibility level) is "no override"; its
+    // unsupported fields still reach the policy. The Config API documents the
+    // subject-level compatibility as optional ("the compatibility, if any"):
+    // https://docs.confluent.io/platform/current/schema-registry/develop/api.html#config
+    std::optional<ppsr::compatibility_level> narrowed;
+    if (res.value().level.has_value()) {
+        narrowed = narrow_compat(*res.value().level);
+        if (!narrowed.has_value()) {
+            co_return std::unexpected(
+              source_error{
+                .kind = source_error_kind::operation_failed,
+                .message = fmt::format(
+                  "source compatibility level '{}' of {} is not supported by "
+                  "the destination",
+                  res.value().raw,
+                  sub)});
+        }
     }
-    // Unsupported config fields (config_info::unknown_fields, e.g.
-    // defaultRuleSet or compatibilityGroup) are ignored; honoring
-    // unsupported_schema_feature_policy is future work, as it is for the
-    // schema-body path in read_subject_version.
-    co_return narrowed;
+    // Carry the unsupported config fields through for the sync's policy.
+    co_return source_config_read{
+      .compatibility = narrowed,
+      .unsupported = std::move(res.value().unsupported)};
 }
 
 ss::future<> http_source_reader::stop() {
     // Idempotent: the reader can be stopped more than once (e.g. an in-flight
     // reconciler stopping the task before link teardown stops it again). The
     // rest_client's gate must be closed exactly once, so release the client
-    // after shutting it down and skip it on a repeat call.
+    // after shutting it down and skip it on a repeat call. The sticky
+    // _stopped flag rejects post-stop rebuilds, and waiting out the build
+    // mutex means a build that raced this stop is shut down here rather than
+    // leaked.
+    _stopped = true;
+    auto build = co_await ss::get_units(_build, 1);
     if (auto client = std::move(_client); client) {
         co_await client->shutdown();
     }
@@ -390,7 +437,9 @@ std::unique_ptr<source_reader> http_source_reader_factory::create(
       .address = std::move(*address),
       .endpoint = api_cfg->source_url,
       .tls_enabled = bool(api_cfg->tls_enabled),
-      .provide_sni = bool(api_cfg->tls_provide_sni)};
+      .provide_sni = bool(api_cfg->tls_provide_sni),
+      .max_requests_per_sec = static_cast<size_t>(
+        api_cfg->get_max_source_requests_per_second())};
 
     if (api_cfg->ca.has_value()) {
         conn.truststore = to_certificate(api_cfg->ca.value());

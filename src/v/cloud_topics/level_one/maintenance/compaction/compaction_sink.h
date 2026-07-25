@@ -35,6 +35,7 @@ public:
       l1::metastore*,
       ss::abort_source&,
       config::binding<size_t>,
+      config::binding<size_t>,
       size_t,
       compaction_worker_probe&,
       prefix_logger&,
@@ -44,26 +45,41 @@ public:
     ss::future<bool>
     initialize(compaction::sliding_window_reducer::source&) final;
 
-    ss::future<ss::stop_iteration> operator()(model::record_batch) final;
-
     ss::future<> finalize(bool success) final;
+
+protected:
+    // Commits the builder's finished objects as a partial compaction
+    // commit: a compact_objects() carrying the objects and an empty
+    // compaction update, which validates and bumps the compaction epoch.
+    // Bumping the epoch on every batch keeps the job's progress durable and
+    // fences stale rewriters (straggler compaction jobs, leveling jobs with
+    // old read snapshots) for the remainder of the run. Throws on failure,
+    // aborting the run.
+    ss::future<>
+      commit_objects(std::unique_ptr<metastore::object_metadata_builder>) final;
 
 private:
     // Makes a `compact_objects()` request to the `metastore`, using the
     // provided (potentially empty) `compaction_map_t` as the metastore
     // compaction update.
-    ss::future<std::expected<void, metastore::errc>>
-      do_compact_objects(metastore::compaction_map_t);
+    ss::future<std::expected<void, metastore::errc>> do_compact_objects(
+      const metastore::object_metadata_builder&, metastore::compaction_map_t);
 
-    // Finalizes the compaction via `metastore->compact_objects()` without a
-    // compaction metadata update.
-    ss::future<> compact_objects_without_update();
+    // Advances the partition's min_allowed_local_threshold floor via the
+    // notifier. Returns false if the floor could not be advanced, in which
+    // case no compaction data or metadata may be committed.
+    ss::future<bool> advance_local_threshold_floor(kafka::offset new_floor);
 
-    // Finalizes the compaction via `metastore->compact_objects()` with a
-    // compaction metadata update.
-    ss::future<> compact_objects_with_update(
+    // Builds a compaction update carrying the given ranges at the given
+    // expected epoch.
+    static metastore::compaction_update make_compaction_update(
       chunked_vector<metastore::compaction_update::cleaned_range>,
-      offset_interval_set);
+      offset_interval_set,
+      metastore::compaction_epoch);
+
+    // Wraps the given update into a single-partition compaction map.
+    metastore::compaction_map_t
+      make_compaction_map(metastore::compaction_update) const;
 
 private:
     // Offset ranges for the contained `topic_id_partition` obtained from the
@@ -72,8 +88,21 @@ private:
     const interval_vec& _dirty_range_intervals;
     const offset_interval_set& _removable_tombstone_ranges;
 
-    // The expected compaction epoch for the log.
-    const metastore::compaction_epoch _expected_compaction_epoch;
+    // The compaction epoch the job's own partial commits have advanced the
+    // partition to. Each successful partial commit bumps this by one; the
+    // final metadata-only commit validates against (and bumps) it.
+    metastore::compaction_epoch _current_epoch;
+
+    // Number of partial commits this job has landed, and the output
+    // objects they committed. Reported against the processed extent count
+    // at finalize to show the job's extent-count reduction.
+    uint64_t _partial_commits{0};
+    uint64_t _committed_objects{0};
+
+    // Whether the min_allowed_local_threshold floor was advanced for this
+    // job (advanced once, before the first partial commit removes any
+    // data).
+    bool _floor_advanced{false};
 
     // The start offset of the log.
     kafka::offset _start_offset;

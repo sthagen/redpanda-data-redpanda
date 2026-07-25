@@ -132,6 +132,16 @@ public:
     ss::future<> put(key_space ks, bytes key, iobuf value);
     ss::future<> remove(key_space ks, bytes key);
 
+    /// Durably persist a single key/value during bootstrap, before the kvstore
+    /// has been start()ed and therefore before its segment/chunk-cache write
+    /// path is available. Applies the value to the in-memory db and writes a
+    /// snapshot (plain file I/O, no chunk cache). Must be called after
+    /// recover() and before start(), with no other writer active.
+    ///
+    /// Intended for the narrow bootstrap case where a value must be durable
+    /// before the kvstore is start()ed; prefer put() everywhere else.
+    ss::future<> persist_pre_start(key_space ks, bytes key, iobuf value);
+
     /// Iterate over all key-value pairs in a keyspace.
     /// NOTE: this will stall all updates, so use with a lot of caution.
     ss::future<> for_each(

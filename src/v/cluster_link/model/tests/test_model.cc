@@ -37,6 +37,31 @@ struct schema_registry_sync_config_v0
 
     auto serde_fields() { return std::tie(sync_schema_registry_topic_mode); }
 };
+
+// The shape of link_configuration before role sync (v26.2) appended
+// role_sync_cfg: the four fields that preceded it, at the original envelope
+// version. Models a node on the prior release decoding a link configuration
+// written by an upgraded node. Reuses the current nested config types (as
+// schema_registry_sync_config_v0 does) -- only the absence of the trailing
+// role_sync_cfg field is modeled here.
+struct link_configuration_v0
+  : serde::envelope<
+      link_configuration_v0,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    topic_metadata_mirroring_config topic_metadata_mirroring_cfg;
+    consumer_groups_mirroring_config consumer_groups_mirroring_cfg;
+    security_settings_sync_config security_settings_sync_cfg;
+    schema_registry_sync_config schema_registry_sync_cfg;
+
+    auto serde_fields() {
+        return std::tie(
+          topic_metadata_mirroring_cfg,
+          consumer_groups_mirroring_cfg,
+          security_settings_sync_cfg,
+          schema_registry_sync_cfg);
+    }
+};
 } // namespace
 
 TEST(test_model, test_no_leak_private_data) {
@@ -219,6 +244,58 @@ TEST(test_model, role_sync_config_serde_round_trip) {
     EXPECT_EQ(
       decoded.role_sync_cfg.get_task_interval(), std::chrono::seconds{45});
 }
+
+// Downgrade safety for the unfinalized-upgrade feature. Role sync (v26.2)
+// appends role_sync_cfg to link_configuration as a trailing field, bumping the
+// envelope to version<1> while leaving compat_version at 0. Because shadow
+// links exist since v25.3, a link created or edited on the upgraded binary
+// while the upgrade is still unfinalized persists a v1 link_configuration in
+// the controller log; if that upgrade is rolled back, a node on the prior
+// release must still decode the record -- recovering every field it knows and
+// skipping the trailing role_sync_cfg. If this breaks (compat_version bumped,
+// or a field inserted ahead of role_sync_cfg) an unfinalized downgrade could no
+// longer replay the controller log.
+TEST(test_model, link_configuration_legacy_reads_v1_role_sync) {
+    link_configuration cfg;
+    // A field that predates role_sync_cfg: the legacy reader must recover it.
+    cfg.topic_metadata_mirroring_cfg.is_enabled = enabled_t::no;
+    cfg.topic_metadata_mirroring_cfg.task_interval = std::chrono::seconds{45};
+    // The trailing v1-only field, populated so the test proves it is skipped
+    // rather than corrupting the decode of the fields ahead of it.
+    cfg.role_sync_cfg.is_enabled = enabled_t::no;
+    cfg.role_sync_cfg.role_name_filters.push_back(
+      resource_name_filter_pattern{
+        .pattern_type = filter_pattern_type::prefix,
+        .filter = filter_type::include,
+        .pattern = "analytics-"});
+
+    auto legacy = serde_to<link_configuration_v0>(cfg);
+
+    EXPECT_EQ(legacy.topic_metadata_mirroring_cfg.is_enabled, enabled_t::no);
+    EXPECT_EQ(
+      legacy.topic_metadata_mirroring_cfg.get_task_interval(),
+      std::chrono::seconds{45});
+}
+
+// The complementary upgrade-read direction: a link_configuration written by the
+// prior release (no role_sync_cfg field) is decoded by the current binary,
+// which must default role_sync_cfg rather than fail. An upgraded node reads
+// pre-upgrade link records this way on every restart.
+TEST(test_model, link_configuration_reads_v0_defaults_role_sync) {
+    link_configuration_v0 legacy;
+    legacy.topic_metadata_mirroring_cfg.is_enabled = enabled_t::no;
+
+    auto cfg = serde_to<link_configuration>(legacy);
+
+    EXPECT_EQ(cfg.topic_metadata_mirroring_cfg.is_enabled, enabled_t::no);
+    // role_sync_cfg falls back to its defaults: no filters, so the migrator is
+    // a no-op until one is configured.
+    EXPECT_TRUE(cfg.role_sync_cfg.role_name_filters.empty());
+    EXPECT_EQ(
+      cfg.role_sync_cfg.get_task_interval(),
+      role_sync_config::task_interval_default);
+}
+
 TEST(test_model, select_role_include_exclude_prefix) {
     using namespace cluster_link::model;
     chunked_vector<resource_name_filter_pattern> patterns;

@@ -93,6 +93,53 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "rate_limited_client",
+    srcs = [
+        "rate_limited_client.cc",
+    ],
+    hdrs = [
+        "rate_limited_client.h",
+    ],
+    implementation_deps = [
+        ":logger",
+    ],
+    visibility = [
+        "//src/v/cluster_link:__subpackages__",
+        "//src/v/pandaproxy:__subpackages__",
+    ],
+    deps = [
+        "//src/v/base",
+        "//src/v/bytes:iobuf",
+        "//src/v/http",
+        "//src/v/utils:token_bucket",
+        "@boost//:beast",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "pooled_client",
+    srcs = [
+        "pooled_client.cc",
+    ],
+    hdrs = [
+        "pooled_client.h",
+    ],
+    visibility = [
+        "//src/v/cluster_link:__subpackages__",
+        "//src/v/pandaproxy:__subpackages__",
+    ],
+    deps = [
+        "//src/v/base",
+        "//src/v/bytes:iobuf",
+        "//src/v/http",
+        "//src/v/ssx:semaphore",
+        "@boost//:beast",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "client",
     srcs = [
         "client.cc",

@@ -100,7 +100,8 @@ public:
     ss::future<bool> delete_mode(
       context_subject ctx_sub, write_source src = write_source::client);
 
-    ss::future<> delete_context(context ctx);
+    ss::future<>
+    delete_context(context ctx, write_source src = write_source::client);
 
     ss::future<bool> delete_subject_version(
       context_subject sub,

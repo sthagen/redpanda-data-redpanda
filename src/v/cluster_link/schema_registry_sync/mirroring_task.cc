@@ -28,6 +28,9 @@
 #include <seastar/coroutine/as_future.hh>
 #include <seastar/util/defer.hh>
 
+#include <fmt/ranges.h>
+
+#include <ranges>
 #include <utility>
 
 namespace cluster_link::schema_registry_sync {
@@ -59,6 +62,19 @@ bool is_reference_blocked(const std::exception_ptr& ep) {
         std::rethrow_exception(ep);
     } catch (const ppsr::exception& e) {
         return e.code() == ppsr::error_code::subject_version_has_references;
+    } catch (...) {
+    }
+    return false;
+}
+
+// A context delete blocked because the context still has subjects (e.g. a
+// reference-blocked version survived the purge); retried on the next full sync
+// rather than counted as a hard error.
+bool is_context_not_empty(const std::exception_ptr& ep) {
+    try {
+        std::rethrow_exception(ep);
+    } catch (const ppsr::exception& e) {
+        return e.code() == ppsr::error_code::context_not_empty;
     } catch (...) {
     }
     return false;
@@ -137,31 +153,73 @@ void mirroring_task::reset_sync_state() {
     _last_full_sync.reset();
 }
 
-ss::future<cl_result<void>> mirroring_task::stop() noexcept {
-    auto res = co_await task::stop();
-    // task::stop() closed the runner's gate, so no run_impl is in flight and it
-    // is safe to reset the state directly (unlike update_config, which races a
-    // running fiber and defers via _config_changed). Reset so a later leader
-    // starts fresh: this instance may regain _schemas/0 leadership (A->B->A)
-    // and would otherwise report a prior tenure's stale counters/inventory and
-    // skip its first full sync on a still-recent _last_full_sync.
-    reset_sync_state();
-    // The run loop has stopped, so no fiber is using the reader; release its
-    // HTTP transport. as_future guards the noexcept contract.
-    if (_reader) {
-        auto stopped = co_await ss::coroutine::as_future(_reader->stop());
-        if (stopped.failed()) {
-            auto ex = stopped.get_exception();
-            vlog(
-              logger().warn,
-              "Error stopping Schema Registry source reader: {}",
-              ex);
-        }
+ss::future<cl_result<void>> mirroring_task::start() {
+    auto res = co_await task::start();
+    // The series stay registered for the task's whole non-stopped life,
+    // including while paused; stop() removes them. See probe.h for the
+    // lifecycle rationale. setup is idempotent, so resuming from paused
+    // (which also lands here) is fine.
+    if (res.has_value()) {
+        _probe.setup(get_link()->get_config()->name, [this] {
+            return get_live_sync_status().totals_since_task_start;
+        });
     }
     co_return res;
 }
 
+ss::future<cl_result<void>> mirroring_task::stop() noexcept {
+    // Stop the reader BEFORE joining the run fiber: run_impl can be parked on
+    // reader-internal waits that only the reader's own shutdown aborts (the
+    // rate limiter's token queue and Retry-After pause -- up to 60s -- and the
+    // connection pool's slot queue are deaf to the runner's abort source).
+    // Joining first would sequence that abort behind the join that needs it.
+    // The reader is built to be stopped under fire: in-flight and queued
+    // requests fail promptly with abort-classified errors and run_impl
+    // unwinds. as_future guards the noexcept contract.
+    //
+    // Under _reader_lifecycle: run_impl is still live here (reader-first), so a
+    // concurrent reset_reader() could otherwise free the reader while this
+    // stop() is suspended mid-shutdown. The lock is dropped before the join
+    // below, so it cannot deadlock against a reset_reader() the join waits on.
+    {
+        auto reader_units = co_await _reader_lifecycle.get_units();
+        if (_reader) {
+            auto stopped = co_await ss::coroutine::as_future(_reader->stop());
+            if (stopped.failed()) {
+                auto ex = stopped.get_exception();
+                vlog(
+                  logger().warn,
+                  "Error stopping Schema Registry source reader: {}",
+                  ex);
+            }
+        }
+    }
+    auto res = co_await task::stop();
+    _probe.clear();
+    // task::stop() closed the runner's gate, so no run_impl is in flight and
+    // it is safe to reset the state directly (unlike update_config, which
+    // races a running fiber and defers via _config_changed). Reset so a later
+    // leader starts fresh: this instance may regain _schemas/0 leadership
+    // (A->B->A) and would otherwise report a prior tenure's stale
+    // counters/inventory and skip its first full sync on a still-recent
+    // _last_full_sync.
+    reset_sync_state();
+    // Replace the stopped reader with a fresh one for that possible A->B->A
+    // re-acquisition. The reader's stop() is permanent by design (it refuses
+    // to rebuild its client so an unwinding fiber cannot resurrect it during
+    // teardown), and run_impl only rebuilds the reader on a config change, so
+    // a restarted task would otherwise keep using the dead reader and never
+    // sync. No lock needed: the run fibers have been joined, so reset_reader()
+    // cannot run and none is mid-request on the old reader.
+    _reader = _source_factory->create(_config.api_mode());
+    co_return res;
+}
+
 ss::future<> mirroring_task::reset_reader() {
+    // Serialize with stop() (see _reader_lifecycle): both stop and then free
+    // the reader by reassignment, and either can be suspended in the reader's
+    // shutdown when the other reaches the free.
+    auto reader_units = co_await _reader_lifecycle.get_units();
     if (_reader) {
         auto stopped = co_await ss::coroutine::as_future(_reader->stop());
         if (stopped.failed()) {
@@ -201,30 +259,35 @@ bool mirroring_task::should_long_sync() const {
            >= full_sync_interval(_config);
 }
 
+model::schema_registry_sync_status
+mirroring_task::get_live_sync_status() const {
+    auto status = _status;
+    // Reflect the in-flight reconcile's live counters for mid-sync
+    // progress. Guarded on current_sync so it cannot double-count after the
+    // fold (which zeroes _reconcile_stats and bakes them into _status).
+    if (status.current_sync.has_value()) {
+        status.current_sync->summary.subject_versions_changed
+          += _reconcile_stats.versions_changed;
+        status.current_sync->summary.errors += _reconcile_stats.errors;
+        status.current_sync->summary.unsupported_features_removed
+          += _reconcile_stats.unsupported_features_removed;
+        status.totals_since_task_start.subject_versions_changed
+          += _reconcile_stats.versions_changed;
+        status.totals_since_task_start.errors += _reconcile_stats.errors;
+        status.totals_since_task_start.unsupported_features_removed
+          += _reconcile_stats.unsupported_features_removed;
+    }
+    return status;
+}
+
 model::task_status_report mirroring_task::get_status_report() const {
     auto report = task::get_status_report();
     // Only the shard leading _schemas/0 runs the sync; a stopped shard's empty
     // status must not win the admin aggregation over the leader's, so suppress
     // it.
     if (get_state() != model::task_state::stopped) {
-        auto status = _status;
-        // Reflect the in-flight reconcile's live counters for mid-sync
-        // progress. Guarded on current_sync so it cannot double-count after the
-        // fold (which zeroes _reconcile_stats and bakes them into _status).
-        if (status.current_sync.has_value()) {
-            status.current_sync->summary.subject_versions_changed
-              += _reconcile_stats.versions_changed;
-            status.current_sync->summary.errors += _reconcile_stats.errors;
-            status.current_sync->summary.unsupported_features_removed
-              += _reconcile_stats.unsupported_features_removed;
-            status.totals_since_task_start.subject_versions_changed
-              += _reconcile_stats.versions_changed;
-            status.totals_since_task_start.errors += _reconcile_stats.errors;
-            status.totals_since_task_start.unsupported_features_removed
-              += _reconcile_stats.unsupported_features_removed;
-        }
         report.detail = model::task_detail{
-          .schema_registry_sync_status = std::move(status)};
+          .schema_registry_sync_status = get_live_sync_status()};
     }
     return report;
 }
@@ -337,8 +400,107 @@ ss::future<uint64_t> mirroring_task::purge_destination_only_versions(
     co_return purged;
 }
 
+ss::future<> mirroring_task::delete_source_absent_contexts(
+  const chunked_hash_set<ppsr::context>& contexts,
+  const ss::noncopyable_function<bool(const ppsr::context_subject&)>& in_scope,
+  ss::abort_source& as) {
+    // Enumerated in the destination namespace. A destination context is a
+    // deletion target when it is owned by this link (reverse-maps to a source
+    // context), managed as a whole (in scope as a context, not merely via a
+    // subject filter), is not the default context (which always exists), and is
+    // no longer present at the source. Its subjects were already purged above.
+    // `dest_contexts` is a named local, so the lazy view is safe to iterate
+    // across the deletes below (which touch the store, not these operands).
+    const auto dest_contexts = co_await _destination->list_contexts();
+    auto to_delete
+      = dest_contexts | std::views::filter([&](const ppsr::context& dest_ctx) {
+            if (dest_ctx == ppsr::default_context) {
+                return false;
+            }
+            auto src_ctx = _mapper.reverse(dest_ctx);
+            return src_ctx.has_value()
+                   && in_scope(
+                     ppsr::context_subject{*src_ctx, ppsr::subject{""}})
+                   && !contexts.contains(*src_ctx);
+        });
+
+    for (const auto& dest_ctx : to_delete) {
+        as.check();
+        auto fut = co_await ss::coroutine::as_future(
+          _destination->delete_context(dest_ctx));
+        if (fut.failed()) {
+            auto ex = fut.get_exception();
+            if (ssx::is_shutdown_exception(ex)) {
+                std::rethrow_exception(ex);
+            }
+            if (is_context_not_empty(ex)) {
+                // The purge could not empty it this run (e.g. a
+                // reference-blocked version); retry on the next full sync.
+                vlog(
+                  logger().debug,
+                  "Deferring delete of source-absent context {}: {}",
+                  dest_ctx,
+                  ex);
+                continue;
+            }
+            record_error(
+              fmt::format(
+                "failed to delete source-absent context {}: {}", dest_ctx, ex));
+            continue;
+        }
+        vlog(
+          logger().info, "Deleted context {} absent from the source", dest_ctx);
+    }
+}
+
+bool mirroring_task::fail_if_contains_unsupported(
+  const ppsr::context_subject& target,
+  model::schema_registry_sync_config::unsupported_feature_policy feature_policy,
+  const chunked_vector<ppsr::unsupported_feature>& unsupported) {
+    using policy_t
+      = model::schema_registry_sync_config::unsupported_feature_policy;
+    if (feature_policy != policy_t::fail || unsupported.empty()) {
+        return false;
+    }
+    // Per-item failure (as on the schema-body path): count it, log the
+    // offending fields, and let the caller skip this subject's config sync
+    // while the rest of the work continues.
+    record_error(
+      fmt::format(
+        "{} config carries {} unsupported feature(s) the destination cannot "
+        "store; failing it under the FAIL policy: {}",
+        target,
+        unsupported.size(),
+        fmt::join(unsupported, ", ")));
+    return true;
+}
+
+void mirroring_task::count_if_contains_unsupported_removed(
+  const ppsr::context_subject& target,
+  model::schema_registry_sync_config::unsupported_feature_policy feature_policy,
+  const chunked_vector<ppsr::unsupported_feature>& unsupported) {
+    using policy_t
+      = model::schema_registry_sync_config::unsupported_feature_policy;
+    if (feature_policy != policy_t::remove || unsupported.empty()) {
+        return;
+    }
+    // Only compatibilityLevel is synced, so the unsupported config fields are
+    // already dropped; log and count them.
+    vlog(
+      logger().info,
+      "Removed {} unsupported config feature(s) from {}: {}",
+      unsupported.size(),
+      target,
+      fmt::join(unsupported, ", "));
+    _status.current_sync->summary.unsupported_features_removed
+      += unsupported.size();
+    _status.totals_since_task_start.unsupported_features_removed
+      += unsupported.size();
+}
+
 ss::future<> mirroring_task::sync_mode_and_config(
   const ppsr::context_subject& target,
+  model::schema_registry_sync_config::unsupported_feature_policy feature_policy,
   ss::abort_source& as,
   std::optional<source_error>& unavailable) {
     // A peer fiber already hit source_unavailable; skip the remaining work.
@@ -402,9 +564,16 @@ ss::future<> mirroring_task::sync_mode_and_config(
         co_return;
     }
 
+    auto& cfg = config.value();
+    // FAIL rejects before the write; REMOVE accounting runs after it lands.
+    // Policy diagnostics name the source subject, write errors the destination.
+    if (fail_if_contains_unsupported(target, feature_policy, cfg.unsupported)) {
+        co_return;
+    }
+
     auto write = co_await ss::coroutine::as_future(
-      config.value().has_value()
-        ? _destination->write_config(dest_target, *config.value())
+      cfg.compatibility.has_value()
+        ? _destination->write_config(dest_target, *cfg.compatibility)
         : _destination->delete_config(dest_target));
     if (write.failed()) {
         auto ex = write.get_exception();
@@ -419,6 +588,12 @@ ss::future<> mirroring_task::sync_mode_and_config(
         ++_status.current_sync->summary.compatibility_configs_changed;
         ++_status.totals_since_task_start.compatibility_configs_changed;
     }
+    // Counted per completed sync, even when the write was a no-op: the drop
+    // recurs on every re-read, and a governance-only config (a no-op delete)
+    // must not be silently ignored. Mirrors FAIL's per-sync errors; the schema
+    // path counts once because its projection lands durably.
+    count_if_contains_unsupported_removed(
+      target, feature_policy, cfg.unsupported);
 }
 
 void mirroring_task::record_error(std::string_view what) {
@@ -602,10 +777,9 @@ ss::future<task::state_transition> mirroring_task::full_source_sync(
                                     node);
         if (!dest_deleted) {
             work.upserts.push_back(node);
-            // Authoritative deleted-state from the listing partition: the
-            // reconciler imports these soft-deleted regardless of the
-            // per-version source body, which a standard source (e.g. Confluent)
-            // does not populate with a `deleted` flag by default.
+            // Listing-derived soft-delete, recorded as the fallback signal: the
+            // reconciler prefers the version body's own `deleted` flag and
+            // consults this set only when the source omits it from the body.
             work.soft_deleted.insert(node);
         }
     }
@@ -704,11 +878,17 @@ ss::future<task::state_transition> mirroring_task::full_source_sync(
       mode_config_targets,
       std::max<size_t>(1, limits.parallelism),
       [&](const ppsr::context_subject& target) {
-          return sync_mode_and_config(target, as, mc_unavailable);
+          return sync_mode_and_config(
+            target, feature_policy, as, mc_unavailable);
       });
     if (mc_unavailable.has_value()) {
         co_return make_unavailable(mc_unavailable->message);
     }
+
+    // Tombstone any destination context whose source context is gone (its
+    // subjects were purged above). Runs after mode/config so a
+    // source-unavailable run backs off before touching contexts.
+    co_await delete_source_absent_contexts(contexts, in_scope, as);
 
     // Re-scan now that imports have landed so the reported destination counts
     // reflect the post-sync state, not the pre-import baseline the diff used.

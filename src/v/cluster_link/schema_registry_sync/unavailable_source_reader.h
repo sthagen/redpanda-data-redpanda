@@ -49,7 +49,7 @@ public:
     ss::future<source_result<std::optional<ppsr::mode>>>
     read_mode(ppsr::context_subject, ss::abort_source&) override;
 
-    ss::future<source_result<std::optional<ppsr::compatibility_level>>>
+    ss::future<source_result<source_config_read>>
     read_config(ppsr::context_subject, ss::abort_source&) override;
 
 private:

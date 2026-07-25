@@ -45,10 +45,10 @@ constexpr size_t reconcile_reserve_bytes = 100_KiB;
 // on them. Unqualified references resolve against the referring schema's own
 // context.
 chunked_vector<ppsr::subject_version>
-resolve_refs(const ppsr::stored_schema& stored) {
-    const auto& parent_ctx = stored.schema.sub().ctx;
+resolve_refs(const ppsr::subject_schema& schema) {
+    const auto& parent_ctx = schema.sub().ctx;
     chunked_vector<ppsr::subject_version> out;
-    for (const auto& ref : stored.schema.def().refs()) {
+    for (const auto& ref : schema.def().refs()) {
         out.push_back(
           ppsr::subject_version{ref.sub.resolve(parent_ctx), ref.version});
     }
@@ -57,8 +57,8 @@ resolve_refs(const ppsr::stored_schema& stored) {
 
 // Byte-size proxy for a schema body: the canonical definition's length. This
 // is what the byte-semaphore budgets, and what tests control via the fake.
-size_t body_size(const ppsr::stored_schema& s) {
-    return s.schema.def().raw()().size_bytes();
+size_t body_size(const ppsr::subject_schema& s) {
+    return s.def().raw()().size_bytes();
 }
 
 // Rewrites a schema's contexts source->destination for import: the subject's
@@ -439,16 +439,21 @@ ss::future<bool> reconciler::import_body(
     if (fail_if_contains_unsupported(n, read.unsupported)) {
         co_return false;
     }
-    // Deleted-state is authoritative from the caller's active-vs-deleted
-    // listing partition, not the per-version source body: a standard source
-    // (e.g. Confluent) omits the `deleted` flag from that body by default, so
-    // the fetched flag cannot be trusted to propagate a soft-delete.
-    read.schema.deleted = _soft_deleted.contains(n) ? ppsr::is_deleted::yes
-                                                    : ppsr::is_deleted::no;
     data(n).state = node_state::importing;
+    // into_stored() consumes `read`, so lift out the unsupported-feature list
+    // first: it is accounted for only after a successful import below.
+    const auto unsupported = std::move(read.unsupported);
+    // Materialize the stored schema, preferring the source's own reported
+    // deleted flag: it is fresher (read on a later call than the listing) and
+    // avoids the listing set-difference, which can race. Fall back to the
+    // caller's active-vs-deleted listing partition only when the source omitted
+    // the flag, as a source that does not report it cannot otherwise convey a
+    // soft-delete.
+    auto stored = std::move(read).into_stored(
+      _soft_deleted.contains(n) ? ppsr::is_deleted::yes : ppsr::is_deleted::no);
     // The graph key `n` stays in the source namespace; only the schema written
     // to the destination is remapped.
-    auto remapped = remap_for_import(*_mapper, std::move(read.schema));
+    auto remapped = remap_for_import(*_mapper, std::move(stored));
     if (!remapped.has_value()) {
         vlog(
           cllog.warn,
@@ -484,8 +489,8 @@ ss::future<bool> reconciler::import_body(
     ++_stats->versions_changed;
     // Account for REMOVE-stripped features only after the projection actually
     // lands on the destination, so a failed import does not report features as
-    // removed. Only read.schema was moved above; read.unsupported is intact.
-    count_if_contains_unsupported_removed(n, read.unsupported);
+    // removed.
+    count_if_contains_unsupported_removed(n, unsupported);
     wake(n);
     co_return true;
 }

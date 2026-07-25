@@ -30,6 +30,7 @@ from rptest.services.cluster import cluster
 from rptest.services.redpanda import RESTART_LOG_ALLOW_LIST
 from rptest.services.redpanda_installer import RedpandaInstaller, wait_for_num_versions
 from rptest.tests.redpanda_test import RedpandaTest
+from rptest.tests.unfinalized_upgrade_mixin import UnfinalizedUpgradeMixin
 from rptest.util import expect_exception, wait_until_result
 from rptest.utils.node_operations import NodeDecommissionWaiter
 from rptest.utils.rpenv import sample_license, sample_license_v1
@@ -1173,12 +1174,6 @@ class ManualFinalizationTest(FeaturesTestBase):
         ]
 
 
-# The `features_auto_finalization` knob was backported to v26.1.9, so the real
-# upgrade below must start from a released patch that already has it. The knob
-# lets a cluster opt out of auto-finalization *before* upgrading to a HEAD build
-# that ships the gating logic and the admin v2 RPCs.
-MANUAL_FINALIZE_MIN_OLD_RELEASE = (26, 1, 9)
-
 # The same knob was also backported to v25.3.15, the oldest release from which a
 # multi-hop upgrade (v25.3 -> v26.1 -> HEAD) can carry the opt-out through every
 # hop with the flag set only once.
@@ -1209,26 +1204,42 @@ PERTURB_RECORD_SIZE = 128
 # exercise or an explicit acknowledgement. Add a feature's name here when you
 # cover it or knowingly skip it; entries for features no longer gated by the
 # current upgrade are harmless extras, so no per-major pruning is needed.
-PERTURB_EXERCISED_FEATURES = frozenset({"tiered_cloud_topics", "shadow_link_role_sync"})
+PERTURB_EXERCISED_FEATURES = frozenset(
+    {
+        "tiered_cloud_topics",
+        "shadow_link_role_sync",
+        "fetch_controller_snapshot_rpc",
+    }
+)
 PERTURB_ACKNOWLEDGED_FEATURES = frozenset(
     {
-        # Cluster-linking features, out of scope for this single-cluster test.
+        # Cluster-linking features: exercising either needs a second (source)
+        # cluster, which this single-cluster test does not have.
+        #
+        # shadow_link_sr_api_sync gates configuring Schema Registry API-mode
+        # sync on the target. Covered end to end -- gated while unfinalized,
+        # working after finalize -- by ShadowLinkUnfinalizedUpgradeTest.
         "shadow_link_sr_api_sync",
+        # batch_mirror_topic_status gates only the batched controller command
+        # for mirror-topic failover, reachable solely via a failover on an
+        # active shadow link. Downgrade-safe by inspection: while unfinalized
+        # the feature is inactive, so failover falls back to the legacy
+        # per-topic path, which writes only controller-log records (command
+        # types and status-enum values) the prior release already decodes. The
+        # one new-in-26.2 record -- the batched failover command -- is not
+        # written until the feature activates post-finalize (and a HEAD-side
+        # backstop in frontend::batch_update_mirror_topic_status refuses to
+        # replicate it while inactive), so the window persists nothing that
+        # could break a downgrade.
         "batch_mirror_topic_status",
         # Iceberg extended-mode topic-config gate; exercising it needs Iceberg
         # topic setup orthogonal to the finalization behavior under test.
         "iceberg_extended_mode_config",
-        # Bootstrap-time internal RPC: while gated, a restarting node simply
-        # skips the controller-snapshot fetch and falls back to its local
-        # config cache (indistinguishable from prior behavior, with no
-        # distinctive signal to assert here). Its active-state
-        # behavior is covered by ClusterConfigMultiNodeBootstrapTest.
-        "fetch_controller_snapshot_rpc",
     }
 )
 
 
-class ManualFinalizationUpgradeTest(FeaturesTestBase):
+class ManualFinalizationUpgradeTest(UnfinalizedUpgradeMixin, FeaturesTestBase):
     """
     Real-upgrade counterpart to ManualFinalizationTest.
 
@@ -1278,10 +1289,10 @@ class ManualFinalizationUpgradeTest(FeaturesTestBase):
         old_release = self.installer.highest_from_prior_feature_version(
             RedpandaInstaller.HEAD
         )
-        assert old_release >= MANUAL_FINALIZE_MIN_OLD_RELEASE, (
+        assert old_release >= self.MIN_OLD_RELEASE, (
             f"prior feature version {old_release} predates the "
             f"features_auto_finalization backport "
-            f"{MANUAL_FINALIZE_MIN_OLD_RELEASE}; cannot opt out before upgrade"
+            f"{self.MIN_OLD_RELEASE}; cannot opt out before upgrade"
         )
         self.old_release = old_release
         self.logger.info(f"Starting cluster on old release {old_release}")
@@ -1292,76 +1303,6 @@ class ManualFinalizationUpgradeTest(FeaturesTestBase):
         self.logger.info(
             f"Old release {old_release} reports logical version {self.old_logical}"
         )
-
-    def _restart_at_new(self, nodes):
-        """Upgrade `nodes` to the HEAD build and restart them in place."""
-        self.installer.install(nodes, RedpandaInstaller.HEAD)
-        self.redpanda.restart_nodes(nodes)
-        self._wait_for_cluster_settled()
-
-        self.new_logical = self._node_latest_logical_version(nodes[0])
-        self.logger.info(f"HEAD build reports logical version {self.new_logical}")
-        assert self.new_logical > self.old_logical, (
-            f"expected HEAD logical version {self.new_logical} to exceed the old "
-            f"version {self.old_logical}; the upgrade did not raise the version"
-        )
-
-    def _node_latest_logical_version(self, node):
-        """Read a (possibly just-restarted) node's latest logical version,
-        tolerating the brief window before it is serving the admin API."""
-
-        def query():
-            return self.admin.get_features(node=node).get("node_latest_version")
-
-        return wait_until_result(
-            query,
-            timeout_sec=30,
-            backoff_sec=1,
-            err_msg="node did not report node_latest_version after upgrade",
-        )
-
-    def _upgrade_all_to(self, version):
-        """Install `version` on every node, restart in place, and return the
-        binary's latest logical version."""
-        self.installer.install(self.redpanda.nodes, version)
-        self.redpanda.restart_nodes(self.redpanda.nodes)
-        self._wait_for_cluster_settled()
-        return self._node_latest_logical_version(self.redpanda.nodes[0])
-
-    def _wait_for_cluster_version(self, target, timeout_sec=60):
-        """Wait until every node reports cluster_version == target."""
-
-        def check():
-            return all(
-                self.admin.get_features(node=n)["cluster_version"] == target
-                for n in self.redpanda.nodes
-            )
-
-        wait_until(check, timeout_sec=timeout_sec, backoff_sec=1)
-
-    def _wait_for_cluster_settled(self, timeout_sec=90):
-        """Wait for the cluster to settle after a restart: every broker has
-        rejoined and no under-replicated partitions remain. `start_node` only
-        waits for per-node readiness (the v1 ready probe), not cluster
-        convergence -- so without this a "did not advance" assertion could pass
-        merely because the controller has not yet observed the upgrade."""
-        self.redpanda.wait_for_membership(first_start=False)
-        wait_until(
-            self.redpanda.healthy,
-            timeout_sec=timeout_sec,
-            backoff_sec=2,
-            err_msg="cluster did not become healthy after restart",
-        )
-
-    def _downgrade_all_to(self, release):
-        """Roll every node back to `release` (an older binary) without
-        finalizing, then wait for the cluster to come back healthy. This is the
-        rollback the unfinalized-upgrade feature is meant to preserve: because
-        the active version was never advanced, the older binary can still run on
-        the existing on-disk data."""
-        self.installer.install(self.redpanda.nodes, release)
-        self.redpanda.restart_nodes(self.redpanda.nodes)
-        self._wait_for_cluster_settled()
 
     def _perturb(self, phase):
         """Perturb the cluster while it sits in `phase` (e.g.
@@ -1455,10 +1396,13 @@ class ManualFinalizationUpgradeTest(FeaturesTestBase):
             return
         self._exercise_tiered_cloud_topics()
         self._exercise_shadow_link_role_sync()
-        # The other two v26.2-gated features are not exercised by this
-        # single-cluster perturbation: shadow_link_sr_api_sync and
-        # batch_mirror_topic_status are both cluster-linking features
-        # (batch_mirror_topic_status additionally needs a second cluster).
+        self._exercise_fetch_controller_snapshot_rpc()
+        # The other two v26.2-gated features are cluster-linking features that
+        # need a second (source) cluster, so they are acknowledged rather than
+        # exercised here; see PERTURB_ACKNOWLEDGED_FEATURES for why each stays
+        # downgrade-safe (shadow_link_sr_api_sync is covered by
+        # ShadowLinkUnfinalizedUpgradeTest; batch_mirror_topic_status is safe by
+        # inspection).
 
     def _exercise_tiered_cloud_topics(self):
         """tiered_cloud_topics gate: creating a topic with the tiered_v2
@@ -1549,6 +1493,147 @@ class ManualFinalizationUpgradeTest(FeaturesTestBase):
                 "configuring role sync should be gated while unfinalized"
             )
 
+    def _exercise_fetch_controller_snapshot_rpc(self):
+        """Sanity-check that the fetch_controller_snapshot_rpc gate keeps an
+        unfinalized upgrade downgrade-safe.
+
+        This feature is safe because its only new behavior -- a restarting
+        broker fetching a fresh controller snapshot at bootstrap (from the "great
+        config bootstrap fix") -- sits behind a single client-side is_active()
+        check in application::bootstrap_controller_view. While the upgrade is
+        unfinalized the active version is held below the feature's
+        require_version (v26_2_1), so that gate is provably closed: the feature
+        never even becomes available, let alone active. With the gate closed
+        bootstrap_controller_view returns immediately -- it issues no RPC and,
+        crucially, writes no new state (no config-cache write, no feature-table
+        snapshot applied, no wait-for-offset). The broker boots exactly as the
+        pre-upgrade binary did, from its local config cache, so rolling back to
+        the old binary finds nothing on disk it cannot read. Finalization is the
+        one-way door that opens the gate; until it is crossed the new path stays
+        inert and leaves no trace, which is precisely what makes the downgrade
+        safe.
+
+        This test is a sanity check on that safety property -- not a proof of the
+        C++ gate logic, but a check that the *observable* behavior matches it. It
+        simulates the case the feature actually targets, not just any restart:
+        bring one broker down, change a restart-requiring, non-feature-gated
+        property it will miss, then restart only that broker with the other two
+        (and therefore the controller leader) still up. Keeping the leader
+        reachable is what makes this a gate test rather than a
+        leader-reachability test: were the gate wrongly open -- e.g. a future
+        change activating the feature before finalization, or moving the fetch
+        ahead of the is_active() check -- the broker would fetch the missed value
+        before starting services and come back needing no restart (as it does
+        once finalized -- see
+        ClusterConfigMultiNodeBootstrapTest.test_node_delayed_restart). Gated, it
+        must instead boot on the stale value and still report restart-required,
+        having attempted no fetch.
+
+        NOTE: the whole-cluster in-place restart in _perturb_common does not
+        exercise this. Restarting every broker at once leaves no controller
+        leader to fetch from and changes no config, so it cannot tell the gated
+        path from the active one."""
+        assert self._feature_state("fetch_controller_snapshot_rpc") == "unavailable", (
+            "fetch_controller_snapshot_rpc should be unavailable while unfinalized"
+        )
+
+        PROPERTY = "kafka_qdc_idle_depth"  # restart-requiring, not feature-gated
+        node = self.redpanda.nodes[-1]
+        node_id = self.redpanda.node_id(node)
+
+        # Pick a value different from the current one so the change the broker
+        # misses is always real. A fixed constant is not safe across the
+        # upgrade/downgrade cycles: an earlier value can already be promoted into
+        # the broker's on-disk config cache (e.g. the pre-fix old binary promotes
+        # it at start during a downgrade), and if that happened to match, the
+        # "missed change" would be a no-op and the broker would boot with nothing
+        # pending. node[-1] is converged before we stop it, so its boot value is
+        # the current cluster value read here; current + 1 is guaranteed to
+        # differ.
+        current_value = int(
+            self.admin.get_cluster_config(include_defaults=True)[PROPERTY]
+        )
+        new_value = current_value + 1
+
+        # Down one broker, then change the property while it is down so it misses
+        # the change. Quorum (2/3) survives, so the change commits and a
+        # controller leader stays up.
+        self.redpanda.stop_node(node)
+        try:
+            # new_version is the version the restarted broker must replay up to
+            # before its restart-required verdict is meaningful.
+            new_version = self.admin.patch_cluster_config(upsert={PROPERTY: new_value})[
+                "config_version"
+            ]
+
+            # Restart the broker on the same (HEAD) binary and let it rejoin.
+            self.redpanda.start_node(node)
+            self._wait_for_cluster_settled()
+
+            # Query node[-1] about itself. A broker's view of its OWN config
+            # status is authoritative and fresh; a peer's view is eventually
+            # consistent and can briefly report node[-1] at a stale version /
+            # restart=False right after its restart. Admin() otherwise dispatches
+            # to a random broker, which is exactly what raced in CI: caught_up
+            # read node[-1]'s own (fresh) view, then the restart read landed on a
+            # peer whose view of node[-1] had not yet caught up.
+            def restarted_node_status():
+                try:
+                    statuses = self.admin.get_cluster_config_status(node=node)
+                except Exception:
+                    return None
+                for s in statuses:
+                    if s["node_id"] == node_id:
+                        return s
+                return None
+
+            # Wait until the broker has replayed the controller log up to the
+            # missed change, so its restart-required verdict is meaningful.
+            def caught_up():
+                st = restarted_node_status()
+                return st is not None and st["config_version"] >= new_version
+
+            wait_until(
+                caught_up,
+                timeout_sec=60,
+                backoff_sec=1,
+                err_msg="restarted broker did not catch up to the new config version",
+            )
+
+            # Gated: no bootstrap fetch was attempted. This info-level line is
+            # logged only past the feature gate; every pre-finalize boot in this
+            # test is gated, so any match on this node is a real regression.
+            assert not self.redpanda.search_log_node(
+                node, "Fetching controller snapshot from"
+            ), "a gated broker must not attempt the bootstrap controller-snapshot fetch"
+
+            # Gated: the broker bootstrapped on its stale local cache, learned of
+            # the change only via post-bootstrap log replay, and -- since pending
+            # needs_restart values are not promoted at start -- reports
+            # restart-required. A wrongly-open gate would instead have fetched the
+            # fresh value at bootstrap and come back needing no restart. Poll to
+            # absorb any lag between node[-1] replaying the change and its own
+            # status reflecting it.
+            def reports_restart_required():
+                st = restarted_node_status()
+                return st is not None and st["restart"] is True
+
+            wait_until(
+                reports_restart_required,
+                timeout_sec=30,
+                backoff_sec=1,
+                err_msg=(
+                    "gated broker did not report restart-required for the missed "
+                    "change; it may have fetched fresh config at bootstrap"
+                ),
+            )
+        finally:
+            # Leave no config override behind for later phases or the downgrade.
+            try:
+                self.admin.patch_cluster_config(remove=[PROPERTY])
+            except Exception as e:
+                self.logger.warning(f"cleanup: failed to reset {PROPERTY}: {e}")
+
     def _verify_tiered_cloud_topics_working(self):
         """After finalize the active version has advanced past the feature's
         require_version, so the gate opens: the feature auto-activates (it is
@@ -1586,11 +1671,27 @@ class ManualFinalizationUpgradeTest(FeaturesTestBase):
                 f"role-sync config still gated after finalize: {e}"
             )
 
+    def _verify_fetch_controller_snapshot_rpc_working(self):
+        """After finalize the active version advances past the feature's
+        require_version and it auto-activates (available_policy::always), opening
+        the bootstrap-fetch gate. Confirm the state transition; the active-state
+        fetch mechanics (a delayed-restart broker picking up fresh config before
+        starting services, the inverse of the gated outcome asserted in
+        _exercise_fetch_controller_snapshot_rpc) are covered end to end by
+        ClusterConfigMultiNodeBootstrapTest.test_node_delayed_restart."""
+        wait_until(
+            lambda: self._feature_state("fetch_controller_snapshot_rpc") == "active",
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="fetch_controller_snapshot_rpc did not activate after finalize",
+        )
+
     def _verify_v26_2_features_working(self):
         """After the upgrade is finalized, confirm each v26.2 feature's gate has
         opened and the feature actually works (simple per-feature predicates)."""
         self._verify_tiered_cloud_topics_working()
         self._verify_shadow_link_role_sync_working()
+        self._verify_fetch_controller_snapshot_rpc_working()
 
     def _feature_state(self, name):
         for f in self.admin.get_features()["features"]:
@@ -1625,45 +1726,6 @@ class ManualFinalizationUpgradeTest(FeaturesTestBase):
             "perturbation coverage: add an exercise in the matching _perturb_* "
             "step, or acknowledge them in PERTURB_ACKNOWLEDGED_FEATURES"
         )
-
-    def _disable_auto_finalization(self):
-        self.redpanda.set_cluster_config({"features_auto_finalization": False})
-
-    def _call_with_leader_retry(self, call, timeout_sec=30):
-        """Retry a controller-leader-routed admin v2 call through the transient
-        UNAVAILABLE window after restarts/leadership changes. See the identical
-        helper in ManualFinalizationTest for the rationale."""
-        deadline = time.time() + timeout_sec
-        while True:
-            try:
-                return call()
-            except ConnectError as e:
-                if e.code != ConnectErrorCode.UNAVAILABLE or time.time() >= deadline:
-                    raise
-                time.sleep(1)
-
-    def _finalize(self):
-        return self._call_with_leader_retry(
-            lambda: self.admin_v2.features().finalize_upgrade(
-                features_pb2.FinalizeUpgradeRequest()
-            )
-        )
-
-    def _get_upgrade_status(self):
-        return self._call_with_leader_retry(
-            lambda: self.admin_v2.features().get_upgrade_status(
-                features_pb2.GetUpgradeStatusRequest()
-            )
-        )
-
-    def _wait_for_status_state(self, state, timeout_sec=30):
-        """Wait until GetUpgradeStatus reports `state`; return that status."""
-        wait_until(
-            lambda: self._get_upgrade_status().state == state,
-            timeout_sec=timeout_sec,
-            backoff_sec=1,
-        )
-        return self._get_upgrade_status()
 
     @cluster(num_nodes=3, log_allow_list=RESTART_LOG_ALLOW_LIST)
     def test_auto_finalization_disabled_blocks_advance(self):
@@ -1766,9 +1828,8 @@ class ManualFinalizationUpgradeTest(FeaturesTestBase):
             f"backport {MANUAL_FINALIZE_MIN_OLDEST_RELEASE}"
         )
         mid, _ = self.installer.latest_for_line((26, 1))
-        assert mid >= MANUAL_FINALIZE_MIN_OLD_RELEASE, (
-            f"latest v26.1 patch {mid} predates the backport "
-            f"{MANUAL_FINALIZE_MIN_OLD_RELEASE}"
+        assert mid >= self.MIN_OLD_RELEASE, (
+            f"latest v26.1 patch {mid} predates the backport {self.MIN_OLD_RELEASE}"
         )
 
         # Hop 0: boot the oldest release and opt out of auto-finalization once.
@@ -1786,7 +1847,7 @@ class ManualFinalizationUpgradeTest(FeaturesTestBase):
         # latest; the flag rides along in the controller log untouched.
         self.logger.info(f"Upgrading to intermediate release {mid}")
         mid_logical = self._upgrade_all_to(mid)
-        self._wait_for_cluster_version(mid_logical)
+        self._wait_for_version_everywhere(mid_logical, timeout_sec=60)
         held_version = mid_logical
 
         # The v26.1 hop was NOT gated, so the active version -- which doubles as

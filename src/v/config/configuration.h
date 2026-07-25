@@ -220,8 +220,10 @@ struct configuration final : public config_store {
     enum_property<model::kafka_batch_validation_mode>
       kafka_produce_batch_validation;
     enum_property<model::compression> log_compression_type;
+    property<bool> kafka_produce_enable_batch_compression;
     property<size_t> fetch_max_bytes;
     property<bool> use_fetch_scheduler_group;
+    property<bool> kafka_fetch_read_coalescing_enabled;
     property<bool> use_produce_scheduler_group;
     property<bool> use_kafka_handler_scheduler_group;
     property<bool> kafka_handler_latency_all;
@@ -518,6 +520,7 @@ struct configuration final : public config_store {
     bounded_property<double, numeric_bounds> disk_reservation_percent;
     bounded_property<uint16_t> space_management_max_log_concurrency;
     bounded_property<uint16_t> space_management_max_segment_concurrency;
+    property<std::vector<ss::sstring>> log_eviction_exempt_topics;
     property<std::optional<size_t>>
       initial_retention_local_target_bytes_default;
     property<std::optional<std::chrono::milliseconds>>
@@ -682,6 +685,8 @@ struct configuration final : public config_store {
 
     enterprise<property<bool>> schema_registry_enable_authorization;
     property<bool> schema_registry_always_normalize;
+    property<bool> schema_registry_deferred_recovery;
+    property<bool> schema_registry_replay_on_startup;
     deprecated_property schema_registry_avro_use_named_references;
     property<bool> schema_registry_enable_qualified_subjects;
     bounded_property<size_t> schema_registry_sync_memory_bytes;
@@ -831,6 +836,9 @@ public:
     bounded_property<double, numeric_bounds>
       cloud_topics_leveling_min_extent_size_ratio;
     property<size_t> cloud_topics_leveling_max_range_bytes;
+    property<size_t> cloud_topics_leveling_max_ranges_per_partition;
+    property<size_t> cloud_topics_compaction_commit_interval_bytes;
+    property<size_t> cloud_topics_leveling_commit_interval_bytes;
     property<bool> cloud_topics_compaction_disabled;
     property<bool> cloud_topics_leveling_disabled;
     bounded_property<uint64_t> cloud_topics_compaction_key_map_memory;

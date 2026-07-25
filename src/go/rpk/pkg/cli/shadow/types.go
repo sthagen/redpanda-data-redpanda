@@ -245,6 +245,11 @@ type ShadowSchemaRegistryTopic struct{}
 type ShadowSchemaRegistryAPI struct {
 	// The source Schema Registry URL to use
 	SourceURL string `json:"source_url,omitempty" yaml:"source_url,omitempty"`
+	// Allows the user to pause the Schema Registry sync task. If paused, the
+	// task enters the 'paused' state and stops replicating schemas from the
+	// source, and the per-context client write protection on the contexts this
+	// link owns is lifted.
+	Paused bool `json:"paused,omitempty" yaml:"paused,omitempty"`
 	// Authentication settings for requests to the source Schema Registry.
 	// If unset, requests are sent without authentication
 	AuthOptions *SchemaRegistryAuthOptions `json:"auth_options,omitempty" yaml:"auth_options,omitempty"`

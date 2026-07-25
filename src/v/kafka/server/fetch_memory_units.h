@@ -1,12 +1,11 @@
 /*
  * Copyright 2025 Redpanda Data, Inc.
  *
- * Use of this software is governed by the Business Source License
- * included in the file licenses/BSL.md
+ * Licensed as a Redpanda Enterprise file under the Redpanda Community
+ * License (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- * As of the Change Date specified in that file, in accordance with
- * the Business Source License, use of this software will be governed
- * by the Apache License, Version 2.0
+ * https://github.com/redpanda-data/redpanda/blob/dev/licenses/rcl.md
  */
 #pragma once
 #include "base/seastarx.h"
@@ -18,6 +17,9 @@
 
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
+
+#include <memory>
+#include <variant>
 
 namespace kafka {
 
@@ -166,6 +168,53 @@ private:
 
     fetch_memory_units_manager::units _units;
     fetch_memory_units_manager::local_instance_fn _local_instance_fn;
+};
+
+/// Holds the memory units reserved for a read's data until its response is
+/// sent. A non-coalesced read owns its units inline, with no allocation. A
+/// coalesced read is shared by several responses, so each response instead
+/// holds a shared handle that co-owns the shared read result (and thus its
+/// inline units) until that response is sent.
+class fetch_units_holder {
+public:
+    using shared_units = std::shared_ptr<const fetch_memory_units>;
+
+    fetch_units_holder() noexcept = default;
+    explicit fetch_units_holder(fetch_memory_units units) noexcept
+      : _units(std::move(units)) {}
+    explicit fetch_units_holder(shared_units units) noexcept
+      : _units(std::move(units)) {}
+
+    fetch_units_holder(fetch_units_holder&&) noexcept = default;
+    fetch_units_holder& operator=(fetch_units_holder&&) noexcept = default;
+    fetch_units_holder(const fetch_units_holder&) = delete;
+    fetch_units_holder& operator=(const fetch_units_holder&) = delete;
+    ~fetch_units_holder() noexcept = default;
+
+    size_t num_units() const {
+        if (const auto* u = std::get_if<fetch_memory_units>(&_units)) {
+            return u->num_units();
+        }
+        if (const auto* u = std::get_if<shared_units>(&_units)) {
+            return *u ? (*u)->num_units() : 0;
+        }
+        return 0;
+    }
+
+    /// Pointer to the held units, or nullptr if none. A coalesced clone aliases
+    /// this to co-own the shared read result it was cloned from.
+    const fetch_memory_units* get() const {
+        if (const auto* u = std::get_if<fetch_memory_units>(&_units)) {
+            return u;
+        }
+        if (const auto* u = std::get_if<shared_units>(&_units)) {
+            return u->get();
+        }
+        return nullptr;
+    }
+
+private:
+    std::variant<std::monostate, fetch_memory_units, shared_units> _units;
 };
 
 } // namespace kafka

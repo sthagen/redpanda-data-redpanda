@@ -21,12 +21,18 @@
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/sharded.hh>
+#include <seastar/util/bool_class.hh>
 
 namespace YAML {
 class Node;
 }
 
 namespace cluster {
+
+// When set, needs_restart properties applied from a late join snapshot are
+// persisted as pending (activated on the next restart) rather than promoted
+// live. See preload_join().
+using defer_needs_restart = ss::bool_class<struct defer_needs_restart_tag>;
 
 /// This state machine receives updates to the global cluster config,
 /// and uses them to update the per-shard configuration objects
@@ -61,8 +67,12 @@ public:
 
     // Preload while joining the cluster, from a controller snapshot sent
     // in response to a join request.
-    static ss::future<preload_result>
-    preload_join(const controller_join_snapshot&);
+    //
+    // When defer_needs_restart is set, needs_restart properties are applied as
+    // pending (activated on the next restart) rather than promoted live.
+    static ss::future<preload_result> preload_join(
+      const controller_join_snapshot&,
+      defer_needs_restart = defer_needs_restart::no);
 
     ss::future<> start();
     ss::future<> stop();

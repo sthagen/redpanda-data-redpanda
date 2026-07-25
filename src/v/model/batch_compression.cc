@@ -39,7 +39,20 @@ namespace {
 }
 } // namespace
 
-ss::future<model::record_batch> decompress_batch(const model::record_batch& b) {
+namespace {
+model::record_batch make_uncompressed_batch(
+  model::record_batch_header header_of_compressed, iobuf uncompressed_payload) {
+    // must remove compression first!
+    header_of_compressed.attrs.remove_compression();
+    header_of_compressed.reset_size_checksum_metadata(uncompressed_payload);
+    return {
+      header_of_compressed,
+      std::move(uncompressed_payload),
+      model::record_batch::tag_ctor_ng{}};
+}
+} // namespace
+
+ss::future<iobuf> decompress_payload(const model::record_batch& b) {
     if (!b.compressed()) [[unlikely]] {
         throw std::runtime_error(fmt_with_ctx(
           fmt::format,
@@ -52,15 +65,13 @@ ss::future<model::record_batch> decompress_batch(const model::record_batch& b) {
     //
     // We should consider a version of async uncompress that takes a const
     // iobuf& where the caller owns the lifetime of the iobuf.
-    iobuf body_buf = ::compression::compressor::uncompress(
+    co_return ::compression::compressor::uncompress(
       b.data(), to_compression_type(b.header().attrs.compression()));
-    // must remove compression first!
-    auto h = b.header();
-    h.attrs.remove_compression();
-    h.reset_size_checksum_metadata(body_buf);
-    auto batch = model::record_batch(
-      h, std::move(body_buf), model::record_batch::tag_ctor_ng{});
-    co_return batch;
+}
+
+ss::future<model::record_batch> decompress_batch(const model::record_batch& b) {
+    auto body_buf = co_await decompress_payload(b);
+    co_return make_uncompressed_batch(b.header(), std::move(body_buf));
 }
 
 model::record_batch decompress_batch_sync(const model::record_batch& b) {
@@ -72,13 +83,25 @@ model::record_batch decompress_batch_sync(const model::record_batch& b) {
     }
     iobuf body_buf = ::compression::compressor::uncompress(
       b.data(), to_compression_type(b.header().attrs.compression()));
-    // must remove compression first!
-    auto h = b.header();
-    h.attrs.remove_compression();
-    h.reset_size_checksum_metadata(body_buf);
-    auto batch = model::record_batch(
-      h, std::move(body_buf), model::record_batch::tag_ctor_ng{});
-    return batch;
+    return make_uncompressed_batch(b.header(), std::move(body_buf));
+}
+
+ss::future<model::record_batch> recompress_batch(
+  model::compression target,
+  model::record_batch_header header,
+  iobuf uncompressed_payload) {
+    if (target == model::compression::none) {
+        co_return make_uncompressed_batch(
+          header, std::move(uncompressed_payload));
+    }
+    auto payload = co_await ::compression::stream_compressor::compress(
+      std::move(uncompressed_payload), to_compression_type(target));
+    header.attrs.remove_compression();
+    // compression bit must be set first!
+    header.attrs |= target;
+    header.reset_size_checksum_metadata(payload);
+    co_return model::record_batch(
+      header, std::move(payload), model::record_batch::tag_ctor_ng{});
 }
 
 ss::future<model::record_batch>

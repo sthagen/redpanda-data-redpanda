@@ -103,6 +103,12 @@ public:
       chunked_vector<pandaproxy::schema_registry::context_subject>>
       get_subjects(pandaproxy::schema_registry::include_deleted) const = 0;
 
+    /// Lists every materialized context (always includes the default context).
+    /// Mirrors the source's context enumeration so shadow-link sync can detect
+    /// a context that has been deleted at the source.
+    virtual ss::future<chunked_vector<pandaproxy::schema_registry::context>>
+    list_contexts() const = 0;
+
     virtual ss::future<pandaproxy::schema_registry::context_schema_id>
       create_schema(pandaproxy::schema_registry::subject_schema) = 0;
 
@@ -148,6 +154,14 @@ public:
 
     virtual ss::future<bool>
       delete_config(pandaproxy::schema_registry::context_subject) = 0;
+
+    /// Deletes (tombstones) a materialized context, removing only the context
+    /// marker and leaving any context-level mode/config overrides untouched, as
+    /// Confluent's DELETE /contexts does. Throws if the context is not
+    /// materialized or still has subjects (counting soft-deleted ones).
+    /// Redpanda additionally forbids deleting the default context.
+    virtual ss::future<>
+      delete_context(pandaproxy::schema_registry::context) = 0;
 
     ///@}
 };

@@ -21,6 +21,7 @@
 #include "kafka/protocol/batch_consumer.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/fetch.h"
+#include "kafka/server/fetch_read_coalescer.h"
 #include "kafka/server/fetch_session.h"
 #include "kafka/server/fwd.h"
 #include "kafka/server/handlers/details/leader_epoch.h"
@@ -205,24 +206,37 @@ static ss::future<read_result> read_from_partition(
       std::move(aborted_transactions));
 }
 
-/**
- * Entry point for reading from an ntp. This is executed on NTP home core and
- * build error responses if anything goes wrong.
- */
-static ss::future<read_result> do_read_from_ntp(
-  cluster::partition_manager& cluster_pm,
-  const cluster::metadata_cache& md_cache,
-  const replica_selector& replica_selector,
-  ntp_fetch_config ntp_config,
-  std::optional<model::timeout_clock::time_point> deadline,
-  const bool obligatory_batch_read,
-  fetch_memory_units_manager& units_mgr) {
-    // If it's the obligatory batch read then we need to allow for the
-    // configured max bytes to exceeded if the next batch in the partition
-    // is larger. This is needed to conform with KIP-74.
-    ntp_config.cfg.strict_max_bytes = !obligatory_batch_read;
+// Clone a shared read into a fresh read_result for one response. Share the
+// iobuf and copy the metadata. memory_units is left unset; the caller installs
+// an aliasing pointer that co-owns the shared result.
+static read_result clone_read_result(const read_result& src) {
+    if (src.error != error_code::none) {
+        return read_result(
+          src.error,
+          src.start_offset,
+          src.high_watermark,
+          src.last_stable_offset);
+    }
+    return read_result(
+      src.has_data() ? std::make_unique<iobuf>(src.data->share()) : nullptr,
+      src.start_offset,
+      src.data_base_offset,
+      src.data_last_offset,
+      src.batch_count,
+      src.high_watermark,
+      src.last_stable_offset,
+      src.delta_from_tip_ms,
+      src.aborted_transactions);
+}
 
-    // control available memory
+// Allocate memory units, read, and adjust the reservation to the result size.
+static ss::future<read_result> read_with_units(
+  fetch_memory_units_manager& units_mgr,
+  kafka::partition_proxy part,
+  ntp_fetch_config& ntp_config,
+  model::offset lso,
+  std::optional<model::timeout_clock::time_point> deadline,
+  bool obligatory_batch_read) {
     auto memory_units = units_mgr.zero_units();
     if (!ntp_config.cfg.skip_read) {
         memory_units = units_mgr.allocate_memory_units(
@@ -237,7 +251,28 @@ static ss::future<read_result> do_read_from_ntp(
             ntp_config.cfg.max_bytes = memory_units.num_units();
         }
     }
+    auto result = co_await read_from_partition(
+      std::move(part), lso, ntp_config.cfg, deadline);
+    // Units can be increased here too: an obligatory read has no strict limit
+    // and may return a batch larger than the reserved size.
+    memory_units.adjust_units(result.data_size_bytes());
+    result.memory_units = fetch_units_holder{std::move(memory_units)};
+    co_return result;
+}
 
+/**
+ * Entry point for reading from an ntp. This is executed on NTP home core and
+ * build error responses if anything goes wrong.
+ */
+static ss::future<read_result> do_read_from_ntp(
+  cluster::partition_manager& cluster_pm,
+  const cluster::metadata_cache& md_cache,
+  const replica_selector& replica_selector,
+  ntp_fetch_config ntp_config,
+  std::optional<model::timeout_clock::time_point> deadline,
+  const bool obligatory_batch_read,
+  fetch_memory_units_manager& units_mgr,
+  fetch_read_coalescer& coalescer) {
     /*
      * lookup the ntp's partition
      */
@@ -314,15 +349,49 @@ static ss::future<read_result> do_read_from_ntp(
               preferred_replica);
         }
     }
-    auto result = co_await read_from_partition(
-      std::move(*kafka_partition), maybe_lso.value(), ntp_config.cfg, deadline);
+    // If it's the obligatory batch read then we need to allow for the
+    // configured max bytes to exceeded if the next batch in the partition
+    // is larger. This is needed to conform with KIP-74.
+    ntp_config.cfg.strict_max_bytes = !obligatory_batch_read;
 
-    // Note that units can be both increased and decreassed here. Increases
-    // happen because there is no strict limit on read size when reading the
-    // obligatory batch.
-    memory_units.adjust_units(result.data_size_bytes());
-    result.memory_units = std::move(memory_units);
-    co_return result;
+    auto do_read = [&] {
+        return read_with_units(
+          units_mgr,
+          std::move(*kafka_partition),
+          ntp_config,
+          maybe_lso.value(),
+          deadline,
+          obligatory_batch_read);
+    };
+
+    if (!coalescer.enabled()) {
+        co_return co_await do_read();
+    }
+
+    auto get_result = [&](const shared_read& sr) {
+        read_result r = clone_read_result(*sr);
+        // The units are held until the response is sent, so co-owning the
+        // cached read through them (aliasing ctor) keeps it alive until then.
+        if (const auto* units = sr->memory_units.get()) {
+            r.memory_units = fetch_units_holder{
+              std::shared_ptr<const fetch_memory_units>(sr, units)};
+        }
+        return r;
+    };
+
+    auto current_bound = ntp_config.cfg.isolation_level
+                             == model::isolation_level::read_committed
+                           ? maybe_lso.value()
+                           : kafka_partition->high_watermark();
+    coalesce_key key{
+      .ktp = ntp_config.ktp_with_hash(),
+      .fetch_offset = ntp_config.cfg.start_offset,
+      .level = ntp_config.cfg.isolation_level,
+      .max_bytes = ntp_config.cfg.max_bytes,
+      .obligatory = obligatory_batch_read};
+
+    co_return get_result(
+      co_await coalescer.get_or_insert(key, current_bound, std::move(do_read)));
 }
 
 namespace testing {
@@ -335,7 +404,8 @@ ss::future<read_result> read_from_ntp(
   fetch_config config,
   std::optional<model::timeout_clock::time_point> deadline,
   const bool obligatory_batch_read,
-  fetch_memory_units_manager& units_mgr) {
+  fetch_memory_units_manager& units_mgr,
+  fetch_read_coalescer& coalescer) {
     return do_read_from_ntp(
       cluster_pm,
       md_cache,
@@ -343,7 +413,8 @@ ss::future<read_result> read_from_ntp(
       {{ktp.get_topic(), ktp.get_partition()}, std::move(config)},
       deadline,
       obligatory_batch_read,
-      units_mgr);
+      units_mgr,
+      coalescer);
 }
 
 } // namespace testing
@@ -414,7 +485,7 @@ static void fill_fetch_responses(
             resp.preferred_read_replica = *res.preferred_replica;
         }
 
-        std::optional<fetch_memory_units> resp_units{};
+        fetch_units_holder resp_units;
         auto current_response_size = resp_it->response_size();
         auto bytes_left = octx.bytes_left - current_response_size;
 
@@ -475,7 +546,8 @@ static ss::future<chunked_vector<read_result>> fetch_ntps(
   std::optional<model::timeout_clock::time_point> deadline,
   model::timeout_clock::time_point fetch_deadline,
   const size_t bytes_left,
-  fetch_memory_units_manager& units_mgr) {
+  fetch_memory_units_manager& units_mgr,
+  fetch_read_coalescer& coalescer) {
     size_t total_read_size = 0;
 
     // bytes_left comes from the fetch plan and also accounts for the max_bytes
@@ -528,7 +600,8 @@ static ss::future<chunked_vector<read_result>> fetch_ntps(
                    ntp_cfg,
                    fetch_deadline,
                    obligatory_batch_read,
-                   units_mgr)
+                   units_mgr,
+                   coalescer)
             .then([&, cfg_idx](read_result&& res) {
                 res.partition = ntp_cfg.ktp().get_partition();
 
@@ -714,7 +787,8 @@ private:
           _ctx.deadline,
           _ctx.fetch_deadline,
           _ctx.bytes_left,
-          _ctx.srv.fetch_units_manager());
+          _ctx.srv.fetch_units_manager(),
+          _ctx.srv.read_coalescer());
 
         // If we weren't able to read the last_visible_index for a partition
         // before calling `fetch_ntps_in_parallel` then we need to
@@ -1750,10 +1824,10 @@ ss::future<response_ptr> op_context::send_error_response(error_code ec) && {
 }
 
 ss::deleter op_context::response_memory_units_deleter() {
-    chunked_vector<fetch_memory_units> mu;
+    chunked_vector<fetch_units_holder> mu;
     for (auto& r : iteration_order) {
         if (r.has_memory_units()) {
-            mu.push_back(r.release_memory_units().value());
+            mu.push_back(r.release_memory_units());
         }
     }
     return ss::make_object_deleter(std::move(mu));
@@ -1775,7 +1849,7 @@ op_context::response_placeholder::response_placeholder(
 
 void op_context::response_placeholder::set(
   fetch_response::partition_response&& response,
-  std::optional<fetch_memory_units>&& response_memory_units) {
+  fetch_units_holder&& response_memory_units) {
     vassert(
       response.partition_index == _it->partition_response->partition_index,
       "Response and current partition ids have to be the same. Current "
@@ -1784,7 +1858,7 @@ void op_context::response_placeholder::set(
       response.partition_index);
     dassert(
       (response.records ? response.records->size_bytes() : 0)
-        == (response_memory_units ? response_memory_units->num_units() : 0),
+        == response_memory_units.num_units(),
       "Response units should equal the number of bytes in the response its "
       "self.");
 

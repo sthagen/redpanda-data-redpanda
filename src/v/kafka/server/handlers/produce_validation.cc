@@ -456,8 +456,7 @@ std::optional<error_code_and_msg> validate_batch(
 
 } // namespace
 
-ss::future<std::optional<error_code_and_msg>>
-validate_batch(const validation_args& args) {
+ss::future<validation_result> validate_batch(const validation_args& args) {
     const auto& validation_mode
       = config::shard_local_cfg().kafka_produce_batch_validation();
 
@@ -473,10 +472,11 @@ validate_batch(const validation_args& args) {
                 maybe_decompressed_batch = co_await model::decompress_batch(
                   batch);
             } catch (...) {
-                co_return error_code_and_msg{
-                  .err = error_code::corrupt_message,
-                  .msg = "unable to decompress batch",
-                };
+                co_return validation_result{
+                  .error = error_code_and_msg{
+                    .err = error_code::corrupt_message,
+                    .msg = "unable to decompress batch",
+                  }};
             }
             maybe_decompressed_batch_ref = maybe_decompressed_batch.value();
         }
@@ -484,7 +484,7 @@ validate_batch(const validation_args& args) {
         maybe_decompressed_batch_ref = batch;
     }
 
-    co_return validate_batch(
+    auto error = validate_batch(
       batch,
       maybe_decompressed_batch_ref,
       validation_mode,
@@ -494,6 +494,17 @@ validate_batch(const validation_args& args) {
       args.probe,
       args.ntp,
       args.client_id);
+
+    std::optional<iobuf> decompressed_payload;
+    if (maybe_decompressed_batch.has_value()) {
+        decompressed_payload
+          = std::move(maybe_decompressed_batch).value().release_data();
+    }
+
+    co_return validation_result{
+      .error = std::move(error),
+      .decompressed_payload = std::move(decompressed_payload),
+    };
 }
 
 } // namespace kafka

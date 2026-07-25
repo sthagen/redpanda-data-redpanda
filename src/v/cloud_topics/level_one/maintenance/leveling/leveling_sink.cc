@@ -25,6 +25,7 @@ leveling_sink::leveling_sink(
   metastore* metastore,
   ss::abort_source& as,
   config::binding<size_t> max_object_size,
+  config::binding<size_t> commit_interval_bytes,
   size_t upload_part_size,
   compaction_worker_probe& probe,
   prefix_logger& ctxlog,
@@ -35,6 +36,7 @@ leveling_sink::leveling_sink(
       metastore,
       as,
       std::move(max_object_size),
+      std::move(commit_interval_bytes),
       upload_part_size,
       ctxlog,
       std::move(opts))
@@ -55,8 +57,6 @@ leveling_sink::initialize(compaction::sliding_window_reducer::source& src) {
       size_t{0},
       [](size_t acc, const auto& range) { return acc + range.extent_count; });
 
-    co_await init_metadata_builder();
-
     vlog(
       _ctxlog.debug,
       "Initialized leveling job with {} leveling ranges",
@@ -65,60 +65,70 @@ leveling_sink::initialize(compaction::sliding_window_reducer::source& src) {
     co_return true;
 }
 
-ss::future<ss::stop_iteration>
-leveling_sink::operator()(model::record_batch b) {
-    auto next_offset = model::offset_cast(b.base_offset());
-    auto prev_offset = kafka::prev_offset(next_offset);
-
-    if (
-      _inflight_object
-      && _inflight_object->builder->file_size() >= _max_object_size()) {
-        co_await flush(prev_offset);
-    }
-
-    if (!_inflight_object) {
-        co_await initialize_builder(next_offset);
-    }
-
-    co_await _inflight_object->builder->add_batch(std::move(b));
-
-    co_return ss::stop_iteration::no;
-}
-
-ss::future<> leveling_sink::finalize(bool success) {
-    auto should_commit = co_await finalize_inflight(success);
-    if (!should_commit) {
-        co_return;
-    }
-
+ss::future<> leveling_sink::commit_objects(
+  std::unique_ptr<metastore::object_metadata_builder> builder) {
     metastore::replace_epoch_map_t epoch_map;
     epoch_map.emplace(_tp, _expected_compaction_epoch);
     auto replace_res = co_await l1::retry_metastore_op_with_default_rtc(
-      [this, &epoch_map]() {
-          return _metastore->replace_objects(*_metadata_builder, epoch_map);
+      [this, &builder, &epoch_map]() {
+          return _metastore->replace_objects(*builder, epoch_map);
       },
       _as);
-    if (replace_res.has_value()) {
-        auto reclaimed = _input_extents > _output_objects
-                           ? _input_extents - _output_objects
-                           : size_t{0};
-        _probe.add_leveling_extents_reclaimed(reclaimed);
-        _probe.add_leveling_objects_committed(_output_objects);
-        _probe.add_leveling_bytes_committed(_output_bytes);
-        vlog(
-          _ctxlog.info,
-          "Finalized leveling with {} extents reclaimed ({}->{})",
-          reclaimed,
-          _input_extents,
-          _output_objects);
-    } else {
-        _probe.add_leveling_objects_rejected(_output_objects);
-        _probe.add_leveling_bytes_rejected(_output_bytes);
+    if (!replace_res.has_value()) {
+        _probe.add_leveling_objects_rejected(_pending_objects);
+        _probe.add_leveling_bytes_rejected(_pending_bytes);
+        auto err = replace_res.error();
+        throw std::runtime_error(
+          fmt::format(
+            "[{}] aborting leveling: object replacement at epoch {} failed: "
+            "{}",
+            _tp,
+            _expected_compaction_epoch,
+            err));
+    }
+    _probe.add_leveling_objects_committed(_pending_objects);
+    _probe.add_leveling_bytes_committed(_pending_bytes);
+    _committed_objects += _pending_objects;
+    ++_partial_commits;
+    vlog(
+      _ctxlog.debug,
+      "Partial leveling commit of {} object(s) landed at epoch {}",
+      _pending_objects,
+      _expected_compaction_epoch);
+}
+
+ss::future<> leveling_sink::finalize(bool success) {
+    co_await finalize_inflight(success);
+
+    if (!success) {
         vlog(
           _ctxlog.warn,
-          "Could not commit object replacement during leveling: {}.",
-          replace_res.error());
+          "Skipping leveling finalization; {}",
+          _committed_objects == 0
+            ? fmt::format("no objects had been committed")
+            : fmt::format(
+                "{} object(s) already committed", _committed_objects));
+        co_return;
     }
+
+    if (_committed_objects == 0) {
+        vlog(
+          _ctxlog.debug, "Finalized leveling without any committed objects.");
+        co_return;
+    }
+
+    auto reclaimed = _input_extents > _committed_objects
+                       ? _input_extents - _committed_objects
+                       : size_t{0};
+    _probe.add_leveling_extents_reclaimed(reclaimed);
+    vlog(
+      _ctxlog.info,
+      "Finalized leveling with {} extents reclaimed ({}->{}) in {} partial "
+      "commit(s)",
+      reclaimed,
+      _input_extents,
+      _committed_objects,
+      _partial_commits);
 }
 
 } // namespace cloud_topics::l1

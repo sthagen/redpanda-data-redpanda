@@ -164,6 +164,8 @@ redpanda_cc_gtest(
     cpu = 1,
     deps = [
         ":random",
+        "//src/v/bytes",
+        "//src/v/bytes:iobuf_parser",
         "//src/v/container:chunked_vector",
         "//src/v/model",
         "//src/v/model:batch_compression",
@@ -253,6 +255,7 @@ redpanda_cc_gtest(
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iobuf_parser",
         "//src/v/model",
+        "//src/v/serde",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
     ],

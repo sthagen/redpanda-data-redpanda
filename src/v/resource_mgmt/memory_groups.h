@@ -58,6 +58,18 @@ struct cloud_topics_reconciler_memory_reservation {
     size_t reserved_bytes() const { return max_bytes; }
 };
 
+/**
+ * Memory reservation for the WebAssembly runtime (data transforms). Held
+ * off the top, separate from the share-based allocation that
+ * `data_transforms_max_memory()` provides for the rest of the data
+ * transforms subsystem.
+ */
+struct data_transforms_memory_reservation {
+    size_t max_bytes{0};
+
+    size_t reserved_bytes() const { return max_bytes; }
+};
+
 namespace testing {
 class system_memory_groups_accessor;
 }
@@ -76,6 +88,7 @@ public:
       compaction_memory_reservation compaction,
       cloud_topics_compaction_memory_reservation cloud_topics_compaction,
       cloud_topics_reconciler_memory_reservation cloud_topics_reconciler,
+      data_transforms_memory_reservation data_transforms,
       bool wasm_enabled,
       bool datalake_enabled,
       bool cloud_storage_enabled,
@@ -123,6 +136,15 @@ public:
         return _cloud_topics_reconciler_reserved_memory;
     }
 
+    size_t data_transforms_reserved_memory() const {
+        return _data_transforms_reserved_memory;
+    }
+
+    /// Sum of all per-shard memory reservations subtracted from the shard's
+    /// total before share-based allocation. This is the minimum per-shard
+    /// memory below which the share-based allocator has no memory to divide.
+    size_t total_reserved_memory() const;
+
     size_t datalake_max_memory() const;
 
     size_t cloud_topics_memory() const;
@@ -151,8 +173,9 @@ private:
     size_t _compaction_reserved_memory;
     size_t _cloud_topics_compaction_reserved_memory;
     size_t _cloud_topics_reconciler_reserved_memory;
+    size_t _data_transforms_reserved_memory;
     size_t _partitions_reserved_memory;
-    size_t _total_system_memory;
+    size_t _total_available_memory;
     bool _wasm_enabled;
     bool _datalake_enabled;
     bool _cloud_storage_enabled;

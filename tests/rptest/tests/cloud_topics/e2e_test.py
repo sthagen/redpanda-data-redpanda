@@ -32,7 +32,7 @@ from rptest.services.redpanda import (
     MetricsEndpoint,
 )
 from rptest.tests.end_to_end import EndToEndTest
-from rptest.util import Scale
+from rptest.util import Scale, wait_until_result
 import rptest.tests.cloud_topics.utils as ct_utils
 
 
@@ -115,6 +115,8 @@ class EndToEndCloudTopicsBase(EndToEndTest):
                 config["min.cleanable.dirty.ratio"] = topic.min_cleanable_dirty_ratio
             if topic.delete_retention_ms is not None:
                 config["delete.retention.ms"] = topic.delete_retention_ms
+            if topic.retention_bytes is not None:
+                config["retention.bytes"] = topic.retention_bytes
             self.rpk.create_topic(
                 topic=topic.name,
                 partitions=topic.partition_count,
@@ -122,8 +124,30 @@ class EndToEndCloudTopicsBase(EndToEndTest):
                 config=config,
             )
 
-    def wait_until_reconciled(self, topic: str, partition: int, timeout_sec: int = 60):
-        def get_offsets():
+    def wait_until_reconciled(
+        self,
+        topic: str,
+        partition: int,
+        offset: int | None = None,
+        timeout_sec: int = 60,
+    ):
+        """Wait for the partition's L1 reconciled frontier to catch up.
+
+        By default this waits until every observable record has been reconciled
+        into L1 (the metastore next offset reaches the log tail). When `offset`
+        is given, instead wait until L1 has reconciled at least up to `offset`
+        (the metastore next offset reaches `offset`), letting callers wait for a
+        specific amount of fresh data to land in L1 without requiring the
+        reconciler to fully catch up to the tail."""
+
+        def get_next_offset() -> int:
+            metastore = self.admin.metastore()
+            req = metastore_pb.GetOffsetsRequest(
+                partition=ntp_pb.TopicPartition(topic=topic, partition=partition)
+            )
+            return metastore.get_offsets(req=req).offsets.next_offset
+
+        def get_last_record() -> int | None:
             last_record: int | None = None
             output = self.rpk.consume(
                 topic,
@@ -134,21 +158,23 @@ class EndToEndCloudTopicsBase(EndToEndTest):
             )
             for line in output.splitlines():
                 last_record = int(line)
-            metastore = self.admin.metastore()
-            req = metastore_pb.GetOffsetsRequest(
-                partition=ntp_pb.TopicPartition(topic=topic, partition=partition)
-            )
-            return metastore.get_offsets(req=req).offsets.next_offset, last_record
+            return last_record
 
         def is_reconciled() -> bool:
-            next_offset, last_record = get_offsets()
-            # Check the last observable record's offset against the next offset expected.
-            # For transactions, this could be much less than the HWM if there are aborts.
-            return (next_offset - 1) == last_record
+            if offset is not None:
+                # Wait until L1 has reconciled at least up to `offset`.
+                return get_next_offset() >= offset
+            # Check the last observable record's offset against the next offset
+            # expected. For transactions, this could be much less than the HWM
+            # if there are aborts.
+            return (get_next_offset() - 1) == get_last_record()
 
         def message() -> str:
             try:
-                next_offset, last_record = get_offsets()
+                next_offset = get_next_offset()
+                if offset is not None:
+                    return f"failed to reconcile all data: topic={topic}, partition={partition}, next_offset={next_offset}, target_next_offset={offset}"
+                last_record = get_last_record()
                 return f"failed to reconcile all data: topic={topic}, partition={partition}, last_record={last_record}, next_offset={next_offset}"
             except Exception:
                 return f"failed to reconcile all data: topic={topic}, partition={partition}, unable to fetch offsets"
@@ -333,6 +359,13 @@ class EndToEndCloudTopicsBase(EndToEndTest):
         extents that have no foldable neighbour — a lone small extent between
         two ~`max_target_size` extents cannot be merged without exceeding the
         cap. Those are an expected, irreducible outcome, not a leveling defect.
+
+        The partition's tail run — the trailing consecutive undersized
+        extents — is likewise exempt while its combined size is below the
+        undersized threshold: leveling deliberately holds it back until its
+        rewrite can produce a healthy extent, since folding it earlier would
+        just emit another undersized extent that snowballs as new data lands
+        behind it.
         """
         by_partition = ct_utils.get_l1_extent_lengths_by_partition(
             self.admin, topic=topic
@@ -357,7 +390,19 @@ class EndToEndCloudTopicsBase(EndToEndTest):
                 f"{max_target_size}B soft cap): {oversized}"
             )
 
+            # Locate the tail run (trailing consecutive undersized extents).
+            # If its combined size cannot yet fill a healthy extent, leveling
+            # holds it back on purpose; exempt pairs within it.
+            tail_start = len(lengths)
+            while tail_start > 0 and lengths[tail_start - 1] < min_healthy:
+                tail_start -= 1
+            if sum(lengths[tail_start:]) >= min_healthy:
+                # The tail run is big enough to level; no exemption.
+                tail_start = len(lengths)
+
             for i in range(len(lengths) - 1):
+                if i >= tail_start:
+                    continue
                 a, b = lengths[i], lengths[i + 1]
                 foldable = (
                     a < min_healthy and b < min_healthy and a + b <= max_target_size
@@ -1190,4 +1235,216 @@ class EndToEndCloudTopicsMaintenanceToggleTest(EndToEndCloudTopicsBase):
             timeout_sec=360,
             backoff_sec=1,
             err_msg="Did not see a fully compacted CTP log after toggling",
+        )
+
+
+class EndToEndCloudTopicsReconciliationToggleTest(EndToEndCloudTopicsBase):
+    """Rapidly flip the reconciliation loop
+    (`cloud_topics_disable_reconciliation_loop`) on and off while a
+    rate-limited producer keeps a delete-policy topic busy under aggressive
+    size-based retention.
+
+    Retention (housekeeping) only acts on data that reconciliation has moved
+    from L0 into the L1 metastore, so toggling reconciliation repeatedly
+    stresses the interaction between the two: the reconciler adds extents in
+    bursts while housekeeping trims them. The test verifies the toggling never
+    wedges reconciliation or retention -- after both are allowed to drain, data
+    still reconciles to L1 and retention advances the start offset -- and that
+    the surviving tail of the log remains consumable.
+    """
+
+    topic_name = "cloud_topic_reconciliation_toggle_test"
+    partition_count = 4
+
+    RECONCILIATION_INTERVAL_MS = 1000
+    HOUSEKEEPING_INTERVAL_MS = 5000
+    # Per-partition size cap. The workload produces far more than this per
+    # partition, so once reconciliation catches up retention must trim heavily
+    # and advance the start offset well past 0.
+    RETENTION_BYTES = 2 * 1024 * 1024
+
+    topics = (
+        TopicSpec(
+            name=topic_name,
+            partition_count=partition_count,
+            replication_factor=3,
+            cleanup_policy=TopicSpec.CLEANUP_DELETE,
+            retention_bytes=RETENTION_BYTES,
+        ),
+    )
+
+    kgo_producer: KgoVerifierProducer
+
+    def __init__(self, test_context):
+        extra_rp_conf = {
+            # Fast reconciliation so each enabled window actually moves data
+            # L0 -> L1.
+            "cloud_topics_reconciliation_min_interval": self.RECONCILIATION_INTERVAL_MS,
+            "cloud_topics_reconciliation_max_interval": self.RECONCILIATION_INTERVAL_MS,
+            # Fast housekeeping so retention enforcement runs often.
+            "cloud_storage_housekeeping_interval_ms": self.HOUSEKEEPING_INTERVAL_MS,
+        }
+        super(EndToEndCloudTopicsReconciliationToggleTest, self).__init__(
+            test_context,
+            extra_rp_conf,
+        )
+        self.msg_size = 4096
+        # Rate-limit the produce so it spans the whole toggle window: at
+        # 1 MiB/s this is ~160s of traffic, vs. a 120s toggle window.
+        self.msg_count = 40_000
+        self.rate_limit_bps = 1024 * 1024  # 1 MB/s
+        # Each toggle iteration blocks until retention advances the start
+        # offset, so the window is sized to fit several such gated flips.
+        self.toggle_duration_sec = 120
+
+    def set_reconciliation_disabled(self, disabled: bool):
+        assert self.redpanda
+        self.redpanda.set_cluster_config(
+            {"cloud_topics_disable_reconciliation_loop": disabled}
+        )
+
+    def _start_offsets(self) -> dict[int, int]:
+        """Current start offset of every partition, keyed by partition id."""
+        return {
+            part.id: part.start_offset
+            for part in self.rpk.describe_topic(self.topic_name)
+        }
+
+    def _wait_for_retention_to_apply(
+        self, min_offsets: dict[int, int], timeout_sec: int = 90
+    ) -> dict[int, int]:
+        """Wait until retention advances *every* partition's start offset
+        strictly past its entry in `min_offsets`, then return the new start
+        offsets. Threading the returned dict back in as the next `min_offsets`
+        makes the wait itself the monotonic-advancement check across all
+        partitions: it only returns once retention has moved every offset
+        forward, gated on the slowest partition."""
+
+        def retention_applied() -> tuple[bool, dict[int, int]]:
+            current = self._start_offsets()
+            applied = all(current.get(p, 0) > floor for p, floor in min_offsets.items())
+            return applied, current
+
+        return wait_until_result(
+            retention_applied,
+            timeout_sec=timeout_sec,
+            backoff_sec=2,
+            err_msg=lambda: (
+                f"retention did not advance every partition past "
+                f"{min_offsets} (last={self._start_offsets()})"
+            ),
+        )
+
+    @cluster(num_nodes=4)
+    @matrix(
+        storage_mode=[
+            TopicSpec.STORAGE_MODE_CLOUD,
+            TopicSpec.STORAGE_MODE_IMPL_TIERED_V2,
+        ],
+    )
+    def test_toggle_reconciliation(self, storage_mode: str):
+        assert self.redpanda is not None
+
+        self.kgo_producer = KgoVerifierProducer(
+            self.test_context,
+            self.redpanda,
+            self.topic_name,
+            msg_size=self.msg_size,
+            msg_count=self.msg_count,
+            rate_limit_bps=self.rate_limit_bps,
+            tolerate_failed_produce=True,
+        )
+        producer = self.kgo_producer
+        partition_offsets = {p: 0 for p in range(self.partition_count)}
+        toggles = 0
+        # Before each pause the reconciled frontier must move at least a full
+        # retention window beyond each partition's current start offset, so
+        # that once paused retention still has data above the cap to trim and
+        # can advance the start offset. Records carry framing overhead, so
+        # fewer than RETENTION_BYTES/msg_size records actually fit in the
+        # window; requiring 2x the nominal count guarantees enough surplus.
+        reconcile_ahead = 2 * (self.RETENTION_BYTES // self.msg_size)
+        try:
+            producer.start()
+
+            start = time.time()
+            while time.time() - start < self.toggle_duration_sec:
+                # With the reconciler enabled, wait until a full retention
+                # window of fresh data has landed in L1 beyond each partition's
+                # current start offset, so that retention will be able to
+                # advance every start offset once the reconciler is paused.
+                self.set_reconciliation_disabled(False)
+                for partition, start_offset in partition_offsets.items():
+                    self.wait_until_reconciled(
+                        topic=self.topic_name,
+                        partition=partition,
+                        offset=start_offset + reconcile_ahead,
+                        timeout_sec=90,
+                    )
+
+                # Pause the reconciler and require retention to advance every
+                # partition's start offset while it is paused: the housekeeper
+                # must trim the freshly-reconciled backlog even though the
+                # reconciler is stopped. Pausing reconciliation must not wedge
+                # retention.
+                self.set_reconciliation_disabled(True)
+                prev = partition_offsets
+                partition_offsets = self._wait_for_retention_to_apply(
+                    prev, timeout_sec=90
+                )
+                self.logger.info(
+                    f"retention advanced start offsets {prev} -> "
+                    f"{partition_offsets} while reconciler paused "
+                    f"(acked={producer.produce_status.acked})"
+                )
+                toggles += 1
+
+            # Ensure reconciliation is enabled so it can drain, then let the producer
+            # run to completion.
+            self.set_reconciliation_disabled(False)
+            producer.wait(timeout_sec=240)
+            self.logger.info(
+                f"producer finished with acked={producer.produce_status.acked}, "
+                f"bad_offsets={producer.produce_status.bad_offsets}"
+            )
+        finally:
+            producer.stop()
+
+        assert producer.produce_status.acked > 0, "producer acked no records"
+        assert toggles > 0, "expected toggling to have occurred"
+
+        # Wait until all partitions are fully reconciled
+        for partition in range(self.partition_count):
+            self.wait_until_reconciled(topic=self.topic_name, partition=partition)
+
+        # Retention must advance every partition even further now that the
+        # backlog has drained.
+        drained = self._wait_for_retention_to_apply(partition_offsets)
+        assert all(drained[p] > partition_offsets[p] for p in partition_offsets), (
+            f"retention did not advance every partition after draining: "
+            f"{partition_offsets} -> {drained}"
+        )
+
+        # Finally, read the whole surviving log end-to-end.
+        traffic_node = producer.nodes[0]
+        consumer = KgoVerifierSeqConsumer(
+            self.test_context,
+            self.redpanda,
+            self.topic_name,
+            self.msg_size,
+            loop=False,
+            tolerate_data_loss=True,
+            nodes=[traffic_node],
+            producer=producer,
+        )
+        try:
+            consumer.start(clean=False)
+            consumer.wait(timeout_sec=240)
+        finally:
+            consumer.stop()
+
+        status = consumer.consumer_status
+        assert status.validator.valid_reads > 0, "consumer read no records"
+        assert status.validator.invalid_reads == 0, (
+            f"consumer saw invalid reads: {status.validator.invalid_reads}"
         )

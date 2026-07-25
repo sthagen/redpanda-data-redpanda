@@ -20,6 +20,8 @@
 #include "model/timestamp.h"
 #include "utils/prefix_logger.h"
 
+#include <stdexcept>
+
 namespace cloud_topics::l1 {
 
 namespace {
@@ -92,6 +94,7 @@ compaction_sink::compaction_sink(
   metastore* metastore,
   ss::abort_source& as,
   config::binding<size_t> max_object_size,
+  config::binding<size_t> commit_interval_bytes,
   size_t upload_part_size,
   compaction_worker_probe& probe,
   prefix_logger& ctxlog,
@@ -103,12 +106,13 @@ compaction_sink::compaction_sink(
       metastore,
       as,
       std::move(max_object_size),
+      std::move(commit_interval_bytes),
       upload_part_size,
       ctxlog,
       std::move(opts))
   , _dirty_range_intervals(dirty_range_intervals)
   , _removable_tombstone_ranges(removable_tombstone_ranges)
-  , _expected_compaction_epoch(expected_compaction_epoch)
+  , _current_epoch(expected_compaction_epoch)
   , _start_offset(start_offset)
   , _probe(probe)
   , _notifier(notifier) {}
@@ -125,8 +129,6 @@ compaction_sink::initialize(compaction::sliding_window_reducer::source& src) {
         co_return false;
     }
 
-    co_await init_metadata_builder();
-
     auto& new_cleaned_ranges = ct_src._new_cleaned_ranges;
     new_cleaned_ranges.shrink_to_fit();
     _new_cleaned_ranges = std::move(new_cleaned_ranges);
@@ -140,136 +142,179 @@ compaction_sink::initialize(compaction::sliding_window_reducer::source& src) {
     co_return true;
 }
 
-ss::future<ss::stop_iteration>
-compaction_sink::operator()(model::record_batch b) {
-    auto next_offset = model::offset_cast(b.base_offset());
-    auto prev_offset = kafka::prev_offset(next_offset);
-
-    if (
-      _inflight_object
-      && _inflight_object->builder->file_size() >= _max_object_size()) {
-        co_await flush(prev_offset);
-    }
-
-    if (!_inflight_object) {
-        co_await initialize_builder(next_offset);
-    }
-
-    co_await _inflight_object->builder->add_batch(std::move(b));
-
-    co_return ss::stop_iteration::no;
-}
-
 ss::future<std::expected<void, metastore::errc>>
-compaction_sink::do_compact_objects(metastore::compaction_map_t compact_map) {
+compaction_sink::do_compact_objects(
+  const metastore::object_metadata_builder& builder,
+  metastore::compaction_map_t compact_map) {
     co_return co_await l1::retry_metastore_op_with_default_rtc(
-      [this, &compact_map]() {
-          return _metastore->compact_objects(*_metadata_builder, compact_map);
+      [this, &builder, &compact_map]() {
+          return _metastore->compact_objects(builder, compact_map);
       },
       _as);
 }
 
-ss::future<> compaction_sink::compact_objects_without_update() {
-    auto compaction_update = metastore::compaction_update{
-      .new_cleaned_ranges = {},
-      .removed_tombstones_ranges = {},
-      .cleaned_at = model::timestamp::missing(),
-      .expected_compaction_epoch = _expected_compaction_epoch};
-
-    metastore::compaction_map_t compact_map;
-    compact_map.emplace(_tp, std::move(compaction_update));
-    auto replace_res = co_await do_compact_objects(std::move(compact_map));
-    if (replace_res.has_value()) {
-        _probe.add_compaction_objects_committed(_output_objects);
-        _probe.add_compaction_bytes_committed(_output_bytes);
-        vlog(
-          _ctxlog.info, "Finalized job without a compaction metadata update");
-    } else {
-        _probe.add_compaction_objects_rejected(_output_objects);
-        _probe.add_compaction_bytes_rejected(_output_bytes);
-        vlog(_ctxlog.warn, "Could not finalize job: {}.", replace_res.error());
-    }
-}
-
-ss::future<> compaction_sink::compact_objects_with_update(
+metastore::compaction_update compaction_sink::make_compaction_update(
   chunked_vector<metastore::compaction_update::cleaned_range>
     new_cleaned_ranges,
-  offset_interval_set removed_tombstone_ranges) {
-    auto compaction_update = metastore::compaction_update{
+  offset_interval_set removed_tombstone_ranges,
+  metastore::compaction_epoch expected_epoch) {
+    auto cleaned_at = new_cleaned_ranges.empty()
+                          && removed_tombstone_ranges.empty()
+                        ? model::timestamp::missing()
+                        : model::timestamp::now();
+    return metastore::compaction_update{
       .new_cleaned_ranges = std::move(new_cleaned_ranges),
       .removed_tombstones_ranges = std::move(removed_tombstone_ranges),
-      .cleaned_at = model::timestamp::now(),
-      .expected_compaction_epoch = _expected_compaction_epoch};
+      .cleaned_at = cleaned_at,
+      .expected_compaction_epoch = expected_epoch};
+}
 
-    auto compaction_update_str = fmt::format("{}", compaction_update);
+metastore::compaction_map_t compaction_sink::make_compaction_map(
+  metastore::compaction_update update) const {
     metastore::compaction_map_t compact_map;
-    compact_map.emplace(_tp, std::move(compaction_update));
-    auto commit_res = co_await do_compact_objects(std::move(compact_map));
+    compact_map.emplace(_tp, std::move(update));
+    return compact_map;
+}
 
-    if (commit_res.has_value()) {
-        _probe.add_compaction_objects_committed(_output_objects);
-        _probe.add_compaction_bytes_committed(_output_bytes);
-        vlog(
-          _ctxlog.info,
-          "Finalized job with compaction metadata update: {}",
-          compaction_update_str);
-    } else {
+ss::future<bool>
+compaction_sink::advance_local_threshold_floor(kafka::offset new_floor) {
+    // _notifier is null only in tests, where the notification is a no-op.
+    if (_notifier == nullptr) {
+        co_return true;
+    }
+    vlog(
+      _ctxlog.debug,
+      "Compaction advancing min_allowed_local_threshold to {}",
+      new_floor);
+    auto res = co_await _notifier->set_min_allowed_local_threshold(
+      _tp, new_floor);
+    if (!res.has_value()) {
         vlog(
           _ctxlog.warn,
-          "Could not finalize job with compaction metadata update {}: {}. "
-          "Retrying object update without metadata.",
-          compaction_update_str,
-          commit_res.error());
-        co_return co_await compact_objects_without_update();
+          "Failed to advance min_allowed_local_threshold to {} ({})",
+          new_floor,
+          res.error());
+        co_return false;
     }
+    co_return true;
+}
+
+ss::future<> compaction_sink::commit_objects(
+  std::unique_ptr<metastore::object_metadata_builder> builder) {
+    // Data is about to be durably replaced. Advance the partition's
+    // min_allowed_local_threshold floor before the first partial commit so
+    // that local reads cannot serve records this job removes, mirroring the
+    // pre-commit floor advance of the single-request path. The floor is
+    // advanced once, to the top of the job's candidate cleaned ranges (the
+    // final cleaned ranges are a subset).
+    if (!_floor_advanced) {
+        if (
+          auto new_floor = get_max_cleaned_offset(_new_cleaned_ranges);
+          new_floor.has_value()) {
+            if (!co_await advance_local_threshold_floor(*new_floor)) {
+                throw std::runtime_error(
+                  fmt::format(
+                    "[{}] aborting compaction: could not advance "
+                    "min_allowed_local_threshold",
+                    _tp));
+            }
+        }
+        _floor_advanced = true;
+    }
+
+    // Partial compaction commit: the finished object(s) with an empty
+    // compaction update, which validates and bumps the compaction epoch.
+    auto commit_res = co_await do_compact_objects(
+      *builder,
+      make_compaction_map(make_compaction_update({}, {}, _current_epoch)));
+    if (!commit_res.has_value()) {
+        _probe.add_compaction_objects_rejected(_pending_objects);
+        _probe.add_compaction_bytes_rejected(_pending_bytes);
+        auto err = commit_res.error();
+        throw std::runtime_error(
+          fmt::format(
+            "[{}] aborting compaction: partial commit at epoch {} failed: "
+            "{}",
+            _tp,
+            _current_epoch,
+            err));
+    }
+    _probe.add_compaction_objects_committed(_pending_objects);
+    _probe.add_compaction_bytes_committed(_pending_bytes);
+    _committed_objects += _pending_objects;
+    ++_partial_commits;
+    _current_epoch = metastore::compaction_epoch{_current_epoch() + 1};
+    vlog(
+      _ctxlog.debug,
+      "Partial compaction commit of {} object(s) landed; compaction epoch "
+      "advanced to {}",
+      _pending_objects,
+      _current_epoch);
 }
 
 ss::future<> compaction_sink::finalize(bool success) {
-    auto should_commit = co_await finalize_inflight(success);
-    if (!should_commit) {
+    co_await finalize_inflight(success);
+
+    if (!success) {
+        vlog(
+          _ctxlog.warn,
+          "Skipping compaction metadata commit; {}",
+          _partial_commits == 0
+            ? fmt::format("no partial commits had landed")
+            : fmt::format(
+                "{} object(s) already committed in {} partial commit(s)",
+                _committed_objects,
+                _partial_commits));
+        co_return;
+    }
+    auto removed_tombstone_ranges = get_removed_tombstone_ranges(
+      _removable_tombstone_ranges, _processed_extents);
+    auto new_cleaned_ranges = get_new_cleaned_ranges(
+      _new_cleaned_ranges, _processed_extents, _start_offset);
+    if (new_cleaned_ranges.empty() && removed_tombstone_ranges.empty()) {
+        vlog(
+          _ctxlog.info,
+          "Finalized job without a compaction metadata update; {} extent(s) "
+          "compacted into {} object(s) in {} partial commit(s)",
+          _processed_extent_count,
+          _committed_objects,
+          _partial_commits);
         co_return;
     }
 
-    if (_any_object_failed) {
-        co_await compact_objects_without_update();
+    // The min_allowed_local_threshold floor was already advanced before the
+    // first partial commit. Record the job's compaction metadata against
+    // the epoch its own partial commits advanced.
+    auto compaction_update = make_compaction_update(
+      std::move(new_cleaned_ranges),
+      std::move(removed_tombstone_ranges),
+      _current_epoch);
+    auto compaction_update_str = fmt::format("{}", compaction_update);
+    auto compact_map = make_compaction_map(std::move(compaction_update));
+    auto commit_res = co_await l1::retry_metastore_op_with_default_rtc(
+      [this, &compact_map]() {
+          return _metastore->commit_compaction_metadata(compact_map);
+      },
+      _as);
+    if (commit_res.has_value()) {
+        vlog(
+          _ctxlog.info,
+          "Finalized job with compaction metadata update: {} ({} extent(s) "
+          "compacted into {} object(s) in {} partial commit(s))",
+          compaction_update_str,
+          _processed_extent_count,
+          _committed_objects,
+          _partial_commits);
     } else {
-        auto removed_tombstone_ranges = get_removed_tombstone_ranges(
-          _removable_tombstone_ranges, _processed_extents);
-        auto new_cleaned_ranges = get_new_cleaned_ranges(
-          _new_cleaned_ranges, _processed_extents, _start_offset);
-
-        // Advance the partition's min_allowed_local_threshold floor before
-        // committing the compaction. Compaction removes tombstones within the
-        // cleaned ranges, so local reads below the new floor could otherwise
-        // serve records that L1 has just deleted. If the floor cannot be
-        // advanced we skip the commit and retry the whole job later. _notifier
-        // is null only in tests, where the notification is a no-op.
-        if (
-          auto new_floor = get_max_cleaned_offset(new_cleaned_ranges);
-          new_floor.has_value() && _notifier != nullptr) {
-            vlog(
-              _ctxlog.debug,
-              "[{}] compaction advancing min_allowed_local_threshold to {}",
-              _tp,
-              *new_floor);
-            auto res = co_await _notifier->set_min_allowed_local_threshold(
-              _tp, *new_floor);
-            if (!res.has_value()) {
-                _probe.add_compaction_objects_rejected(_output_objects);
-                _probe.add_compaction_bytes_rejected(_output_bytes);
-                vlog(
-                  _ctxlog.warn,
-                  "[{}] skipping compaction commit: failed to advance "
-                  "min_allowed_local_threshold to {} ({})",
-                  _tp,
-                  *new_floor,
-                  res.error());
-                co_return;
-            }
-        }
-
-        co_await compact_objects_with_update(
-          std::move(new_cleaned_ranges), std::move(removed_tombstone_ranges));
+        vlog(
+          _ctxlog.warn,
+          "Could not commit compaction metadata update {}: {}; {} extent(s) "
+          "compacted into {} object(s) in {} partial commit(s)",
+          compaction_update_str,
+          commit_res.error(),
+          _processed_extent_count,
+          _committed_objects,
+          _partial_commits);
     }
 }
 

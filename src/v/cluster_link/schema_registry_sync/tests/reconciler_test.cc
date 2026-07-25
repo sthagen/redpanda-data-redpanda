@@ -21,6 +21,8 @@
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/when_all.hh>
 
+#include <gmock/gmock.h>
+
 #include <limits>
 #include <string>
 #include <tuple>
@@ -364,41 +366,20 @@ TEST(reconciler, seed_replicated_upsert_is_still_imported) {
     EXPECT_GE(h.source.reads(a, 1), 1);
 }
 
-// A soft-deleted source version imports preserving its deleted state: the
-// caller declares it in work_set.soft_deleted and import_schema stores it
-// soft-deleted. Underpins the task syncing soft-deleted source versions
-// preserving their deleted state.
-TEST(reconciler, imports_soft_deleted_as_deleted) {
-    reconcile_harness h;
-    auto a = ppsr::context_subject::unqualified("a");
-    h.source.add(a, 1, ppsr::is_deleted::yes);
-
-    srs::work_set work;
-    work.upserts.push_back(key(a, 1));
-    work.soft_deleted.insert(key(a, 1));
-
-    auto stats = h.run(std::move(work)).get();
-    ASSERT_TRUE(stats.has_value());
-    EXPECT_EQ(stats->versions_changed, 1);
-    EXPECT_EQ(stats->errors, 0);
-
-    const auto& all = h.destination.get_all();
-    auto ia = index_of(all, "a");
-    ASSERT_GE(ia, 0);
-    EXPECT_EQ(all[ia].deleted, ppsr::is_deleted::yes);
-}
-
-// Soft-delete propagation onto an active destination version: re-importing the
-// version with the caller's declared deleted-state transitions an existing
-// active version to soft-deleted. The node is in the seed (a destination
-// version is in `all`), so this also guards that a seeded upsert is still
-// imported. Underpins the task propagating a source soft-delete onto a live
-// destination version.
+// Soft-delete propagation onto an active destination version via the
+// listing-derived fallback: with a source that omits the `deleted` flag from
+// the body, re-importing the version with the caller's declared deleted-state
+// transitions an existing active version to soft-deleted. The node is in the
+// seed (a destination version is in `all`), so this also guards that a seeded
+// upsert is still imported. Underpins the task propagating a source soft-delete
+// onto a live destination version.
 TEST(reconciler, propagates_soft_delete_over_active_destination) {
     reconcile_harness h;
     auto a = ppsr::context_subject::unqualified("a");
-    // Destination already holds a:v1 active; the source has soft-deleted it.
+    // Destination already holds a:v1 active; the source has soft-deleted it but
+    // does not echo the flag, so only the listing-derived set conveys it.
     h.destination.import_schema(make_schema(a, 1, R"({"v":1})")).get();
+    h.source.reports_deleted_flag = false;
     h.source.add(a, 1, ppsr::is_deleted::yes);
 
     chunked_hash_set<ppsr::subject_version> seed;
@@ -418,17 +399,17 @@ TEST(reconciler, propagates_soft_delete_over_active_destination) {
     EXPECT_EQ(all[ia].deleted, ppsr::is_deleted::yes);
 }
 
-// The caller's declared soft-delete wins over the per-version source body: a
-// standard (e.g. Confluent) source omits the `deleted` flag from that body by
-// default, so read_subject_version reports the version active, yet declaring it
-// in work_set.soft_deleted still lands it soft-deleted on the destination.
-// Guards the cross-vendor soft-delete propagation the HTTP source reader
-// relies on.
-TEST(reconciler, caller_soft_delete_wins_over_active_source_body) {
+// When the source omits the `deleted` flag from the per-version body, the
+// caller's listing-derived soft-delete set is the fallback:
+// read_subject_version reports deleted == nullopt, so declaring the node in
+// work_set.soft_deleted still lands it soft-deleted on the destination.
+// Guards the fallback path for a source that does not echo the flag.
+TEST(reconciler, listing_soft_delete_used_when_source_omits_flag) {
     reconcile_harness h;
     auto a = ppsr::context_subject::unqualified("a");
-    // Source body reports the version ACTIVE, like a standard SR that does not
-    // echo a deleted flag.
+    // Source does not echo a deleted flag, so the body cannot convey the
+    // soft-delete; only the listing-derived set can.
+    h.source.reports_deleted_flag = false;
     h.source.add(a, 1, ppsr::is_deleted::no);
 
     srs::work_set work;
@@ -444,6 +425,63 @@ TEST(reconciler, caller_soft_delete_wins_over_active_source_body) {
     auto ia = index_of(all, "a");
     ASSERT_GE(ia, 0);
     EXPECT_EQ(all[ia].deleted, ppsr::is_deleted::yes);
+}
+
+// The source's reported deleted flag wins over the listing-derived set when the
+// two disagree: a version the source reports soft-deleted lands deleted even
+// though it is absent from work_set.soft_deleted. The body is authoritative
+// when present.
+TEST(reconciler, reported_deleted_wins_over_listing_absent) {
+    reconcile_harness h;
+    auto a = ppsr::context_subject::unqualified("a");
+    // Source reports the version soft-deleted; the listing set does NOT list
+    // it.
+    h.source.add(a, 1, ppsr::is_deleted::yes);
+
+    srs::work_set work;
+    work.upserts.push_back(key(a, 1));
+    // work.soft_deleted intentionally left empty.
+
+    EXPECT_THAT(
+      h.run(std::move(work)).get(),
+      testing::Optional(
+        testing::AllOf(
+          testing::Field(
+            "versions_changed", &srs::reconcile_stats::versions_changed, 1),
+          testing::Field("errors", &srs::reconcile_stats::errors, 0))));
+
+    const auto& all = h.destination.get_all();
+    auto ia = index_of(all, "a");
+    ASSERT_GE(ia, 0);
+    EXPECT_EQ(all[ia].deleted, ppsr::is_deleted::yes);
+}
+
+// The mirror case, and the point of preferring the body: a fresh body reporting
+// the version active wins over a stale listing set that still lists it as
+// soft-deleted (the listing was read earlier and may have raced). The version
+// lands active despite being in work_set.soft_deleted.
+TEST(reconciler, reported_active_wins_over_stale_listing_soft_delete) {
+    reconcile_harness h;
+    auto a = ppsr::context_subject::unqualified("a");
+    // Source reports the version active; the stale listing set still lists it.
+    h.source.add(a, 1, ppsr::is_deleted::no);
+
+    srs::work_set work;
+    work.upserts.push_back(key(a, 1));
+    work.soft_deleted.insert(key(a, 1));
+
+    EXPECT_THAT(
+      h.run(std::move(work)).get(),
+      testing::Optional(
+        testing::AllOf(
+          testing::Field(
+            "versions_changed", &srs::reconcile_stats::versions_changed, 1),
+          testing::Field("errors", &srs::reconcile_stats::errors, 0))));
+
+    const auto& all = h.destination.get_all();
+    auto ia = index_of(all, "a");
+    ASSERT_GE(ia, 0);
+    EXPECT_EQ(all[ia].deleted, ppsr::is_deleted::no);
 }
 
 TEST(reconciler, cyclic_source_does_not_hang) {

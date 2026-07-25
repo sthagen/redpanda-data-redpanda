@@ -139,9 +139,23 @@ schema::fake_registry::get_subjects(ppsr::include_deleted inc_del) const {
       | std::ranges::to<chunked_vector<ppsr::context_subject>>();
 }
 
+ss::future<chunked_vector<ppsr::context>>
+schema::fake_registry::list_contexts() const {
+    maybe_throw_injected_failure();
+    // `_contexts` holds only non-default contexts (default is always present
+    // and never gets a CONTEXT record), so seed with the default and copy the
+    // rest.
+    auto out = chunked_vector{ppsr::default_context};
+    std::ranges::copy(_contexts, std::back_inserter(out));
+    co_return out;
+}
+
 ss::future<ppsr::context_schema_id>
 schema::fake_registry::create_schema(ppsr::subject_schema unparsed) {
     maybe_throw_injected_failure();
+    if (unparsed.sub().ctx != ppsr::default_context) {
+        _contexts.insert(unparsed.sub().ctx);
+    }
     // This is wrong, but simple for our testing.
     for (const auto& s : _store.schemas) {
         if (
@@ -172,6 +186,9 @@ schema::fake_registry::create_schema(ppsr::subject_schema unparsed) {
 ss::future<ppsr::context_schema_id>
 schema::fake_registry::import_schema(ppsr::stored_schema imported) {
     maybe_throw_injected_failure();
+    if (imported.schema.sub().ctx != ppsr::default_context) {
+        _contexts.insert(imported.schema.sub().ctx);
+    }
 
     for (const auto& s : _store.schemas) {
         if (
@@ -280,6 +297,29 @@ ss::future<bool>
 schema::fake_registry::delete_config(ppsr::context_subject sub) {
     maybe_throw_injected_failure();
     co_return _configs.erase(sub) > 0;
+}
+
+ss::future<> schema::fake_registry::delete_context(ppsr::context ctx) {
+    maybe_throw_injected_failure();
+    if (ctx == ppsr::default_context) {
+        throw as_exception(ppsr::cannot_delete_default_context());
+    }
+    // Mirror the real store: an unmaterialized context is not found.
+    if (!_contexts.contains(ctx)) {
+        throw as_exception(
+          ppsr::error_info{
+            ppsr::error_code::subject_not_found,
+            fmt::format("Context '{}' not found", ctx())});
+    }
+    // Mirror the real store: a context can only be tombstoned once empty,
+    // counting soft-deleted subjects (include_deleted::yes).
+    const bool not_empty = std::ranges::any_of(
+      _store.schemas, [&](const auto& s) { return s.schema.sub().ctx == ctx; });
+    if (not_empty) {
+        throw as_exception(ppsr::context_not_empty(ctx));
+    }
+    _contexts.erase(ctx);
+    co_return;
 }
 
 const std::vector<ppsr::stored_schema>& schema::fake_registry::get_all() {

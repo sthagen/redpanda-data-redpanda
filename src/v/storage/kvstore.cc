@@ -26,6 +26,7 @@
 #include "storage/types.h"
 
 #include <seastar/core/metrics.hh>
+#include <seastar/core/seastar.hh>
 #include <seastar/coroutine/exception.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 #include <seastar/util/log.hh>
@@ -198,6 +199,35 @@ ss::future<> kvstore::put(key_space ks, bytes key, std::optional<iobuf> value) {
           }
           return w.done.get_future();
       });
+}
+
+ss::future<> kvstore::persist_pre_start(key_space ks, bytes key, iobuf value) {
+    vassert(
+      _recovered,
+      "kvstore::persist_pre_start called before recover() for dir {}",
+      _ntpc.work_directory());
+    vassert(
+      !_started,
+      "kvstore::persist_pre_start must be called before start() for dir {}",
+      _ntpc.work_directory());
+
+    // The partition directory (where the snapshot is written) is normally
+    // created lazily when the first segment is rolled. We bypass that path, so
+    // ensure it exists.
+    co_await ss::recursive_touch_directory(_ntpc.work_directory());
+
+    _probe.entry_written();
+    {
+        auto units = co_await _db_mut.get_units();
+        apply_op(
+          make_spaced_key(ks, key),
+          std::make_optional(std::move(value)),
+          units);
+        units.return_all();
+    }
+
+    _next_offset = model::next_offset(_next_offset);
+    co_await save_snapshot();
 }
 
 ss::future<> kvstore::for_each(

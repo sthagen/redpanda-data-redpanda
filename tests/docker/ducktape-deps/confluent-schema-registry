@@ -4,14 +4,14 @@ set -e
 source "$(dirname "${BASH_SOURCE[0]}")/download-utils" # import download-utils
 
 # Confluent Platform Community Edition includes Schema Registry, used as a
-# cross-vendor source in the shadow-link SR migration ducktape tests. Pin to a
-# version compatible with the Apache Kafka version used by the multi-cluster
-# shadow-link tests (kafka 3.7/3.8 -> CP 7.7.x).
-CP_VERSION=7.7.1
+# cross-vendor source in the shadow-link SR migration ducktape tests. Schema
+# Registry is a plain Kafka client and stays backward-compatible with the
+# Apache Kafka version used by the multi-cluster shadow-link tests (kafka 3.8).
+CP_VERSION=8.0.1
 CP_FILE=confluent-community-${CP_VERSION}.tar.gz
 
 # Confluent's archive is the canonical source for the tarball.
-CP_URL=https://packages.confluent.io/archive/7.7/${CP_FILE}
+CP_URL=https://packages.confluent.io/archive/8.0/${CP_FILE}
 
 mkdir -p /opt/confluent
 chmod a+rw /opt/confluent

@@ -342,30 +342,31 @@ class LevelingStressDisjointTest(LevelingStressBase):
 
         [ tiny tiny tiny ... ] [ LARGE ] [ tiny tiny tiny ... ]
 
-    After enabling leveling, we should observe that the two undersized runs
-    are leveled, while the large objects are left in place.
+    After enabling leveling, we should observe that the first undersized run
+    is folded, while the large objects are left in place. The trailing run is
+    the partition's tail: leveling holds it back until its rewrite can produce
+    a healthy extent, so it may (legitimately) survive untouched.
     """
 
     TOPIC_NAME = "leveling_disjoint_stress"
     MSG_SIZE = 4096
     # A 0.5 ratio (vs the base's 0.9) gives clear separation: the burst's
-    # ~3 MiB objects are comfortably "healthy" (>= 2 MiB), the trickle's small
-    # flushes comfortably "undersized".
+    # ~3 MiB objects are comfortably "healthy" (>= 2 MiB), the tiny runs'
+    # ~256 KiB extents comfortably "undersized".
     MIN_EXTENT_RATIO = 0.5
     RECONCILIATION_MAX_OBJECT_SIZE = 4 * 1024 * 1024  # 4 MiB
 
-    # Low fill -> small frequent flushes; higher fill -> larger packed objects.
+    # Low fill -> prompt small flushes; higher fill -> larger packed objects.
     # 0.75 targets ~3 MiB objects, well above the 2 MiB healthy threshold while
     # leaving headroom so the reconciler does not stall trying to pack to the
     # cap.
     TINY_FILL_RATIO = 0.05
     LARGE_FILL_RATIO = 0.75
-    # Rate-limit the trickle so each reconciliation flush stays small.
-    TRICKLE_RATE_BPS = 1024 * 1024  # 1 MiB/s
 
     # This is a shape test, not a volume test: produce just enough to form a
     # short run of undersized extents, a healthy extent, then another short run.
-    trickle_msgs = 1_000  # ~4 MiB per trickle phase, ~4s at 1 MiB/s
+    TINY_RUN_EXTENTS = 3
+    TINY_CHUNK_MSGS = 64  # 256 KiB per chunk -> one undersized extent each
     burst_msgs = 2_500  # ~10 MiB burst -> a few healthy objects
 
     def __init__(self, test_context: TestContext):
@@ -393,18 +394,40 @@ class LevelingStressDisjointTest(LevelingStressBase):
             },
         )
 
-    def _produce_phase(
-        self, msg_count: int, rate_limit_bps: int | None, fill_ratio: float
-    ):
-        self.set_reconciliation_target_fill(fill_ratio)
+    def _produce_tiny_run(self):
+        """Lay down a run of undersized extents, one per produce chunk.
+
+        Each chunk is fully reconciled into L1 before the next is produced,
+        so it lands as (at least) one extent well below the undersized
+        threshold. The shape must not depend on flush timing: a rate-limited
+        trickle can collapse into a single healthy extent when the
+        reconciler's first flush packs the whole accumulated backlog (e.g. on
+        a cold start, before a lowered fill target has taken effect).
+        """
+        # A low fill target makes the reconciler flush each chunk promptly
+        # rather than waiting out the full reconciliation interval.
+        self.set_reconciliation_target_fill(self.TINY_FILL_RATIO)
+        for _ in range(self.TINY_RUN_EXTENTS):
+            producer = self.produce_and_wait(
+                topic=self.TOPIC_NAME,
+                msg_size=self.MSG_SIZE,
+                msg_count=self.TINY_CHUNK_MSGS,
+            )
+            producer.free()
+            self.wait_until_reconciled(
+                topic=self.TOPIC_NAME, partition=0, timeout_sec=120
+            )
+
+    def _produce_burst(self):
+        """Produce enough at a high fill target to form healthy extents."""
+        self.set_reconciliation_target_fill(self.LARGE_FILL_RATIO)
         producer = self.produce_and_wait(
             topic=self.TOPIC_NAME,
             msg_size=self.MSG_SIZE,
-            msg_count=msg_count,
-            rate_limit_bps=rate_limit_bps,
+            msg_count=self.burst_msgs,
         )
         producer.free()
-        # Flush this phase's data into L1 before the next, so the phases land in
+        # Flush the burst into L1 before the next phase, so the phases land in
         # distinct extents rather than being reconciled together.
         self.wait_until_reconciled(topic=self.TOPIC_NAME, partition=0, timeout_sec=120)
 
@@ -424,13 +447,9 @@ class LevelingStressDisjointTest(LevelingStressBase):
         self.wait_for_managed_logs()
 
         # Lay down the disjoint shape with leveling disabled.
-        self._produce_phase(
-            self.trickle_msgs, self.TRICKLE_RATE_BPS, self.TINY_FILL_RATIO
-        )
-        self._produce_phase(self.burst_msgs, None, self.LARGE_FILL_RATIO)
-        self._produce_phase(
-            self.trickle_msgs, self.TRICKLE_RATE_BPS, self.TINY_FILL_RATIO
-        )
+        self._produce_tiny_run()
+        self._produce_burst()
+        self._produce_tiny_run()
 
         # Verify the setup actually produced the intended shape.
         undersized_before = self.count_undersized_extents()
@@ -438,9 +457,9 @@ class LevelingStressDisjointTest(LevelingStressBase):
         self.logger.info(
             f"Before leveling: undersized={undersized_before}, healthy={healthy_before}"
         )
-        assert undersized_before >= 2, (
-            f"expected a run of undersized extents from the trickle phases, "
-            f"got {undersized_before}"
+        assert undersized_before >= 2 * self.TINY_RUN_EXTENTS, (
+            f"expected {2 * self.TINY_RUN_EXTENTS} undersized extents from "
+            f"the tiny runs, got {undersized_before}"
         )
         assert healthy_before >= 1, (
             f"expected at least one healthy extent from the burst phase, "
@@ -451,7 +470,9 @@ class LevelingStressDisjointTest(LevelingStressBase):
             "leveling reclaimed extents while it was supposed to be disabled"
         )
 
-        total_records = 2 * self.trickle_msgs + self.burst_msgs
+        total_records = (
+            2 * self.TINY_RUN_EXTENTS * self.TINY_CHUNK_MSGS + self.burst_msgs
+        )
 
         # Enable leveling and let it converge.
         self.set_leveling_disabled(False)
@@ -465,7 +486,8 @@ class LevelingStressDisjointTest(LevelingStressBase):
             f"healthy={healthy_after}, reclaimed={reclaimed}"
         )
 
-        # Assert that the disjoint undersized runs were folded...
+        # Assert that the first (non-tail) undersized run was folded; the
+        # trailing run may be held back by the tail gate...
         assert reclaimed > 0, "leveling did not reclaim any extents"
         assert undersized_after < undersized_before, (
             f"undersized extent count did not drop "

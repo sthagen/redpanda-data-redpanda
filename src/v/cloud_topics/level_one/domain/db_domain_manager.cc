@@ -72,7 +72,7 @@ rpc::errc log_and_convert(const db_update_error& e, std::string_view prefix) {
         break;
     case invalid_update:
         ret = rpc::errc::concurrent_requests;
-        lvl = ss::log_level::debug;
+        lvl = ss::log_level::warn;
         break;
     }
     vlogl(cd_log, lvl, "{}{}", prefix, e);
@@ -1455,6 +1455,9 @@ db_domain_manager::do_get_leveling_info(
             }
             builder.process_extent(
               base, extent.val.last_offset, extent.val.len);
+            if (builder.is_full()) {
+                break;
+            }
         }
     }
     co_return rpc::get_leveling_info_reply{

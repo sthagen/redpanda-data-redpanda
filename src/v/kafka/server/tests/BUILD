@@ -245,6 +245,24 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
+    name = "fetch_read_coalescer_test",
+    timeout = "short",
+    srcs = [
+        "fetch_read_coalescer_test.cc",
+    ],
+    cpu = 2,
+    deps = [
+        "//src/v/bytes:iobuf",
+        "//src/v/config",
+        "//src/v/kafka/server",
+        "//src/v/model",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "consumer_group_recovery_test",
     timeout = "short",
     srcs = [
@@ -321,6 +339,7 @@ redpanda_cc_btest(
         "//src/v/model:timeout_clock",
         "//src/v/redpanda/tests:fixture",
         "//src/v/security",
+        "//src/v/ssx:sformat",
         "//src/v/test_utils:scoped_config",
         "//src/v/test_utils:seastar_boost",
         "//src/v/utils:base64",
@@ -864,6 +883,7 @@ redpanda_cc_btest(
     cpu = "1",
     deps = [
         ":kafka_test_utils",
+        "//src/v/bytes:iobuf_parser",
         "//src/v/cluster:cluster_link_table",
         "//src/v/cluster:cluster_link_types",
         "//src/v/cluster:controller_log_limiter",
@@ -881,6 +901,7 @@ redpanda_cc_btest(
         "//src/v/kafka/protocol:produce",
         "//src/v/kafka/server",
         "//src/v/model",
+        "//src/v/model:batch_compression",
         "//src/v/random:generators",
         "//src/v/redpanda/tests:fixture",
         "//src/v/storage:record_batch_builder",

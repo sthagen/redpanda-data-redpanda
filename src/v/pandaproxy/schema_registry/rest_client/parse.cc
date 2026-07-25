@@ -280,7 +280,7 @@ ss::future<std::expected<config_info, parse_error>> parse_config(iobuf body) {
 
         std::optional<registry_compatibility_level> level;
         ss::sstring raw;
-        chunked_vector<ss::sstring> unknown_fields;
+        chunked_vector<unsupported_feature> unsupported;
         while (co_await p.next()) {
             if (p.token() == token::end_object) {
                 // The body is exactly one JSON object: reject any trailing
@@ -291,17 +291,13 @@ ss::future<std::expected<config_info, parse_error>> parse_config(iobuf body) {
                       parse_error{
                         .reason = "trailing content after config object"});
                 }
-                if (!level.has_value()) {
-                    // compatibilityLevel is the one field a config response is
-                    // documented to always carry.
-                    co_return std::unexpected(
-                      parse_error{
-                        .reason = "missing compatibilityLevel field"});
-                }
+                // An absent compatibilityLevel is not an error: a subject
+                // config may carry only governance fields, which must still
+                // reach the unsupported-feature policy.
                 co_return config_info{
-                  .level = *level,
+                  .level = level,
                   .raw = std::move(raw),
-                  .unknown_fields = std::move(unknown_fields)};
+                  .unsupported = std::move(unsupported)};
             }
             if (p.token() != token::key) {
                 co_return std::unexpected(
@@ -313,6 +309,14 @@ ss::future<std::expected<config_info, parse_error>> parse_config(iobuf body) {
                   parse_error{.reason = "truncated JSON after key"});
             }
             if (key == "compatibilityLevel") {
+                if (p.token() == token::value_null) {
+                    // Null means absent, as for every other field; duplicate
+                    // keys are last-wins, so clear any earlier value.
+                    level.reset();
+                    raw = {};
+                    co_await p.skip_value();
+                    continue;
+                }
                 if (p.token() != token::value_string) {
                     co_return std::unexpected(
                       parse_error{
@@ -324,9 +328,14 @@ ss::future<std::expected<config_info, parse_error>> parse_config(iobuf body) {
                 raw = p.value_string().linearize_to_string();
                 level = registry_compatibility_level_from_wire(raw);
             } else {
-                // Any other top-level field is unmodeled: record its name so a
-                // caller can tell config was dropped, then skip its value.
-                unknown_fields.push_back(std::move(key));
+                // Any other non-null top-level field is unmodeled: recorded as
+                // a JSON pointer + type for the policy; null means absent.
+                if (p.token() != token::value_null) {
+                    unsupported.push_back(
+                      unsupported_feature{
+                        .json_pointer = ssx::sformat("/{}", key),
+                        .json_type = json_type_name(p.token())});
+                }
                 co_await p.skip_value();
             }
         }
@@ -682,7 +691,7 @@ parse_subject_version(iobuf body, qualified_subjects_enabled qualified) {
         std::optional<iobuf> schema;
         schema_type type{schema_type::avro};
         schema_definition::references refs;
-        is_deleted deleted{false};
+        std::optional<is_deleted> deleted;
         std::optional<schema_metadata> metadata;
         chunked_vector<unsupported_feature> unsupported;
 
@@ -698,20 +707,22 @@ parse_subject_version(iobuf body, qualified_subjects_enabled qualified) {
                 }
                 // Absent fields fall back to defaults/sentinels; completeness
                 // is a higher-layer concern. Unmodeled fields were recorded in
-                // `unsupported` above for the caller to act on.
+                // `unsupported` above for the caller to act on. `deleted` stays
+                // nullopt when the body omitted the flag, so a caller can tell
+                // an absent flag from an explicit false; into_stored() resolves
+                // it to a concrete value with the caller's fallback.
                 co_return source_schema_read{
-                  .schema = stored_schema{
-                    .schema = subject_schema{
-                      subject.value_or(invalid_subject),
-                      schema_definition{
-                        schema_definition::raw_string{
-                          std::move(schema).value_or(iobuf{})},
-                        type,
-                        std::move(refs),
-                        std::move(metadata)}},
-                    .version = version.value_or(invalid_schema_version),
-                    .id = id.value_or(invalid_schema_id),
-                    .deleted = deleted},
+                  .schema = subject_schema{
+                    subject.value_or(invalid_subject),
+                    schema_definition{
+                      schema_definition::raw_string{
+                        std::move(schema).value_or(iobuf{})},
+                      type,
+                      std::move(refs),
+                      std::move(metadata)}},
+                  .version = version.value_or(invalid_schema_version),
+                  .id = id.value_or(invalid_schema_id),
+                  .deleted = deleted,
                   .unsupported = std::move(unsupported)};
             }
             if (p.token() != token::key) {

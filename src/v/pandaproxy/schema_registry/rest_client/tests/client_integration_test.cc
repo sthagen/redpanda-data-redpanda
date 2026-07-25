@@ -231,12 +231,12 @@ FIXTURE_TEST(sr_rest_client_integration, pandaproxy_test_fixture) {
     {
         // No global config has been set, so the registry reports its built-in
         // default. The real server emits {"compatibilityLevel":"BACKWARD"} and
-        // nothing else, so unknown_fields is empty.
+        // nothing else, so unsupported is empty.
         auto res = sut.get_config(rtc).get();
         BOOST_REQUIRE(res.has_value());
         BOOST_REQUIRE(res->level == rc::registry_compatibility_level::backward);
         BOOST_REQUIRE_EQUAL(res->raw, "BACKWARD");
-        BOOST_REQUIRE(res->unknown_fields.empty());
+        BOOST_REQUIRE(res->unsupported.empty());
     }
 
     info(
@@ -295,7 +295,7 @@ FIXTURE_TEST(sr_rest_client_integration, pandaproxy_test_fixture) {
         BOOST_REQUIRE(res.has_value());
         // Redpanda's SR emits only fields we model, so nothing is dropped.
         BOOST_REQUIRE(res->unsupported.empty());
-        const auto& s = res->schema;
+        const auto& s = res.value();
         BOOST_REQUIRE_EQUAL(s.schema.sub(), multi);
         BOOST_REQUIRE_EQUAL(s.version, pps::schema_version{2});
         BOOST_REQUIRE_GE(s.id(), 1);
@@ -312,7 +312,7 @@ FIXTURE_TEST(sr_rest_client_integration, pandaproxy_test_fixture) {
         // metadata.properties is modeled, so it parses back in full and nothing
         // is reported as unsupported.
         BOOST_REQUIRE(res->unsupported.empty());
-        const auto& def = res->schema.schema.def();
+        const auto& def = res->schema.def();
         BOOST_REQUIRE(def.meta().has_value());
         BOOST_REQUIRE(def.meta()->properties.has_value());
         const auto& props = def.meta()->properties.value();
@@ -327,7 +327,7 @@ FIXTURE_TEST(sr_rest_client_integration, pandaproxy_test_fixture) {
           = sut.get_schema_by_version(ctx_sub, pps::schema_version{1}, rtc)
               .get();
         BOOST_REQUIRE(res.has_value());
-        const auto& s = res->schema;
+        const auto& s = res.value();
         BOOST_REQUIRE_EQUAL(s.schema.sub(), ctx_sub);
         BOOST_REQUIRE_EQUAL(s.version, pps::schema_version{1});
     }
@@ -378,7 +378,7 @@ FIXTURE_TEST(sr_rest_client_integration, pandaproxy_test_fixture) {
           = sut.get_schema_by_version(multi, pps::schema_version{1}, rtc).get();
         BOOST_REQUIRE(v1.has_value());
 
-        auto res = sut.get_schema_id_subject_versions(v1->schema.id, rtc).get();
+        auto res = sut.get_schema_id_subject_versions(v1->id, rtc).get();
         BOOST_REQUIRE(res.has_value());
         // Order is not guaranteed; check membership.
         BOOST_REQUIRE(sv_contains(res.value(), multi, pps::schema_version{1}));
@@ -407,8 +407,7 @@ FIXTURE_TEST(sr_rest_client_integration, pandaproxy_test_fixture) {
         BOOST_REQUIRE(cs.has_value());
 
         auto res
-          = sut.get_schema_id_subject_versions(cs->schema.id, rtc, ctx_sub)
-              .get();
+          = sut.get_schema_id_subject_versions(cs->id, rtc, ctx_sub).get();
         BOOST_REQUIRE(res.has_value());
         BOOST_REQUIRE(
           sv_contains(res.value(), ctx_sub, pps::schema_version{1}));
@@ -460,10 +459,10 @@ FIXTURE_TEST(sr_rest_client_integration, pandaproxy_test_fixture) {
                              pps::include_deleted::yes)
                            .get();
             BOOST_REQUIRE(found.has_value());
-            BOOST_REQUIRE_EQUAL(found->schema.version, pps::schema_version{1});
+            BOOST_REQUIRE_EQUAL(found->version, pps::schema_version{1});
             // Only the per-version response carries an explicit deleted flag;
-            // confirm it round-trips into stored_schema.
-            BOOST_REQUIRE(found->schema.deleted == pps::is_deleted::yes);
+            // confirm it round-trips as the source-reported flag.
+            BOOST_REQUIRE(found->deleted == pps::is_deleted::yes);
         }
 
         info("list_subjects hides a fully-deleted subject without deleted");

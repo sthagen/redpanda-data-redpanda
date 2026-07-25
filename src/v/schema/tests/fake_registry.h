@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "container/chunked_hash_map.h"
 #include "pandaproxy/schema_registry/schema_getter.h"
 #include "schema/registry.h"
 
@@ -81,6 +82,9 @@ public:
     get_subjects(
       pandaproxy::schema_registry::include_deleted inc_del) const override;
 
+    ss::future<chunked_vector<pandaproxy::schema_registry::context>>
+    list_contexts() const override;
+
     ss::future<pandaproxy::schema_registry::context_schema_id> create_schema(
       pandaproxy::schema_registry::subject_schema unparsed) override;
 
@@ -111,6 +115,9 @@ public:
     ss::future<bool>
     delete_config(pandaproxy::schema_registry::context_subject sub) override;
 
+    ss::future<>
+    delete_context(pandaproxy::schema_registry::context ctx) override;
+
     const std::vector<pandaproxy::schema_registry::stored_schema>& get_all();
 
     /// Test accessors for the mode/config overrides written to the registry, so
@@ -137,6 +144,10 @@ private:
 
     std::exception_ptr _injected_failure;
     mutable fake_store _store;
+    // Non-default contexts materialized by an import/create, mirroring the real
+    // store's lazy CONTEXT record: a context stays listed after its subjects
+    // are purged until delete_context tombstones it.
+    chunked_hash_set<pandaproxy::schema_registry::context> _contexts;
     std::map<
       pandaproxy::schema_registry::context_subject,
       pandaproxy::schema_registry::mode>

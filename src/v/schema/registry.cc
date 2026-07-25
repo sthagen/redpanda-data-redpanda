@@ -99,6 +99,10 @@ public:
         auto [reader, _] = co_await service();
         co_return co_await reader->get_subjects(inc_del, std::nullopt);
     }
+    ss::future<chunked_vector<ppsr::context>> list_contexts() const override {
+        auto [reader, _] = co_await service();
+        co_return co_await reader->get_materialized_contexts();
+    }
 
     ss::future<ppsr::context_schema_id>
     create_schema(ppsr::subject_schema schema) override {
@@ -185,6 +189,13 @@ public:
         co_return result;
     }
 
+    ss::future<> delete_context(ppsr::context ctx) override {
+        auto [_, writer] = co_await service();
+        co_await writer->delete_context(
+          std::move(ctx), ppsr::write_source::schema_registry_sync);
+        _last_sync_time = ss::lowres_clock::now();
+    }
+
 private:
     ss::future<std::pair<ppsr::sharded_store*, ppsr::seq_writer*>>
     service() const {
@@ -244,6 +255,10 @@ public:
         throw std::logic_error(
           "invalid attempted usage of a disabled schema registry");
     }
+    ss::future<chunked_vector<ppsr::context>> list_contexts() const override {
+        throw std::logic_error(
+          "invalid attempted usage of a disabled schema registry");
+    }
     ss::future<ppsr::context_schema_id>
     create_schema(ppsr::subject_schema) override {
         throw std::logic_error(
@@ -278,6 +293,10 @@ public:
           "invalid attempted usage of a disabled schema registry");
     }
     ss::future<bool> delete_config(ppsr::context_subject) override {
+        throw std::logic_error(
+          "invalid attempted usage of a disabled schema registry");
+    }
+    ss::future<> delete_context(ppsr::context) override {
         throw std::logic_error(
           "invalid attempted usage of a disabled schema registry");
     }

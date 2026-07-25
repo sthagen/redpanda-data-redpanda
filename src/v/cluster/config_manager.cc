@@ -290,8 +290,8 @@ std::filesystem::path config_manager::cache_path() {
 static void preload_local(
   const ss::sstring& key,
   const ss::sstring& raw_value,
-  std::optional<std::reference_wrapper<config_manager::preload_result>>
-    result) {
+  std::optional<std::reference_wrapper<config_manager::preload_result>> result,
+  defer_needs_restart defer = defer_needs_restart::no) {
     auto& cfg = config::shard_local_cfg();
     if (cfg.contains(key)) {
         auto& property = cfg.get(key);
@@ -301,13 +301,18 @@ static void preload_local(
             // but for strings it's not (the literal value in the cache is
             // "\"foo\"").
             auto decoded = YAML::Load(raw_value);
-            bool set = property.set_value(decoded);
 
-            // We intentionally use set_value (not set_pending_value) even
-            // for needs_restart properties: preload runs before anything
-            // reads the config, so values go straight into _value.
-            // STM replay later calls set_pending_value for any updates
-            // beyond the cache.
+            // Normally preload runs before anything reads the config, so
+            // values (even needs_restart ones) go straight into _value via
+            // set_value; STM replay later calls set_pending_value for updates
+            // beyond the cache. But a join snapshot applied late in startup
+            // (defer_needs_restart) must not promote needs_restart properties
+            // live - that would make the running value disagree with what
+            // memory groups and other consumers already sized against - so
+            // persist them as pending, activated on the next restart.
+            bool set = (defer && property.needs_restart())
+                         ? property.set_pending_value(decoded)
+                         : property.set_value(decoded);
 
             if (result.has_value() && set) {
                 vlog(
@@ -366,8 +371,8 @@ static void preload_local(
     }
 }
 
-ss::future<config_manager::preload_result>
-config_manager::preload_join(const controller_join_snapshot& snap) {
+ss::future<config_manager::preload_result> config_manager::preload_join(
+  const controller_join_snapshot& snap, defer_needs_restart defer) {
     preload_result result;
 
     result.version = snap.config.version;
@@ -377,11 +382,12 @@ config_manager::preload_join(const controller_join_snapshot& snap) {
         auto& value = i.second;
 
         // Run locally to get validation fields of result
-        preload_local(key, value, std::ref(result));
+        preload_local(key, value, std::ref(result), defer);
 
         // Broadcast value to all shards
-        co_await ss::smp::invoke_on_all(
-          [&key, &value]() { preload_local(key, value, std::nullopt); });
+        co_await ss::smp::invoke_on_all([&key, &value, defer]() {
+            preload_local(key, value, std::nullopt, defer);
+        });
     }
 
     co_return result;

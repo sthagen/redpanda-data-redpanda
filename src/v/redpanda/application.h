@@ -16,6 +16,7 @@
 #include "cloud_topics/app.h"
 #include "cloud_topics/test_fixture_cfg.h"
 #include "cluster/archival/fwd.h"
+#include "cluster/cluster_discovery.h"
 #include "cluster/config_manager.h"
 #include "cluster/fwd.h"
 #include "cluster/inventory_service.h"
@@ -242,16 +243,20 @@ public:
     // 1. Applying any local kvstore snapshots (which contain potentially
     //    stale config and feature table state, as well as persisted
     //    node/cluster UUID information).
-    // 2. If we already have an identity and a persisted member set,
-    //    refreshing that view by fetching an authoritative
-    //    controller_join_snapshot from the controller leader via the
-    //    `fetch_controller_snapshot` RPC. New nodes that lack persisted
-    //    state skip this step; they will instead receive their snapshot
-    //    later through the join_node response in resolve_node_identity.
-    // 3. Marking shard_local_cfg() as ready, after which downstream
+    // 2. For a first-time joiner, registering with the cluster and applying the
+    //    controller_join_snapshot from the join reply. This covers non-seed
+    //    joiners and wiped seeds that are rejoining an existing cluster.
+    //    Genuine founders (which need the RPC service for the founder
+    //    handshake) and node-ID overrides are resolved later in
+    //    resolve_node_identity().
+    // 3. For a restarting node with a persisted member set, refreshing that
+    //    view by fetching an authoritative controller_join_snapshot from the
+    //    controller leader via the `fetch_controller_snapshot` RPC.
+    // 4. Marking shard_local_cfg() as ready, after which downstream
     //    services may safely read cluster configuration.
+    // The abort source (owned by the caller) bounds cluster discovery.
     // Public for test fixture access.
-    void establish_cluster_view();
+    void establish_cluster_view(ss::abort_source&);
 
     // Constructs and starts the services required to provide cryptographic
     // algorithm support to Redpanda. Public for test fixture access.
@@ -296,16 +301,53 @@ private:
     // Attempts to read a local feature table snapshot from the kvstore and
     // apply it.
     ss::future<> maybe_apply_local_feature_table_snapshot();
+    // How this node obtains its node ID at startup.
+    enum class node_id_source {
+        // A node ID is already persisted (this node ran a controller before):
+        // reuse it. A restarting node.
+        established,
+        // An operator override supplies the node ID, rewriting the persisted
+        // configuration_invariants.
+        overridden,
+        // No usable node ID yet. The node must register with the cluster to be
+        // assigned one. A first-time founder or joining node.
+        unregistered,
+    };
+    // Returns true if this node is present in the local node config's list of
+    // seed servers, false otherwise.
+    bool is_seed_node() const;
+    // Classifies how this node obtains its node ID from persisted invariants,
+    // node config and node-ID overrides. Reads the kvstore; call once and cache
+    // the result in _node_id_source.
+    node_id_source classify_node_id_source();
     // Performs cluster discovery for first time cluster joiners, or resolves
-    // node identity from persisted kvstore state.
+    // node identity from persisted kvstore state. Also persists the node UUID.
+    // No-op for the discovery/snapshot step if identity was already resolved
+    // early via prime_node_identity().
     ss::future<> resolve_node_identity();
+    // Applies an operator node-ID override: rewrites the persisted
+    // configuration_invariants and returns the overridden node ID.
+    ss::future<model::node_id> apply_node_id_override();
+    // Registers with the cluster per the retry_policy and, if a
+    // controller_join_snapshot is returned in the join reply, applies it and
+    // returns the assigned node ID. When defer_needs_restart is set,
+    // needs_restart configs are applied as pending rather than promoted live.
+    ss::future<std::optional<model::node_id>> register_and_apply_join_snapshot(
+      cluster::cluster_discovery::join_retry_policy policy,
+      cluster::defer_needs_restart = cluster::defer_needs_restart::no);
+    // Resolves node identity early by registering with the cluster and applying
+    // the join snapshot. Used for a first-time joiner (a non-seed, or a seed
+    // that finds an existing cluster).
+    ss::future<> prime_node_identity();
     // Fetches and applies a view of the controller_stm from the current
     // controller leader.
     ss::future<> bootstrap_controller_view();
     // Refreshes the cluster config and feature table from the provided
-    // snapshot.
-    ss::future<>
-    apply_controller_snapshot(const cluster::controller_join_snapshot&);
+    // snapshot. When defer_needs_restart is set, needs_restart config
+    // properties are applied as pending.
+    ss::future<> apply_controller_snapshot(
+      const cluster::controller_join_snapshot&,
+      cluster::defer_needs_restart = cluster::defer_needs_restart::no);
 
     void trigger_abort_source();
 
@@ -344,7 +386,10 @@ private:
     cluster::config_manager::preload_result _config_preload;
 
     std::unique_ptr<cluster::cluster_discovery> _cluster_discovery;
-    bool _node_uuid_needs_persisting{false};
+    // Set once node identity has been resolved, either early via
+    // prime_node_identity() or later via resolve_node_identity().
+    bool _node_identity_resolved{false};
+    std::optional<node_id_source> _node_id_source;
 
     // When joining a cluster, we are tipped off as to the last applied
     // offset of the controller stm from another node.  We will wait for

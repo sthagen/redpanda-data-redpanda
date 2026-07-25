@@ -348,11 +348,11 @@ int application::run(int ac, char** av) {
                 wire_up_and_start_crypto_services();
                 mark_config_ready(false).get();
                 hydrate_cluster_config(node_cfg_yaml);
+                init_crashtracker(app_signal);
                 wire_up_bootstrap_services();
                 bootstrap_from_kvstore();
-                establish_cluster_view();
+                establish_cluster_view(app_signal.abort_source());
                 log_cluster_config();
-                init_crashtracker(app_signal);
                 initialize();
                 check_environment();
                 setup_metrics();
@@ -769,8 +769,28 @@ void application::wire_up_bootstrap_services() {
       .get();
 }
 
-void application::establish_cluster_view() {
-    bootstrap_controller_view().get();
+void application::establish_cluster_view(ss::abort_source& as) {
+    _cluster_discovery = std::make_unique<cluster::cluster_discovery>(
+      storage.local().node_uuid(), storage.local().get_cluster_uuid(), as);
+
+    // Classify how this node obtains its node ID once, up front.
+    _node_id_source = classify_node_id_source();
+
+    switch (_node_id_source.value()) {
+    case node_id_source::unregistered:
+        // A first-time joiner learns the cluster's configuration via its join
+        // reply. This covers non-seed joiners and wiped seed joiners that
+        // detect an existing cluster.
+        prime_node_identity().get();
+        break;
+    case node_id_source::established:
+    case node_id_source::overridden:
+        // A restarting node refreshes its view from the controller leader here,
+        // when it has a persisted member set to fetch from; otherwise this is a
+        // no-op and the node falls back to its local cache.
+        bootstrap_controller_view().get();
+        break;
+    }
 
     // The shard_local_cfg() is now safe to use as we have a view consistent
     // with the rest of the cluster.
@@ -870,7 +890,8 @@ void application::check_environment() {
       = "/proc/sys/crypto/fips_enabled";
     syschecks::systemd_message("checking environment (CPU, Mem)").get();
     syschecks::cpu();
-    syschecks::memory(config::node().developer_mode());
+    syschecks::memory(
+      memory_groups().total_reserved_memory(), config::node().developer_mode());
     if (config::shard_local_cfg().code_hugepages_enabled()) {
         syschecks::promote_code_to_hugepages();
     }

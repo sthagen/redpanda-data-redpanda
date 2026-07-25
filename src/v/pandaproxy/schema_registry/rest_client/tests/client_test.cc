@@ -1027,7 +1027,7 @@ TEST(rest_client, get_config_request_shape_and_success) {
     ASSERT_TRUE(res.has_value());
     EXPECT_EQ(res->level, rc::registry_compatibility_level::backward);
     EXPECT_EQ(res->raw, "BACKWARD");
-    EXPECT_TRUE(res->unknown_fields.empty());
+    EXPECT_TRUE(res->unsupported.empty());
 }
 
 TEST(rest_client, get_config_open_enum_tolerates_unknown_value) {
@@ -1051,7 +1051,7 @@ TEST(rest_client, get_config_open_enum_tolerates_unknown_value) {
 
 TEST(rest_client, get_config_records_unmodeled_fields) {
     // A Confluent registry may return a rich object; the client models only
-    // compatibilityLevel and names the rest in unknown_fields.
+    // compatibilityLevel and surfaces the rest as unsupported features.
     rc::client client{
       make_http_client([](mock_client& m) {
           EXPECT_CALL(m, request_and_collect_response(_, _, _))
@@ -1068,8 +1068,9 @@ TEST(rest_client, get_config_records_unmodeled_fields) {
 
     ASSERT_TRUE(res.has_value());
     EXPECT_EQ(res->level, rc::registry_compatibility_level::full);
-    EXPECT_THAT(
-      res->unknown_fields, ElementsAre("normalize", "validateFields"));
+    ASSERT_EQ(res->unsupported.size(), size_t{2});
+    EXPECT_EQ(res->unsupported[0].json_pointer, "/normalize");
+    EXPECT_EQ(res->unsupported[1].json_pointer, "/validateFields");
 }
 
 TEST(rest_client, get_config_no_credentials_omits_auth_header) {
@@ -1208,7 +1209,7 @@ TEST(rest_client, get_subject_config_request_shape_and_success) {
     ASSERT_TRUE(res.has_value());
     EXPECT_EQ(res->level, rc::registry_compatibility_level::none);
     EXPECT_EQ(res->raw, "NONE");
-    EXPECT_TRUE(res->unknown_fields.empty());
+    EXPECT_TRUE(res->unsupported.empty());
 }
 
 TEST(rest_client, get_subject_config_encodes_qualified_subject) {
@@ -1586,7 +1587,7 @@ TEST(rest_client, get_schema_by_version_success) {
 
     ASSERT_TRUE(res.has_value());
     EXPECT_TRUE(res->unsupported.empty());
-    const auto& s = res->schema;
+    const auto& s = res.value();
     EXPECT_EQ(s.schema.sub(), subject);
     EXPECT_EQ(s.version, pps::schema_version{3});
     EXPECT_EQ(s.id, pps::schema_id{100001});

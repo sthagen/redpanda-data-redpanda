@@ -17,6 +17,7 @@
 #include "cluster/topic_configuration.h"
 #include "cluster/topic_properties.h"
 #include "container/chunked_hash_map.h"
+#include "test_utils/scoped_config.h"
 
 class fake_topic_metadata_provider : public l1::topic_cfg_provider {
 public:
@@ -51,7 +52,10 @@ public:
 
 class SchedulerTestFixture : public l1::l1_reader_fixture {
 public:
-    ss::future<> SetUpAsync() override { co_await start_scheduler(); }
+    ss::future<> SetUpAsync() override {
+        cfg.get("cloud_topics_enabled").set_value(true);
+        co_await start_scheduler();
+    }
 
     ss::future<> start_scheduler() {
         auto info_collector = l1::log_info_collector(
@@ -141,4 +145,6 @@ public:
 
 protected:
     std::unique_ptr<l1::compaction_scheduler> scheduler{nullptr};
+
+    scoped_config cfg;
 };

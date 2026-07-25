@@ -43,6 +43,13 @@ ss::future<bool> is_linked(const log_compaction_meta* meta) {
     });
 }
 
+ss::future<bool> may_level(const log_compaction_meta* meta) {
+    return ss::smp::submit_to(worker_manager::worker_manager_shard, [meta] {
+        return meta->link.is_linked()
+               && !meta->compaction.inflight_shard.has_value();
+    });
+}
+
 } // namespace
 
 compaction_worker::compaction_worker(
@@ -391,6 +398,8 @@ ss::future<> compaction_worker::compact_log(compaction_job* job) {
       _metastore,
       _as,
       config::shard_local_cfg().cloud_topics_compaction_max_object_size.bind(),
+      config::shard_local_cfg()
+        .cloud_topics_compaction_commit_interval_bytes.bind(),
       _upload_part_size,
       _probe,
       ctxlog,
@@ -446,7 +455,7 @@ ss::future<> compaction_worker::do_level_range(leveling_job* job) {
         }
     });
 
-    if (!co_await is_linked(job->meta.get())) {
+    if (!co_await may_level(job->meta.get())) {
         co_return;
     }
 
@@ -487,6 +496,8 @@ ss::future<> compaction_worker::do_level_range(leveling_job* job) {
       _as,
       config::shard_local_cfg()
         .cloud_topics_reconciliation_max_object_size.bind(),
+      config::shard_local_cfg()
+        .cloud_topics_leveling_commit_interval_bytes.bind(),
       _upload_part_size,
       _probe,
       ctxlog,

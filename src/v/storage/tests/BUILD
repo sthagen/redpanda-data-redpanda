@@ -390,6 +390,7 @@ redpanda_cc_gtest(
         "//src/v/test_utils:gtest",
         "//src/v/test_utils:random_bytes",
         "@googletest//:gtest",
+        "@seastar",
         "@seastar//:testing",
     ],
 )
@@ -767,6 +768,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         "//src/v/model",
+        "//src/v/storage",
         "//src/v/storage/tests:disk_log_builder",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",

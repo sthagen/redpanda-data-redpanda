@@ -147,9 +147,9 @@ def data_dependency():
     http_archive(
         name = "rapidjson",
         build_file = "//bazel/thirdparty:rapidjson.BUILD",
-        sha256 = "d085ef6d175d9b20800958c695c7767d65f9c1985a73d172150e57e84f6cd61c",
-        strip_prefix = "rapidjson-14a5dd756e9bef26f9b53d3b4eb1b73c6a1794d5",
-        url = "https://github.com/redpanda-data/rapidjson/archive/14a5dd756e9bef26f9b53d3b4eb1b73c6a1794d5.tar.gz",
+        sha256 = "bb6805bfb8d5491b7ba77019dda08ddb0912b853399409bbf8a74d8357581c9c",
+        strip_prefix = "rapidjson-a47f8d7379e9d1dfbac415e7d8ccece605275e5b",
+        url = "https://github.com/redpanda-data/rapidjson/archive/a47f8d7379e9d1dfbac415e7d8ccece605275e5b.tar.gz",
     )
 
     http_archive(
@@ -164,9 +164,9 @@ def data_dependency():
     http_archive(
         name = "seastar",
         build_file = "//bazel/thirdparty:seastar.BUILD",
-        sha256 = "7f395262aa42d3ffec092a112971c36e5ce7513c8729be6a1a0c606cc5d4fc12",
-        strip_prefix = "seastar-4027b6ed4ad267594fcfaaada877b1c30fc05e0c",
-        url = "https://github.com/redpanda-data/seastar/archive/4027b6ed4ad267594fcfaaada877b1c30fc05e0c.tar.gz",
+        sha256 = "120bb1711ea5c56124b83556fec3dc85d8edd9b3c0990419b7c8900659a46e5f",
+        strip_prefix = "seastar-cde680a9c6c3ff290a46f93a7ccea570ee8ccd87",
+        url = "https://github.com/redpanda-data/seastar/archive/cde680a9c6c3ff290a46f93a7ccea570ee8ccd87.tar.gz",
     )
 
     http_archive(

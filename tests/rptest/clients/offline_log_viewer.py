@@ -49,6 +49,16 @@ class OfflineLogViewer:
     def read_kafka_records(self, node: ClusterNode, topic: str) -> Any:
         return self._json_cmd(node, f"--type kafka_records --topic {topic}")
 
+    def read_kafka_batch_headers(self, node: ClusterNode, topic: str) -> Any:
+        """
+        Decode only the record batch headers of the given kafka topic's log.
+        Unlike read_kafka_records, this is safe for compressed batches, whose
+        records the viewer cannot decode. Batch checksums are validated as a
+        side effect of parsing. Returns one list of batch header dicts per
+        partition log found on the node.
+        """
+        return self._json_cmd(node, f"--type kafka --topic {topic}")
+
     def read_controller(self, node: ClusterNode) -> Any:
         return self._json_cmd(node, "--type controller")
 

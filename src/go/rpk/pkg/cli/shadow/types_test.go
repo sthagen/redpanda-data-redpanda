@@ -218,6 +218,7 @@ client_options:
 schema_registry_sync_options:
   shadow_schema_registry_api:
     source_url: "https://source-sr.example.com:8081"
+    paused: true
     auth_options:
       basic:
         username: "sr-user"
@@ -250,6 +251,7 @@ schema_registry_sync_options:
 				SchemaRegistrySyncOptions: &SchemaRegistrySyncOptions{
 					ShadowSchemaRegistryAPI: &ShadowSchemaRegistryAPI{
 						SourceURL: "https://source-sr.example.com:8081",
+						Paused:    true,
 						AuthOptions: &SchemaRegistryAuthOptions{
 							Basic: &HTTPBasicAuthOptions{
 								Username: "sr-user",
@@ -488,6 +490,7 @@ func TestShadowLinkConfigUnmarshalJSON(t *testing.T) {
 				"schema_registry_sync_options": {
 					"shadow_schema_registry_api": {
 						"source_url": "https://source-sr.example.com:8081",
+						"paused": true,
 						"auth_options": {
 							"basic": {
 								"username": "sr-user",
@@ -516,6 +519,7 @@ func TestShadowLinkConfigUnmarshalJSON(t *testing.T) {
 				SchemaRegistrySyncOptions: &SchemaRegistrySyncOptions{
 					ShadowSchemaRegistryAPI: &ShadowSchemaRegistryAPI{
 						SourceURL: "https://source-sr.example.com:8081",
+						Paused:    true,
 						AuthOptions: &SchemaRegistryAuthOptions{
 							Basic: &HTTPBasicAuthOptions{
 								Username: "sr-user",

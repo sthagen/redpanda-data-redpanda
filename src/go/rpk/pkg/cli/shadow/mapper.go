@@ -342,6 +342,7 @@ func mapShadowSchemaRegistryAPI(api *ShadowSchemaRegistryAPI) *adminv2.SchemaReg
 
 	pbAPI := &adminv2.SchemaRegistrySyncOptions_ShadowSchemaRegistryApi{
 		SourceUrl:                      api.SourceURL,
+		Paused:                         api.Paused,
 		MaxSourceRequestsPerSecond:     api.MaxSourceRequestsPerSecond,
 		AuthOptions:                    mapSchemaRegistryAuthOptions(api.AuthOptions),
 		SourceFilter:                   mapSchemaRegistrySourceFilter(api.SourceFilter),
@@ -838,6 +839,7 @@ func adminShadowSchemaRegistryAPIToCfg(api *adminv2.SchemaRegistrySyncOptions_Sh
 
 	cfg := &ShadowSchemaRegistryAPI{
 		SourceURL:                      api.GetSourceUrl(),
+		Paused:                         api.GetPaused(),
 		MaxSourceRequestsPerSecond:     api.GetMaxSourceRequestsPerSecond(),
 		AuthOptions:                    adminSchemaRegistryAuthToCfg(api.GetAuthOptions()),
 		SourceFilter:                   adminSchemaRegistrySourceFilterToCfg(api.GetSourceFilter()),

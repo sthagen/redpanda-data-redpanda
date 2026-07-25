@@ -50,7 +50,7 @@ unavailable_source_reader::read_mode(ppsr::context_subject, ss::abort_source&) {
     co_return std::unexpected(unavailable());
 }
 
-ss::future<source_result<std::optional<ppsr::compatibility_level>>>
+ss::future<source_result<source_config_read>>
 unavailable_source_reader::read_config(
   ppsr::context_subject, ss::abort_source&) {
     co_return std::unexpected(unavailable());

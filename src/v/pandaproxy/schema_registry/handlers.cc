@@ -1528,13 +1528,6 @@ delete_context(server::request_t rq, server::reply_t rp) {
 
     auto ctx = context{parse_normalized_context(*rq.req)};
 
-    if (ctx == default_context) {
-        throw as_exception(
-          error_info{
-            error_code::subject_version_operation_not_permitted,
-            "Cannot delete the default context"});
-    }
-
     co_await rq.service().writer().delete_context(ctx);
 
     rp.rep->set_status(ss::http::reply::status_type::no_content);
