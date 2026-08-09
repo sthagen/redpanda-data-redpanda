@@ -22,6 +22,7 @@
 #include "cluster/node_isolation_watcher.h"
 #include "cluster/topic_recovery_service.h"
 #include "compression/async_stream_zstd.h"
+#include "compression/internal/snappy_java_compressor.h"
 #include "compression/lz4_decompression_buffers.h"
 #include "compression/stream_zstd.h"
 #include "config/configuration.h"
@@ -465,6 +466,8 @@ void application::initialize(
           compression::lz4_decompression_buffers::bufsize,
           compression::lz4_decompression_buffers::min_threshold,
           config::shard_local_cfg().lz4_decompress_reusable_buffers_disabled());
+
+        compression::internal::snappy_java_compressor::init_workspace();
     }).get();
 
     if (config::shard_local_cfg().enable_pid_file()) {
@@ -645,11 +648,11 @@ void application::validate_arguments(const po::variables_map& cfg) {
     }
 }
 
-ss::app_template::config application::setup_app_config() {
-    ss::app_template::config app_cfg;
+ss::app_template::seastar_options application::setup_app_config() {
+    ss::app_template::seastar_options app_cfg;
     app_cfg.name = "Redpanda";
-    using namespace std::literals::chrono_literals; // NOLINT
-    app_cfg.default_task_quota = 500us;
+    app_cfg.reactor_opts.task_quota_ms.set_default_value(0.5);
+    app_cfg.reactor_opts.linux_aio_nowait.set_value(true);
     app_cfg.auto_handle_sigint_sigterm = false;
     return app_cfg;
 }

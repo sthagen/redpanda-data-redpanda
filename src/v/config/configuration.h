@@ -39,6 +39,7 @@
 
 #include <cctype>
 #include <chrono>
+#include <memory>
 #include <vector>
 
 class monitor_unsafe;
@@ -259,7 +260,7 @@ struct configuration final : public config_store {
     // same as retention.size in kafka - TODO: size not implemented
     property<std::optional<size_t>> retention_bytes;
     property<int32_t> group_topic_partitions;
-    bounded_property<int16_t> default_topic_replication;
+    bounded_property<int16_t> default_topic_replications;
     bounded_property<int16_t> minimum_topic_replication;
     property<int32_t> transaction_coordinator_partitions;
     property<model::cleanup_policy_bitflags>
@@ -719,6 +720,7 @@ struct configuration final : public config_store {
 
     // HTTP Authentication
     enterprise<property<std::vector<ss::sstring>>> http_authentication;
+    property<bool> scram_credential_cache_enabled;
 
     // MPX
     property<bool> enable_mpx_extensions;
@@ -781,7 +783,9 @@ struct configuration final : public config_store {
     bounded_property<std::chrono::milliseconds> iceberg_target_lag_ms;
     property<bool> iceberg_disable_snapshot_tagging;
     bounded_property<size_t> datalake_coordinator_max_files_per_commit;
+    bounded_property<size_t> datalake_coordinator_max_bytes_per_commit;
     bounded_property<size_t> datalake_coordinator_max_pending_files;
+    bounded_property<size_t> datalake_coordinator_max_pending_bytes;
     property<bool> iceberg_disable_automatic_snapshot_expiry;
     property<std::optional<ss::sstring>> iceberg_topic_name_dot_replacement;
     property<ss::sstring> iceberg_dlq_table_suffix;
@@ -806,7 +810,16 @@ struct configuration final : public config_store {
     bounded_property<uint32_t> shadow_link_failover_batch_size;
     property<std::chrono::milliseconds> internal_rpc_request_timeout_ms;
 
-    configuration();
+    class ctor_key {
+        ctor_key() = default;
+        friend std::unique_ptr<configuration> make_config();
+    };
+
+    explicit configuration(ctor_key);
+    configuration(const configuration&) = delete;
+    configuration& operator=(const configuration&) = delete;
+    configuration(configuration&&) = delete;
+    configuration& operator=(configuration&&) = delete;
 
     error_map_t load(const YAML::Node& root_node);
 

@@ -23,7 +23,7 @@ from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
 )
 from rptest.clients.admin.v2 import Admin as AdminV2
 from rptest.clients.kafka_cli_tools import KafkaCliTools
-from rptest.clients.rpk import RpkException, RpkTool
+from rptest.clients.rpk import RpkException, RpkTool, RpkUpgradeFinalizationState
 from rptest.clients.types import TopicSpec
 from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
@@ -1252,12 +1252,17 @@ class ManualFinalizationUpgradeTest(UnfinalizedUpgradeMixin, FeaturesTestBase):
 
     It mirrors three ManualFinalizationTest scenarios end to end:
       - auto-finalization disabled blocks the post-upgrade advance,
-      - an explicit FinalizeUpgrade drives the advance, and
-      - GetUpgradeStatus reports the finalization lifecycle.
+      - an explicit finalize drives the advance, and
+      - the upgrade status reports the finalization lifecycle.
+
+    Where ManualFinalizationTest calls the admin v2 RPCs directly (pinning the
+    server-side API contract), this test drives the workflow through
+    `rpk cluster upgrade` status/finalize -- the operator surface built on
+    those RPCs -- so the rpk subcommands get end-to-end coverage.
 
     The old release has neither the gating logic nor the v2 RPCs, so the opt-out
     is set on the old binary (which also exercises the backported knob) and the
-    status/finalize RPCs are only invoked once every node is on HEAD.
+    status/finalize commands are only invoked once every node is on HEAD.
     """
 
     # DescribeRedpandaRoles occupies the reserved Redpanda Kafka API key range
@@ -1308,16 +1313,27 @@ class ManualFinalizationUpgradeTest(UnfinalizedUpgradeMixin, FeaturesTestBase):
         """Perturb the cluster while it sits in `phase` (e.g.
         "...-upgraded-unfinalized" on the new binary, or "...-downgraded" after a
         rollback). Structured as 1 + N parts: shared baseline work, then one
-        function per supported unfinalized-upgrade step. Today N=1 -- the
-        v26.1 -> v26.2 step. See the note above the per-step functions for how
-        this grows for v26.3 and beyond."""
+        function per supported unfinalized-upgrade step, dispatched on the old
+        release's feature line so only the step matching the upgrade window
+        under test runs. See the note above the per-step functions for how
+        this grows for new majors."""
         self.logger.info(f"perturb: phase={phase}")
         self._perturb_common(phase)
         if "upgraded" in phase:
             # Generic across majors: every feature gated by the upgrade under
             # test must be exercised or acknowledged.
             self._assert_feature_coverage()
-        self._perturb_v26_1_to_v26_2(phase)
+        # A missing entry (e.g. right after a version cut, before any gated
+        # feature lands in the new major) leaves only the shared baseline and
+        # the coverage guard -- exactly what an upgrade that gates nothing
+        # needs. The guard fails loudly once a gated feature appears, forcing
+        # a new per-step function to be written and registered here.
+        per_step = {
+            (26, 1): self._perturb_v26_1_to_v26_2,
+        }
+        step = per_step.get(self.old_release[:2])
+        if step is not None:
+            step(phase)
 
     def _perturb_common(self, phase):
         """Baseline data-plane perturbation, run in every state. On the first
@@ -1367,20 +1383,24 @@ class ManualFinalizationUpgradeTest(UnfinalizedUpgradeMixin, FeaturesTestBase):
 
     # NOTE: growing this beyond the v26.1 -> v26.2 step.
     #
-    # When v26.2 is released and v26.3 development begins, two things change:
-    #   1. Add a new per-step function, e.g. _perturb_v26_2_to_v26_3, exercising
-    #      the features gated by the unfinalized v26.2 -> v26.3 upgrade, and call
-    #      it from _perturb alongside the existing one.
-    #   2. Extend the harness to perform CHAINED unfinalized upgrades: an
-    #      unfinalized upgrade v26.1 -> v26.2, then a further unfinalized upgrade
-    #      v26.2 -> v26.3, perturbing (and exercising downgrade) at each step
-    #      instead of a single old -> HEAD hop.
-    # Keep older step functions and their harness coverage for as long as the
-    # support window allows upgrading from those releases; drop a step once its
-    # source release leaves the supported upgrade matrix.
+    # Once the first feature gated on the new major lands, the coverage guard
+    # (_assert_feature_coverage) fails: add a new per-step function, e.g.
+    # _perturb_v26_2_to_v26_3, exercising the features gated by the unfinalized
+    # v26.2 -> v26.3 upgrade, and register it in _perturb's per-step dispatch.
+    # A step only runs when the installed old release matches its source line,
+    # so older steps go dormant (rather than fail) as the prior feature line
+    # moves forward; they stay live on release branches where the prior line
+    # still matches. Drop a step once its source release leaves the supported
+    # upgrade matrix everywhere.
+    #
+    # A possible further extension: perform CHAINED unfinalized upgrades (an
+    # unfinalized upgrade v26.1 -> v26.2, then a further unfinalized upgrade
+    # v26.2 -> v26.3, perturbing and exercising downgrade at each step) instead
+    # of a single old -> HEAD hop.
     def _perturb_v26_1_to_v26_2(self, phase):
-        """Per-step perturbation for the v26.1 -> v26.2 unfinalized upgrade (the
-        N=1 part of the 1 + N structure).
+        """Per-step perturbation for the v26.1 -> v26.2 unfinalized upgrade;
+        dispatched from _perturb only when the installed old release is on the
+        v26.1 line.
 
         Exercises the code paths gated by the v26.2 feature flags. While the
         upgrade is unfinalized the active version is held at v26.1, so these
@@ -1749,20 +1769,20 @@ class ManualFinalizationUpgradeTest(UnfinalizedUpgradeMixin, FeaturesTestBase):
         # even run. The active version is held at the old (downgrade floor)
         # version, with the uniform higher version available to finalize.
         status = self._wait_for_status_state(
-            features_pb2.FINALIZATION_STATE_READY_TO_FINALIZE
+            RpkUpgradeFinalizationState.READY_TO_FINALIZE
         )
         assert self.admin.get_features()["cluster_version"] == self.old_logical
-        assert status.active_version == self.old_logical
-        assert status.version_after_finalization == self.new_logical
-        assert not status.auto_finalization_enabled
+        assert status["active_version"] == self.old_logical
+        assert status["version_after_finalization"] == self.new_logical
+        assert not status["auto_finalization_enabled"]
 
         # Dwell and re-check: the version must stay held across subsequent
         # gating-loop ticks, not advance late.
         time.sleep(MANUAL_FINALIZE_HOLD_DWELL_SEC)
         assert self.admin.get_features()["cluster_version"] == self.old_logical
         assert (
-            self._get_upgrade_status().state
-            == features_pb2.FINALIZATION_STATE_READY_TO_FINALIZE
+            self._get_upgrade_status()["state"]
+            == RpkUpgradeFinalizationState.READY_TO_FINALIZE
         )
 
     @cluster(num_nodes=3, log_allow_list=RESTART_LOG_ALLOW_LIST)
@@ -1778,7 +1798,7 @@ class ManualFinalizationUpgradeTest(UnfinalizedUpgradeMixin, FeaturesTestBase):
         The old release has no v2 RPCs, so (unlike the synthetic test) the
         FINALIZED-at-rest state cannot be observed before the upgrade; the
         lifecycle is observed from READY_TO_FINALIZE (post-upgrade) through
-        FINALIZED, checked against both the v2 status and the v1 features API.
+        FINALIZED, checked against both the rpk status and the v1 features API.
         """
         self._start_at_old()
         self._disable_auto_finalization()
@@ -1788,111 +1808,136 @@ class ManualFinalizationUpgradeTest(UnfinalizedUpgradeMixin, FeaturesTestBase):
         self._restart_at_new(self.redpanda.nodes)
 
         status = self._wait_for_status_state(
-            features_pb2.FINALIZATION_STATE_READY_TO_FINALIZE
+            RpkUpgradeFinalizationState.READY_TO_FINALIZE
         )
-        assert status.active_version == self.old_logical
-        assert status.version_after_finalization == self.new_logical
-        # The v1 features API agrees with the v2 status: the advance is deferred,
-        # so cluster_version is still held at the old (downgrade-floor) version.
+        assert status["active_version"] == self.old_logical
+        assert status["version_after_finalization"] == self.new_logical
+        # The v1 features API agrees with the rpk status: the advance is
+        # deferred, so cluster_version is still held at the old
+        # (downgrade-floor) version.
         assert self.admin.get_features()["cluster_version"] == self.old_logical
-        assert len(status.members) == len(self.redpanda.nodes)
-        assert all(m.version_known and m.alive for m in status.members)
-        assert all(m.logical_version == self.new_logical for m in status.members)
+        members = status["members"]
+        assert len(members) == len(self.redpanda.nodes)
+        assert all(m["version_known"] and m["alive"] for m in members)
+        assert all(m["logical_version"] == self.new_logical for m in members)
         # release_version is plumbed through from the per-node health report.
-        assert all(m.release_version for m in status.members)
+        assert all(m["release_version"] for m in members)
 
         # Finalize: the active version catches up; no downgrade after this.
         self._finalize()
         self._wait_for_version_everywhere(self.new_logical)
 
-        status = self._wait_for_status_state(features_pb2.FINALIZATION_STATE_FINALIZED)
-        assert status.active_version == self.new_logical
-        assert status.version_after_finalization == self.new_logical
+        status = self._wait_for_status_state(RpkUpgradeFinalizationState.FINALIZED)
+        assert status["active_version"] == self.new_logical
+        assert status["version_after_finalization"] == self.new_logical
 
     @cluster(num_nodes=3, log_allow_list=RESTART_LOG_ALLOW_LIST)
     def test_config_passes_through_multi_hop_upgrade(self):
         """
         Lock in that `features_auto_finalization`, set once on the oldest
-        release, survives a multi-hop upgrade (v25.3.x -> v26.1.x -> HEAD) and
-        is still honored by the final binary's gating logic.
+        release, survives a multi-hop upgrade from v25.3.x all the way to HEAD
+        and is still honored by the gating logic of every binary that ships it.
 
-        The knob was backported to both v25.3.15 and v26.1.9, so every
-        intermediate binary recognizes the property and carries it through the
-        controller log unchanged. Only HEAD consumes the knob, so the
-        deferred-advance behavior appears only after the final hop -- the
-        intermediate v26.1 hop advances the active version normally.
+        The knob was backported to v25.3.15 and v26.1.9 and ships natively from
+        v26.2.1 onward, so every binary in the chain recognizes the property
+        and carries it through the controller log unchanged. The gating logic
+        first shipped in v26.2.1: a hop onto an older binary auto-advances the
+        active version, while every hop onto a v26.2.1+ binary defers its
+        advance until an explicit finalize.
+
+        The hop chain is recomputed from the released-versions list each run,
+        so a new feature release extends the chain with one more gated
+        intermediate hop instead of breaking the test: an intermediate gated
+        hop must be finalized anyway, because the next binary only supports
+        upgrading from the immediately preceding logical version.
         """
-        oldest, _ = self.installer.latest_for_line((25, 3))
-        assert oldest >= MANUAL_FINALIZE_MIN_OLDEST_RELEASE, (
-            f"latest v25.3 patch {oldest} predates the features_auto_finalization "
-            f"backport {MANUAL_FINALIZE_MIN_OLDEST_RELEASE}"
-        )
-        mid, _ = self.installer.latest_for_line((26, 1))
-        assert mid >= self.MIN_OLD_RELEASE, (
-            f"latest v26.1 patch {mid} predates the backport {self.MIN_OLD_RELEASE}"
-        )
+        # Feature lines whose binaries only carry the knob via backport; a hop
+        # landing in one of these lines must be at least the backport patch.
+        # Lines >= v26.2 ship the knob natively.
+        knob_backports = {
+            (25, 3): MANUAL_FINALIZE_MIN_OLDEST_RELEASE,
+            (26, 1): self.MIN_OLD_RELEASE,
+        }
+        # The first release that consumes the knob: hops onto this binary or
+        # newer defer their version advance when auto-finalization is off.
+        gating_min_release = (26, 2, 1)
+
+        chain = self.load_version_range((25, 3))
+        self.logger.info(f"Upgrade chain: {chain}")
+        for hop in chain:
+            backport_min = knob_backports.get(hop[:2])
+            assert backport_min is None or hop >= backport_min, (
+                f"hop {hop} predates the features_auto_finalization "
+                f"backport {backport_min}"
+            )
 
         # Hop 0: boot the oldest release and opt out of auto-finalization once.
         # Setting the flag here is a convenience (set-it-once-early), NOT a
         # guarantee of multi-hop downgradability: a multi-hop upgrade does not
-        # preserve the ability to downgrade across every hop. Only the gated hop
-        # (to HEAD) keeps its downgrade open -- see the assertions below.
+        # preserve the ability to downgrade across every hop. Only a gated hop
+        # keeps its downgrade open, and only until it is finalized -- see the
+        # assertions below.
+        oldest, hops = chain[0], chain[1:]
         self.logger.info(f"Booting oldest release {oldest}")
         self.installer.install(self.redpanda.nodes, oldest)
         self.redpanda.start()
         self._disable_auto_finalization()
+        held_version = self.admin.get_features()["cluster_version"]
 
-        # Hop 1: upgrade to the latest v26.1 patch. v26.1 has the knob but not
-        # the gating logic, so it auto-advances the active version to its own
-        # latest; the flag rides along in the controller log untouched.
-        self.logger.info(f"Upgrading to intermediate release {mid}")
-        mid_logical = self._upgrade_all_to(mid)
-        self._wait_for_version_everywhere(mid_logical, timeout_sec=60)
-        held_version = mid_logical
+        for hop in hops:
+            final_hop = hop == hops[-1]
+            gated = hop >= gating_min_release
+            self.logger.info(
+                f"Upgrading to {'gated' if gated else 'ungated'} release {hop}"
+            )
+            hop_logical = self._upgrade_all_to(hop)
+            assert hop_logical > held_version, (
+                f"hop {hop} logical {hop_logical} should exceed the held "
+                f"version {held_version}"
+            )
+            if not gated:
+                # Ungated binary: it has the knob but not the gating logic, so
+                # it auto-advances the active version -- which doubles as the
+                # downgrade floor -- to its own latest; the flag rides along in
+                # the controller log untouched. Downgrade back past this hop is
+                # no longer possible: the flag set on the oldest release did
+                # not (and cannot) protect an ungated hop.
+                self._wait_for_version_everywhere(hop_logical, timeout_sec=60)
+            else:
+                # Gated binary: because the flag survived every hop so far, the
+                # advance must be deferred. READY_TO_FINALIZE proves the new
+                # binary observed the completed upgrade and deferred (stronger
+                # than a fixed sleep that could pass before the gating loop
+                # runs). The downgrade floor is held at the previous version,
+                # so downgrade back across this hop IS preserved until it is
+                # finalized.
+                status = self._wait_for_status_state(
+                    RpkUpgradeFinalizationState.READY_TO_FINALIZE
+                )
+                assert self.admin.get_features()["cluster_version"] == held_version
+                assert status["active_version"] == held_version
+                assert status["version_after_finalization"] == hop_logical
+                # The decisive passthrough check: this binary sees
+                # auto-finalization as disabled even though the flag was set
+                # only once, on the oldest release.
+                assert not status["auto_finalization_enabled"]
 
-        # The v26.1 hop was NOT gated, so the active version -- which doubles as
-        # the downgrade floor -- has advanced to the v26.1 logical version.
-        # Downgrade back to v25.3 is no longer possible from here: the flag set
-        # on v25.3 did not (and cannot) protect this ungated hop.
-        assert self.admin.get_features()["cluster_version"] == held_version
+                if final_hop:
+                    # Dwell and re-check: the version must stay held across
+                    # subsequent gating-loop ticks, not advance late.
+                    time.sleep(MANUAL_FINALIZE_HOLD_DWELL_SEC)
+                    assert self.admin.get_features()["cluster_version"] == held_version
 
-        # Hop 2: upgrade to HEAD, which DOES consume the knob. Because the flag
-        # survived both hops, the final advance must be deferred.
-        self.logger.info("Upgrading to HEAD")
-        head_logical = self._upgrade_all_to(RedpandaInstaller.HEAD)
-        assert head_logical > held_version, (
-            f"HEAD logical {head_logical} should exceed the held version {held_version}"
-        )
-
-        # READY_TO_FINALIZE proves HEAD observed the completed upgrade and
-        # deferred the advance (stronger than a fixed sleep that could pass
-        # before the gating loop runs).
-        status = self._wait_for_status_state(
-            features_pb2.FINALIZATION_STATE_READY_TO_FINALIZE
-        )
-        # The active version (downgrade floor) is held at the v26.1 version, so
-        # downgrade from v26.2 back to v26.1 IS preserved: this gated hop is the
-        # only one whose downgrade the flag keeps open.
-        assert self.admin.get_features()["cluster_version"] == held_version
-        assert status.active_version == held_version
-        assert status.version_after_finalization == head_logical
-        # The decisive passthrough check: HEAD sees auto-finalization as
-        # disabled even though the flag was set only once, on the oldest release.
-        assert not status.auto_finalization_enabled
-
-        # Dwell and re-check: the version must stay held across subsequent
-        # gating-loop ticks, not advance late.
-        time.sleep(MANUAL_FINALIZE_HOLD_DWELL_SEC)
-        assert self.admin.get_features()["cluster_version"] == held_version
-
-        # The explicit finalize still drives the advance to the head version.
-        self._finalize()
-        self._wait_for_version_everywhere(head_logical)
-        finalized = self._wait_for_status_state(
-            features_pb2.FINALIZATION_STATE_FINALIZED
-        )
-        assert finalized.active_version == head_logical
-        assert finalized.version_after_finalization == head_logical
+                # The explicit finalize drives the advance to this hop's
+                # version.
+                self._finalize()
+                self._wait_for_version_everywhere(hop_logical)
+                finalized = self._wait_for_status_state(
+                    RpkUpgradeFinalizationState.FINALIZED
+                )
+                assert finalized["active_version"] == hop_logical
+                assert finalized["version_after_finalization"] == hop_logical
+            held_version = hop_logical
 
     @cluster(num_nodes=3, log_allow_list=RESTART_LOG_ALLOW_LIST)
     def test_downgrade_before_finalize(self):
@@ -1922,10 +1967,10 @@ class ManualFinalizationUpgradeTest(UnfinalizedUpgradeMixin, FeaturesTestBase):
             # what keeps the downgrade available.
             self._restart_at_new(self.redpanda.nodes)
             status = self._wait_for_status_state(
-                features_pb2.FINALIZATION_STATE_READY_TO_FINALIZE
+                RpkUpgradeFinalizationState.READY_TO_FINALIZE
             )
             assert self.admin.get_features()["cluster_version"] == old_logical
-            assert not status.auto_finalization_enabled
+            assert not status["auto_finalization_enabled"]
 
             self._perturb(f"cycle{cycle}-upgraded-unfinalized")
 
@@ -1945,14 +1990,12 @@ class ManualFinalizationUpgradeTest(UnfinalizedUpgradeMixin, FeaturesTestBase):
         # finalizing. The active version advances to the head version.
         self.logger.info("final attempt: upgrade -> finalize")
         self._restart_at_new(self.redpanda.nodes)
-        self._wait_for_status_state(features_pb2.FINALIZATION_STATE_READY_TO_FINALIZE)
+        self._wait_for_status_state(RpkUpgradeFinalizationState.READY_TO_FINALIZE)
         self._finalize()
         self._wait_for_version_everywhere(self.new_logical)
-        finalized = self._wait_for_status_state(
-            features_pb2.FINALIZATION_STATE_FINALIZED
-        )
-        assert finalized.active_version == self.new_logical
-        assert finalized.version_after_finalization == self.new_logical
+        finalized = self._wait_for_status_state(RpkUpgradeFinalizationState.FINALIZED)
+        assert finalized["active_version"] == self.new_logical
+        assert finalized["version_after_finalization"] == self.new_logical
 
         # With the upgrade finalized, the v26.2 feature gates have opened:
         # confirm the features actually work.
@@ -1990,10 +2033,10 @@ class ManualFinalizationUpgradeTest(UnfinalizedUpgradeMixin, FeaturesTestBase):
         # Upgrade and this time finalize, advancing the active version past what
         # the old binary supports.
         self._restart_at_new(self.redpanda.nodes)
-        self._wait_for_status_state(features_pb2.FINALIZATION_STATE_READY_TO_FINALIZE)
+        self._wait_for_status_state(RpkUpgradeFinalizationState.READY_TO_FINALIZE)
         self._finalize()
         self._wait_for_version_everywhere(self.new_logical)
-        self._wait_for_status_state(features_pb2.FINALIZATION_STATE_FINALIZED)
+        self._wait_for_status_state(RpkUpgradeFinalizationState.FINALIZED)
 
         # Attempt to roll a single node back to the old release. The old binary
         # reads the persisted feature table, sees the cluster advanced past the

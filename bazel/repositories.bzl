@@ -29,6 +29,7 @@ def data_dependency():
         patches = [
             "//bazel/thirdparty:avro-snappy-includes.patch",
             "//bazel/thirdparty:avro-fmt-const.patch",
+            "//bazel/thirdparty:avro-libcxx-includes.patch",
         ],
         patch_args = ["-p1"],
     )
@@ -44,9 +45,9 @@ def data_dependency():
     http_archive(
         name = "c-ares",
         build_file = "//bazel/thirdparty:c-ares.BUILD",
-        sha256 = "912dd7cc3b3e8a79c52fd7fb9c0f4ecf0aaa73e45efda880266a2d6e26b84ef5",
-        strip_prefix = "c-ares-1.34.6",
-        url = "https://vectorized-public.s3.amazonaws.com/dependencies/c-ares-1.34.6.tar.gz",
+        sha256 = "556f781dd188ad932dc8263fee0ad3aaba675b4cd8e54d86908681b43ce3e327",
+        strip_prefix = "c-ares-1.34.7",
+        url = "https://vectorized-public.s3.amazonaws.com/dependencies/c-ares-1.34.7.tar.gz",
     )
 
     http_archive(
@@ -160,13 +161,13 @@ def data_dependency():
         url = "https://github.com/redpanda-data/CRoaring/archive/c433d1c70c10fb2e40f049e019e2abbcafa6e69d.tar.gz",
     )
 
-    # branch: v26.2.x
+    # branch: v26.3.x
     http_archive(
         name = "seastar",
         build_file = "//bazel/thirdparty:seastar.BUILD",
-        sha256 = "120bb1711ea5c56124b83556fec3dc85d8edd9b3c0990419b7c8900659a46e5f",
-        strip_prefix = "seastar-cde680a9c6c3ff290a46f93a7ccea570ee8ccd87",
-        url = "https://github.com/redpanda-data/seastar/archive/cde680a9c6c3ff290a46f93a7ccea570ee8ccd87.tar.gz",
+        sha256 = "5918f72ec59c159a8d2fe36870e7d30c6e61426fde766d7dd6853fa7f9871f7f",
+        strip_prefix = "seastar-a6ac2ff6190a4a9dce5059991355703e1073d11f",
+        url = "https://github.com/redpanda-data/seastar/archive/a6ac2ff6190a4a9dce5059991355703e1073d11f.tar.gz",
     )
 
     http_archive(

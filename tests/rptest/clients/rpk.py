@@ -366,6 +366,16 @@ class AclList:
         )
 
 
+class RpkUpgradeFinalizationState:
+    """State strings reported by `rpk cluster upgrade status`: the admin v2
+    FinalizationState enum names, lowercased with underscores as spaces (see
+    src/go/rpk/pkg/cli/cluster/upgrade/status.go)."""
+
+    FINALIZED = "finalized"
+    READY_TO_FINALIZE = "ready to finalize"
+    UPGRADE_IN_PROGRESS = "upgrade in progress"
+
+
 class RpkTool:
     """
     Wrapper around rpk.
@@ -1112,7 +1122,7 @@ class RpkTool:
                 )
                 wait_until(
                     lambda: "__consumer_offsets" in self.list_topics(internal=True),
-                    timeout_sec=10,
+                    timeout_sec=30,
                     backoff_sec=1,
                     err_msg="__consumer_offsets topic not created",
                 )
@@ -1347,7 +1357,12 @@ class RpkTool:
         output = self._execute(cmd)
         return json.loads(output) if output_format == "json" else output
 
-    def _run_shadow(self, args: list[str], output_format: str | None = None) -> Any:
+    def _run_shadow(
+        self,
+        args: list[str],
+        output_format: str | None = None,
+        env: dict[str, str] | None = None,
+    ) -> Any:
         cmd = [
             self._rpk_binary(),
             "-X",
@@ -1356,7 +1371,7 @@ class RpkTool:
         ] + args
         if output_format is not None:
             cmd += ["--format", output_format]
-        output = self._execute(cmd)
+        output = self._execute(cmd, env=env)
         return json.loads(output) if output_format == "json" else output
 
     def shadow_create(self, config: dict[str, Any], no_confirm: bool = True) -> str:
@@ -1367,6 +1382,19 @@ class RpkTool:
             if no_confirm:
                 args.append("--no-confirm")
             return self._run_shadow(args)
+
+    def shadow_update(self, name: str, config: dict[str, Any]) -> str:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as tf:
+            yaml.safe_dump(config, tf)
+            tf.flush()
+            return self._run_shadow(["update", name, "-c", tf.name])
+
+    def shadow_update_editor(self, name: str, editor: str) -> str:
+        """Run 'rpk shadow update' in editor mode. rpk seeds a temp file with
+        the current configuration and invokes `editor <tmpfile>` ($EDITOR is
+        not shell-parsed, so it must be a single executable); the edited file
+        is submitted when the editor exits."""
+        return self._run_shadow(["update", name], env={"EDITOR": editor})
 
     def shadow_status(self, name: str, output_format: str = "json") -> Any:
         return self._run_shadow(["status", name, "--print-all"], output_format)
@@ -1557,7 +1585,9 @@ class RpkTool:
             self._redpanda.logger.debug("Executing command: %s", cmd)
 
         if env is not None:
-            env.update(os.environ.copy())
+            # Caller-provided variables take precedence over the inherited
+            # environment.
+            env = os.environ | env
 
         p = subprocess.Popen(
             cmd,
@@ -1606,6 +1636,37 @@ class RpkTool:
             "rp_install_path_root", None
         )
         return f"{rp_install_path_root}/bin/rpk"
+
+    def _cluster_brokers(self, subcommand, node, wait, wait_timeout, timeout):
+        node_id = (
+            self._redpanda.node_id(node) if isinstance(node, ClusterNode) else node
+        )
+        cmd = [
+            self._rpk_binary(),
+            "--api-urls",
+            self._admin_host(),
+            "cluster",
+            "brokers",
+            subcommand,
+            str(node_id),
+        ]
+        if wait:
+            cmd.append("--wait")
+        if wait_timeout is not None:
+            cmd += ["--wait-timeout", wait_timeout]
+        return self._execute(cmd, timeout=timeout)
+
+    def cluster_decommission_broker(
+        self, node, wait=False, wait_timeout=None, timeout=None
+    ):
+        return self._cluster_brokers("decommission", node, wait, wait_timeout, timeout)
+
+    def cluster_decommission_status(
+        self, node, wait=False, wait_timeout=None, timeout=None
+    ):
+        return self._cluster_brokers(
+            "decommission-status", node, wait, wait_timeout, timeout
+        )
 
     def cluster_maintenance_enable(self, node, wait=False):
         node_id = (
@@ -1690,6 +1751,44 @@ class RpkTool:
 
         output = self._execute(cmd)
         return list(filter(None, map(parse, output.splitlines())))
+
+    def cluster_upgrade_status(self) -> dict[str, Any]:
+        """
+        Run `rpk cluster upgrade status` and return the parsed JSON response:
+        state (an RpkUpgradeFinalizationState string), active_version,
+        version_after_finalization, auto_finalization_enabled, and members
+        (per-broker node_id, release_version, logical_version, version_known,
+        alive).
+        """
+        cmd = [
+            self._rpk_binary(),
+            "-X",
+            "admin.hosts=" + self._admin_host(),
+            "cluster",
+            "upgrade",
+            "status",
+            "--format",
+            "json",
+        ]
+        return json.loads(self._execute(cmd))
+
+    def cluster_upgrade_finalize(self, no_confirm: bool = True) -> str:
+        """
+        Run `rpk cluster upgrade finalize` and return its output. The command
+        validates upfront (via the upgrade status) and only sends the finalize
+        request when the cluster is ready to finalize.
+        """
+        cmd = [
+            self._rpk_binary(),
+            "-X",
+            "admin.hosts=" + self._admin_host(),
+            "cluster",
+            "upgrade",
+            "finalize",
+        ]
+        if no_confirm:
+            cmd.append("--no-confirm")
+        return self._execute(cmd)
 
     def cluster_connections_list(
         self, limit: int, filter_raw: str | None = None, order_by: str | None = None

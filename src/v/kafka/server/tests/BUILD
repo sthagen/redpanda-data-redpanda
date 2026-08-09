@@ -471,6 +471,8 @@ redpanda_cc_btest(
         "//src/v/cluster:topic_metrics_watcher",
         "//src/v/features",
         "//src/v/kafka/protocol",
+        "//src/v/kafka/protocol:consumer_group_describe",
+        "//src/v/kafka/protocol:consumer_group_heartbeat",
         "//src/v/kafka/protocol:describe_redpanda_roles",
         "//src/v/kafka/server",
         "//src/v/redpanda/tests:fixture",
@@ -680,6 +682,7 @@ redpanda_cc_btest(
     deps = [
         "//src/v/bytes",
         "//src/v/cluster:fwd",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/protocol",
         "//src/v/kafka/server",
         "//src/v/model",
@@ -688,6 +691,7 @@ redpanda_cc_btest(
         "//src/v/storage:record_batch_builder",
         "//src/v/test_utils:random_bytes",
         "//src/v/test_utils:seastar_boost",
+        "//src/v/utils:uuid",
         "@boost//:range",
         "@boost//:test",
         "@seastar",
@@ -1350,5 +1354,25 @@ redpanda_cc_btest(
         "//src/v/test_utils:seastar_boost",
         "@seastar",
         "@seastar//:testing",
+    ],
+)
+
+redpanda_cc_bench(
+    name = "group_offset_commit_rpbench",
+    srcs = [
+        "group_offset_commit_bench.cc",
+    ],
+    memory = "2GiB",
+    deps = [
+        "//src/v/cluster",
+        "//src/v/config",
+        "//src/v/container:chunked_vector",
+        "//src/v/kafka/protocol",
+        "//src/v/kafka/protocol:offset_commit",
+        "//src/v/kafka/server",
+        "//src/v/model",
+        "@fmt",
+        "@seastar",
+        "@seastar//:benchmark",
     ],
 )

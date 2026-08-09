@@ -17,8 +17,12 @@
 #include "version/version.h"
 
 #include <seastar/core/app-template.hh>
+#include <seastar/util/log.hh>
+
+#include <fmt/format.h>
 
 #include <cerrno>
+#include <cstdio>
 #include <iostream>
 #include <memory>
 
@@ -37,14 +41,15 @@ int run_seastar(std::function<ss::future<int>()> main) {
     try {
         return app.run(args.size(), args.data(), std::move(main));
     } catch (...) {
-        std::cerr << std::current_exception() << "\n";
+        fmt::print(stderr, "{}\n", std::current_exception());
         return 1;
     }
 }
 
 int print_cluster_config_schema() {
     return run_seastar([]() -> ss::future<int> {
-        auto schema = util::generate_json_schema(config::configuration());
+        auto cfg = config::make_config();
+        auto schema = util::generate_json_schema(*cfg);
         if (!schema._body_writer) {
             vassert(
               !schema._res.empty(),

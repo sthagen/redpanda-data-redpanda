@@ -258,6 +258,8 @@ db_domain_manager::db_domain_manager(
   , gc_interval_(
       config::shard_local_cfg()
         .cloud_topics_long_term_garbage_collection_interval)
+  , flush_interval_(
+      config::shard_local_cfg().cloud_topics_long_term_flush_interval)
   , probe_(probe) {
     gc_interval_.watch([this]() { sem_.signal(); });
 }
@@ -745,6 +747,7 @@ db_domain_manager::get_offsets(rpc::get_offsets_request req) {
       .ec = rpc::errc::ok,
       .start_offset = metadata.start_offset,
       .next_offset = metadata.next_offset,
+      .migrating = metadata.migrating,
     };
 }
 
@@ -1141,6 +1144,44 @@ db_domain_manager::set_start_offset(rpc::set_start_offset_request req) {
     }
 
     co_return co_await do_set_start_offset(locks_res.value(), req);
+}
+
+ss::future<rpc::set_migrating_reply>
+db_domain_manager::set_migrating(rpc::set_migrating_request req) {
+    auto locks_res = co_await gate_and_open_writes({
+      .topic_read_locks = {req.tp.topic_id},
+      .partition_locks = {req.tp},
+    });
+    if (!locks_res.has_value()) {
+        co_return rpc::set_migrating_reply{
+          .ec = locks_res.error(),
+        };
+    }
+
+    auto reader = state_reader(db_->db().create_snapshot());
+    auto update = set_migrating_db_update{
+      .tp = req.tp,
+      .migrating = req.migrating,
+    };
+    chunked_vector<write_batch_row> rows;
+    bool is_no_op = false;
+    auto build_res = co_await update.build_rows(reader, rows, &is_no_op);
+    if (!build_res.has_value()) {
+        co_return rpc::set_migrating_reply{
+          .ec = log_and_convert(
+            build_res.error(), "Rejecting request to set migration phase: "),
+        };
+    }
+    if (is_no_op) {
+        co_return rpc::set_migrating_reply{.ec = rpc::errc::ok};
+    }
+    auto apply_res = co_await write_rows(locks_res.value(), std::move(rows));
+    if (!apply_res.has_value()) {
+        co_return rpc::set_migrating_reply{
+          .ec = apply_res.error(),
+        };
+    }
+    co_return rpc::set_migrating_reply{.ec = rpc::errc::ok};
 }
 
 ss::future<
@@ -1564,6 +1605,8 @@ db_domain_manager::get_extent_metadata(rpc::get_extent_metadata_request req) {
               .oid = extent.val.oid,
               .footer_pos = object.footer_pos,
               .object_size = object.object_size,
+              .imported = to_imported_ts_info(
+                object.imported_ts_location, extent.val.imported_ts_info),
             };
         }
         extents.push_back(std::move(em));
@@ -1996,11 +2039,30 @@ db_domain_manager::restore_domain(rpc::restore_domain_request req) {
     };
 }
 
+bool db_domain_manager::flushed_recently() const {
+    if (!last_flush_.has_value()) {
+        return false;
+    }
+    // Half the flush interval, so a domain still persists on roughly the
+    // configured cadence while retries in between don't each force a new SST.
+    return ss::lowres_clock::now() - *last_flush_ < flush_interval_() / 2;
+}
+
 ss::future<rpc::flush_domain_reply>
 db_domain_manager::flush_domain(rpc::flush_domain_request req) {
     auto gl_res = co_await gate_and_open_reads();
     if (!gl_res.has_value()) {
         co_return rpc::flush_domain_reply{.ec = gl_res.error()};
+    }
+    if (req.skip_if_recent && flushed_recently()) {
+        vlog(
+          cd_log.debug,
+          "Skipping flush of domain {}, last flushed recently",
+          db_->get_domain_uuid());
+        co_return rpc::flush_domain_reply{
+          .ec = rpc::errc::ok,
+          .uuid = db_->get_domain_uuid(),
+        };
     }
     auto flush_res = co_await db_->flush(30s);
     if (!flush_res.has_value()) {
@@ -2008,6 +2070,7 @@ db_domain_manager::flush_domain(rpc::flush_domain_request req) {
           .ec = log_and_convert(flush_res.error(), "Failed to flush domain: "),
         };
     }
+    last_flush_ = ss::lowres_clock::now();
     co_return rpc::flush_domain_reply{
       .ec = rpc::errc::ok,
       .uuid = db_->get_domain_uuid(),

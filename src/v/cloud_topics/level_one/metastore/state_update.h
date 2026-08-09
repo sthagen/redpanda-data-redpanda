@@ -30,20 +30,26 @@ enum class update_key : uint8_t {
     preregister_objects = 5,
     expire_preregistered_objects = 6,
     replace_objects = 7,
+    set_migrating = 8,
 };
 
 using stm_update_error = named_type<ss::sstring, struct update_error_tag>;
 
 struct new_object
   : public serde::
-      envelope<new_object, serde::version<0>, serde::compat_version<0>> {
+      envelope<new_object, serde::version<1>, serde::compat_version<0>> {
     struct metadata
       : public serde::
-          envelope<metadata, serde::version<0>, serde::compat_version<0>> {
+          envelope<metadata, serde::version<1>, serde::compat_version<0>> {
         friend bool operator==(const metadata&, const metadata&) = default;
         auto serde_fields() {
             return std::tie(
-              base_offset, last_offset, max_timestamp, filepos, len);
+              base_offset,
+              last_offset,
+              max_timestamp,
+              filepos,
+              len,
+              imported_ts_info);
         }
 
         kafka::offset base_offset;
@@ -51,11 +57,18 @@ struct new_object
         model::timestamp max_timestamp;
         size_t filepos;
         size_t len;
+        // The imported segment's descriptor (delta/term), for an extent
+        // imported from a tiered-storage segment; nullopt for native L1. An
+        // extent property -- the segment's location (ts_path) is an object
+        // property carried on new_object directly. apply() copies this onto the
+        // extent row verbatim.
+        std::optional<imported_ts_segment_info> imported_ts_info;
     };
 
     friend bool operator==(const new_object&, const new_object&) = default;
     auto serde_fields() {
-        return std::tie(oid, footer_pos, object_size, extent_metas);
+        return std::tie(
+          oid, footer_pos, object_size, extent_metas, imported_ts_location);
     }
 
     object_id oid;
@@ -65,6 +78,13 @@ struct new_object
       model::topic_id,
       chunked_hash_map<model::partition_id, metadata>>
       extent_metas;
+
+    // The imported segment's location (ts_path), for an object imported from a
+    // tiered-storage segment; nullopt for natively written L1 objects. An
+    // object property -- the per-extent segment descriptor (delta/term) lives
+    // on each `metadata` entry above. apply() copies this onto the object row
+    // verbatim.
+    std::optional<imported_ts_object_location> imported_ts_location;
 
     // Returns the sum of lengths of the extents collected.
     size_t collect_extents_by_tidp(sorted_extents_by_tidp_t*) const;
@@ -232,6 +252,33 @@ struct set_start_offset_update
     kafka::offset new_start_offset;
 };
 
+// Sets the partition's `migrating` flag. Setting the current value is a no-op.
+// Creates the partition's state if absent (the migrating marker may be the
+// first write for a partition being migrated).
+struct set_migrating_update
+  : public serde::envelope<
+      set_migrating_update,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    friend bool operator==(
+      const set_migrating_update&, const set_migrating_update&) = default;
+    auto serde_fields() { return std::tie(tp, migrating); }
+
+    static constexpr auto key{update_key::set_migrating};
+    static std::expected<set_migrating_update, stm_update_error> build(
+      const state&,
+      const model::topic_id_partition&,
+      bool migrating,
+      bool* is_no_op = nullptr);
+
+    std::expected<std::monostate, stm_update_error>
+    can_apply(const state&, bool* is_no_op = nullptr);
+    std::expected<std::monostate, stm_update_error> apply(state&);
+
+    model::topic_id_partition tp;
+    bool migrating{};
+};
+
 struct remove_objects_update
   : public serde::envelope<
       remove_objects_update,
@@ -336,6 +383,8 @@ struct fmt::formatter<cloud_topics::l1::update_key> final
               "expire_preregistered_objects", ctx);
         case cloud_topics::l1::update_key::replace_objects:
             return formatter<string_view>::format("replace_objects", ctx);
+        case cloud_topics::l1::update_key::set_migrating:
+            return formatter<string_view>::format("set_migrating", ctx);
         }
     }
 };

@@ -39,7 +39,7 @@
 namespace config {
 using namespace std::chrono_literals;
 
-configuration::configuration()
+configuration::configuration(ctor_key)
   : log_segment_size(
       *this,
       "log_segment_size",
@@ -1188,7 +1188,7 @@ configuration::configuration()
       "Number of partitions in the internal group membership topic.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       16)
-  , default_topic_replication(
+  , default_topic_replications(
       *this,
       "default_topic_replications",
       "Default replication factor for new topics.",
@@ -3556,7 +3556,7 @@ configuration::configuration()
       5min)
   , leader_balancer_node_mute_timeout(
       *this,
-      "leader_balancer_mute_timeout",
+      "leader_balancer_node_mute_timeout",
       "Leadership rebalancing node mute timeout.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       20s)
@@ -4243,6 +4243,16 @@ configuration::configuration()
       },
       std::vector<ss::sstring>{"BASIC"},
       validate_http_authn_mechanisms)
+  , scram_credential_cache_enabled(
+      *this,
+      "scram_credential_cache_enabled",
+      "Whether to cache SCRAM password validation results for authentication "
+      "paths that receive a plaintext password on every request (HTTP Basic "
+      "authentication and SASL/PLAIN). When enabled, repeat authentications "
+      "skip the salted password derivation, which costs thousands of HMAC "
+      "operations per validation.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      false)
   , enable_mpx_extensions(
       *this,
       "enable_mpx_extensions",
@@ -4715,6 +4725,16 @@ configuration::configuration()
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       10000,
       {.min = 1})
+  , datalake_coordinator_max_bytes_per_commit(
+      *this,
+      "datalake_coordinator_max_bytes_per_commit",
+      "Soft target for the in-memory metadata of the pending data files "
+      "committed to an Iceberg table in a single commit. A larger backlog is "
+      "committed across multiple passes to bound the memory used per commit. "
+      "Complements datalake_coordinator_max_files_per_commit.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      32ULL * 1024 * 1024,
+      {.min = 1})
   , datalake_coordinator_max_pending_files(
       *this,
       "datalake_coordinator_max_pending_files",
@@ -4724,6 +4744,16 @@ configuration::configuration()
       "coordinator's pending-file memory.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       100000,
+      {.min = 1})
+  , datalake_coordinator_max_pending_bytes(
+      *this,
+      "datalake_coordinator_max_pending_bytes",
+      "Soft limit on the in-memory metadata a coordinator holds for pending "
+      "data files on disk, across all of its topics, before it sheds load, "
+      "rejecting new files and offset requests until it commits enough of the "
+      "backlog. Complements datalake_coordinator_max_pending_files.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      32ULL * 1024 * 1024,
       {.min = 1})
   , iceberg_disable_automatic_snapshot_expiry(
       *this,
@@ -5339,9 +5369,11 @@ configuration::configuration()
       "or any cluster where stability, data loss, or the ability to upgrade "
       "are a concern. To enable experimental features, set the value of this "
       "configuration option to the current unix epoch expressed in seconds. "
-      "The value must be within one hour of the current time on the broker."
+      "The value must be within one hour of the current time on the broker. "
       "Once experimental features are enabled they cannot be disabled.",
-      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      {.needs_restart = needs_restart::no,
+       .visibility = visibility::tunable,
+       .usable_before_ready = usable_before_ready::yes},
       "",
       [this](const ss::sstring& v) -> std::optional<ss::sstring> {
           if (development_features_enabled()) {
@@ -5399,7 +5431,9 @@ std::unique_ptr<configuration> make_config() {
     // the case in all tests (BOOST_AUTO_TEST_CASE). Further, otherwise we are
     // running on a native posix thread with large stack anyway so this isn't an
     // issue.
-    auto make_cfg = []() { return std::make_unique<configuration>(); };
+    auto make_cfg = []() {
+        return std::make_unique<configuration>(configuration::ctor_key{});
+    };
     if (seastar::engine_is_ready() && ss::thread::running_in_thread()) {
         ss::thread_attributes attrs;
         attrs.stack_size = 512_KiB;

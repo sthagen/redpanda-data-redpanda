@@ -87,8 +87,9 @@ class CoordinatorBackpressureTest(RedpandaTest):
         """
         Returns the number of pending data files (including DLQ files) the
         coordinator is tracking for the topic, read from the coordinator state
-        admin endpoint. This mirrors what the coordinator counts when deciding
-        to shed load.
+        admin endpoint. This is the file count the coordinator compares against
+        datalake_coordinator_max_pending_files; it sheds load on the estimated
+        memory of those files as well, which is not visible here.
         """
         admin = admin_v2.Admin(self.redpanda)
         request = admin_v2.datalake_pb.GetCoordinatorStateRequest(
@@ -133,7 +134,7 @@ class CoordinatorBackpressureTest(RedpandaTest):
                 err_msg="coordinator never applied backpressure",
             )
 
-            # Translators respect the signal by backing off rather than spinning.
+            # Translators respect the signal by backing off.
             wait_until(
                 lambda: self.metric_sum(TRANSLATION_BACKOFF_METRIC) > 0,
                 timeout_sec=30,
@@ -186,12 +187,26 @@ class CoordinatorBackpressureTest(RedpandaTest):
                 err_msg="pending/translated file counts never stabilized under backpressure",
             )
 
-            # Relieve the pressure so the backlog drains promptly.
+            # Regression check for a case where translation would spin and
+            # churn despite backpressure: backing off means each translator
+            # sleeps its loop jitter between coordinator polls, so the
+            # cumulative backoff count stays on the order of hundreds, with so
+            # few partitions.
+            backoffs = self.metric_sum(TRANSLATION_BACKOFF_METRIC)
+            self.logger.info(f"translator backoffs while backpressured: {backoffs}")
+            assert backoffs < 10000, (
+                f"translators spun on the backpressured coordinator: "
+                f"{backoffs} backoff loop iterations"
+            )
+
+            # Relieve the pressure so the backlog drains promptly. Both limits
+            # have to be lifted: either one on its own keeps shedding load.
             self.redpanda.set_cluster_config(
                 {
                     "iceberg_catalog_commit_interval_ms": 1000,
                     "datalake_coordinator_max_files_per_commit": 10000,
                     "datalake_coordinator_max_pending_files": 1000000,
+                    "datalake_coordinator_max_pending_bytes": 1024 * 1024 * 1024,
                 }
             )
             wait_until(

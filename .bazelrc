@@ -5,6 +5,9 @@ common --extra_toolchains=@current_llvm_toolchain//:all
 common --experimental_repository_downloader_retries=15
 common --http_connector_attempts=24
 
+# Multi-GB CAS uploads don't fit in the 60s default deadline: CORE-16940.
+build --remote_timeout=600
+
 # Bazel 9 removes native C++ rule symbols. Autoload them for external rulesets
 # that have not migrated all generated BUILD/Starlark files to explicit loads.
 common --incompatible_autoload_externally=+@rules_cc
@@ -23,6 +26,11 @@ common --@toolchains_llvm//toolchain/config:libunwind=False
 common --@toolchains_llvm//toolchain/config:compiler-rt=False
 build --linkopt --unwindlib=libgcc
 build --linkopt -stdlib=libc++
+
+# Statically linked binaries (mostly benches) are very large (up to ~4 GB in
+# debug), which isn't necessary in dev and debug modes: link dynamically by
+# default. Release overrides this back to static linking below.
+build --dynamic_mode=fully
 
 # Use Bash instead of system python for finding the hermetic interpreter
 # within Bazel due to the `python3` binary not being present on CI
@@ -114,13 +122,17 @@ build --per_file_copt=.*\\.pb\\.cc@-Wno-deprecated-declarations
 build --per_file_copt=external/protobuf.*@-Wno-deprecated-declarations
 build --host_per_file_copt=external/protobuf.*@-Wno-deprecated-declarations
 
-# Suppress -Wunused-variable in all external modules: we don't control their
+# Suppress unused diagnostics in all external modules: we don't control their
 # sources, and the noise crowds out warnings from our own code. host_per_file_copt
 # covers exec-config (tool) builds like ragel.
 build --per_file_copt=external/.*@-Wno-unused-variable
 build --host_per_file_copt=external/.*@-Wno-unused-variable
 build --per_file_copt=external/.*@-Wno-unused-but-set-variable
 build --host_per_file_copt=external/.*@-Wno-unused-but-set-variable
+# New warning in clang-23 which is fairly aggressive and issues lots of warnings
+# in old/not-updated libraries
+build --per_file_copt=external/.*@-Wno-unused-template
+build --host_per_file_copt=external/.*@-Wno-unused-template
 
 # ragel/colm: assert(false) at end of non-void function (e.g. lookup.cc:50) — UB under NDEBUG but unreachable in practice; unfixed upstream
 build --per_file_copt=external/ragel.*@-Wno-return-type
@@ -261,7 +273,12 @@ build:debug --copt=-O1
 # This may also happen if the target rejected all inputs we tried so far
 #
 # https://llvm.org/docs/LibFuzzer.html
-build:fuzz --config=debug
+#
+# ASan and libFuzzer coverage on an -O1 build, like the default OSS-Fuzz
+# configuration. This is where long fuzzing runs spend their CPU.
+build:fuzz --config=san-asan-only
+build:fuzz --config=dbgsym-lines
+build:fuzz --copt=-O1
 build:fuzz --copt=-fsanitize=fuzzer-no-link
 
 # =================================
@@ -313,6 +330,7 @@ build:secure --config=relro
 # --config=release doesn't create a _true_ release binary, that needs at
 # least --stamp=full and PGO-specific compile steps (outside of bazel).
 build:release --compilation_mode opt
+build:release --dynamic_mode=default
 build:release --config=secure
 build:release --@seastar//:stack_guards=False --@seastar//:debug=False
 build:release --copt -g --strip=never
@@ -324,21 +342,10 @@ build:release --cxxopt=-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_NONE
 build:release --host_cxxopt=-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_NONE
 
 
-# Instrumentation/training step
-# /tmp is a dummy path as bazel expects an arg, we provide the actual path via
-# env var at run time
-build:pgo-instrument --config=lto --fdo_instrument=/tmp
-
-# Final/Optimization build step
-
-# We can't include this in here as bazel wants an absolute path (and we don't
-# really know that) as all the common dirs like /tmp are sandboxed so we can't
-# use them. We pass --fdo_optimize from task instead where the full path is known.
-# build:pgo-optimize --fdo_optimize=
-
 # bazel seems to pass -fprofile-correction unconditionally but that only exists
 # in gcc so need to make clang ignore it
-build:pgo-optimize --config=lto --copt -Wno-ignored-optimization-argument
+build:pgo --config=lto --copt -Wno-ignored-optimization-argument
+build:pgo --fdo_profile=//tools:redpanda_pgo_profile
 
 
 build:stamp --stamp --workspace_status_command=./bazel/stamp_vars.sh

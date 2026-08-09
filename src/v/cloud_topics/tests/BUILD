@@ -18,7 +18,7 @@ redpanda_test_cc_library(
 
 redpanda_cc_gtest(
     name = "end_to_end_test",
-    timeout = "short",
+    timeout = "moderate",
     srcs = [
         "end_to_end_test.cc",
     ],
@@ -40,6 +40,8 @@ redpanda_cc_gtest(
         "//src/v/cluster:self_test",
         "//src/v/cluster:topic_metrics_watcher",
         "//src/v/config",
+        "//src/v/container:chunked_vector",
+        "//src/v/kafka/data:partition_proxy",
         "//src/v/kafka/server/tests:kafka_test_utils",
         "//src/v/model",
         "//src/v/model:batch_builder",
@@ -91,7 +93,9 @@ redpanda_cc_gtest(
         "//src/v/kafka/server/tests:kafka_test_utils",
         "//src/v/test_utils:gtest",
         "//src/v/test_utils:scoped_config",
+        "@fmt",
         "@googletest//:gtest",
+        "@seastar",
     ],
 )
 

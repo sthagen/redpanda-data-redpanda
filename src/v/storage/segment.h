@@ -23,6 +23,7 @@
 #include "storage/version.h"
 #include "utils/functional.h"
 
+#include <seastar/core/abort_source.hh>
 #include <seastar/core/file.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/rwlock.hh>
@@ -253,8 +254,12 @@ public:
     ss::future<ss::rwlock::holder> read_lock(
       ss::semaphore::time_point timeout = ss::semaphore::time_point::max());
 
+    ss::future<ss::rwlock::holder> read_lock(ss::abort_source& as);
+
     ss::future<ss::rwlock::holder> write_lock(
       ss::semaphore::time_point timeout = ss::semaphore::time_point::max());
+
+    ss::future<ss::rwlock::holder> write_lock(ss::abort_source& as);
 
     /*
      * return an estimate of how much data on disk is associated with this
@@ -460,10 +465,15 @@ segment::is_compactible(const compaction::compaction_config& cfg) const {
     // compaction a segment must both
     // 1. have latest batch timestamp longer ago than min.compaction.lag.ms, and
     // 2. end before the max compactible offset.
-    const auto now = to_time_point(model::timestamp::now());
-    const auto max_batch_ts = to_time_point(index().retention_timestamp());
-    if (now - max_batch_ts < cfg.min_lag_ms) {
-        return false;
+    //
+    // As in Kafka's LogCleanerManager::cleanableOffsets, the timestamp check is
+    // skipped entirely when the lag is unset.
+    if (cfg.min_lag_ms > std::chrono::milliseconds{0}) {
+        const auto now = to_time_point(model::timestamp::now());
+        const auto max_batch_ts = to_time_point(index().retention_timestamp());
+        if (now - max_batch_ts < cfg.min_lag_ms) {
+            return false;
+        }
     }
     return _tracker.get_stable_offset() <= cfg.max_removable_local_log_offset;
 }
@@ -547,9 +557,16 @@ inline ss::future<ss::rwlock::holder>
 segment::read_lock(ss::semaphore::time_point timeout) {
     return _destructive_ops.hold_read_lock(timeout);
 }
+inline ss::future<ss::rwlock::holder> segment::read_lock(ss::abort_source& as) {
+    return _destructive_ops.hold_read_lock(as);
+}
 inline ss::future<ss::rwlock::holder>
 segment::write_lock(ss::semaphore::time_point timeout) {
     return _destructive_ops.hold_write_lock(timeout);
+}
+inline ss::future<ss::rwlock::holder>
+segment::write_lock(ss::abort_source& as) {
+    return _destructive_ops.hold_write_lock(as);
 }
 inline void segment::tombstone() { _flags |= bitflags::mark_tombstone; }
 inline bool segment::has_outstanding_locks() const {

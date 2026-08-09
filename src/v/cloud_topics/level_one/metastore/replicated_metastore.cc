@@ -9,6 +9,7 @@
  */
 #include "cloud_topics/level_one/metastore/replicated_metastore.h"
 
+#include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/metastore/leader_router.h"
 #include "cloud_topics/level_one/metastore/manifest_io.h"
 #include "cloud_topics/level_one/metastore/rpc_types.h"
@@ -16,6 +17,7 @@
 #include "cloud_topics/logger.h"
 
 #include <algorithm>
+#include <map>
 
 namespace cloud_topics::l1 {
 
@@ -55,6 +57,14 @@ new_object meta_to_rpc_obj(const metastore::object_metadata& obj) {
         meta.max_timestamp = ntp_meta.max_timestamp;
         meta.filepos = ntp_meta.pos;
         meta.len = ntp_meta.size;
+        if (ntp_meta.imported.has_value()) {
+            // Split the imported descriptor onto the storage rows: the segment
+            // delta/term on the extent, the ts_path on the object (an imported
+            // object is single-extent, so its location is this extent's).
+            meta.imported_ts_info = to_segment_info(*ntp_meta.imported);
+            rpc_obj.imported_ts_location = to_object_location(
+              *ntp_meta.imported);
+        }
         topic_map[ntp_meta.tidp.partition] = std::move(meta);
     }
 
@@ -107,6 +117,8 @@ public:
     std::expected<void, error> remove_pending_object(object_id) override;
     std::expected<void, error>
       add(object_id, metastore::object_metadata::ntp_metadata) override;
+    std::expected<object_id, error>
+      add_imported(metastore::object_metadata::ntp_metadata) override;
     std::expected<void, error>
     finish(object_id, size_t footer_pos, size_t object_size) override;
     bool is_empty() const override;
@@ -246,6 +258,41 @@ replicated_object_builder::add(
     return {};
 }
 
+std::expected<object_id, replicated_object_builder::error>
+replicated_object_builder::add_imported(
+  metastore::object_metadata::ntp_metadata ntp_meta) {
+    if (ntp_meta.base_offset > ntp_meta.last_offset) {
+        return std::unexpected(
+          error{fmt::format(
+            "Imported metadata has inverted offsets for partition {}: "
+            "base_offset {} > last_offset {}",
+            ntp_meta.tidp,
+            ntp_meta.base_offset,
+            ntp_meta.last_offset)});
+    }
+    auto metastore_pid = fe_.metastore_partition(ntp_meta.tidp);
+    if (!metastore_pid) {
+        return std::unexpected(
+          error{"could not determine metastore partition for add_imported()"});
+    }
+    // Imported objects reference an existing tiered-storage segment -- there is
+    // no L1 write to reserve -- so the id is created locally without
+    // pre-registration and recorded as a finished single-extent object for its
+    // metastore partition.
+    auto oid = create_object_id();
+    auto object_size = ntp_meta.size;
+    metastore::object_metadata::ntp_metas_list_t metas;
+    metas.emplace_back(std::move(ntp_meta));
+    partitions_[*metastore_pid].finished_objects_.emplace_back(
+      metastore::object_metadata{
+        .oid = oid,
+        .footer_pos = 0,
+        .object_size = object_size,
+        .ntp_metas = std::move(metas),
+      });
+    return oid;
+}
+
 std::expected<void, replicated_object_builder::error>
 replicated_object_builder::finish(
   object_id oid, size_t footer_pos, size_t object_size) {
@@ -296,6 +343,7 @@ rpc_to_meta_extent_metadata(chunked_vector<rpc::extent_metadata> v) {
               .oid = e.object_info->oid,
               .footer_pos = e.object_info->footer_pos,
               .object_size = e.object_info->object_size,
+              .imported = e.object_info->imported,
             };
         }
         res.push_back(
@@ -357,6 +405,7 @@ replicated_metastore::get_offsets(const model::topic_id_partition& tidp) {
     metastore::offsets_response resp;
     resp.start_offset = reply.start_offset;
     resp.next_offset = reply.next_offset;
+    resp.migrating = reply.migrating;
     co_return resp;
 }
 
@@ -545,6 +594,27 @@ replicated_metastore::set_start_offset(
             co_return std::expected<void, metastore::errc>{};
         }
     }
+}
+
+ss::future<std::expected<void, metastore::errc>>
+replicated_metastore::set_migrating(
+  const model::topic_id_partition& tidp, bool migrating) {
+    rpc::set_migrating_request req;
+    req.tp = tidp;
+    req.migrating = migrating;
+
+    auto reply_fut = co_await ss::coroutine::as_future(
+      fe_.set_migrating(std::move(req)));
+    if (reply_fut.failed()) {
+        auto ex = reply_fut.get_exception();
+        vlog(cd_log.warn, "Error while sending request: {}", ex);
+        co_return std::unexpected(metastore::errc::transport_error);
+    }
+    auto reply = reply_fut.get();
+    if (reply.ec != rpc::errc::ok) {
+        co_return std::unexpected(rpc_to_meta_errc(reply.ec));
+    }
+    co_return std::expected<void, metastore::errc>{};
 }
 
 ss::future<std::expected<metastore::topic_removal_response, metastore::errc>>
@@ -1098,7 +1168,7 @@ replicated_metastore::get_extent_metadata_backwards(
 }
 
 ss::future<std::expected<std::nullopt_t, metastore::errc>>
-replicated_metastore::flush() {
+replicated_metastore::flush(flush_type type) {
     auto num_partitions = fe_.num_metastore_partitions();
     if (!num_partitions.has_value()) {
         vlog(cd_log.warn, "Unable to get num metastore partitions for flush");
@@ -1113,22 +1183,34 @@ replicated_metastore::flush() {
 
     chunked_vector<domain_uuid> domains;
     domains.reserve(*num_partitions);
+    std::optional<errc> flush_error;
     for (int pid = 0; pid < *num_partitions; ++pid) {
         rpc::flush_domain_request req{
-          .metastore_partition = model::partition_id{pid}};
+          .metastore_partition = model::partition_id{pid},
+          .skip_if_recent = type == flush_type::skip_if_recent};
 
         auto reply_fut = co_await ss::coroutine::as_future(
           fe_.flush_domain(std::move(req)));
         if (reply_fut.failed()) {
             auto ex = reply_fut.get_exception();
             vlog(cd_log.warn, "Error flushing partition {}: {}", pid, ex);
-            co_return std::unexpected(errc::transport_error);
+            flush_error = flush_error.value_or(errc::transport_error);
+            continue;
         }
         auto reply = reply_fut.get();
         if (reply.ec != rpc::errc::ok) {
-            co_return std::unexpected(rpc_to_meta_errc(reply.ec));
+            vlog(cd_log.warn, "Error flushing partition {}: {}", pid, reply.ec);
+            flush_error = flush_error.value_or(rpc_to_meta_errc(reply.ec));
+            continue;
         }
         domains.push_back(reply.uuid);
+    }
+
+    // The manifest must list every domain to be usable for restore, so only
+    // upload it if all partitions flushed. Otherwise report the error and let
+    // the caller retry.
+    if (flush_error.has_value()) {
+        co_return std::unexpected(*flush_error);
     }
 
     metastore_manifest manifest{

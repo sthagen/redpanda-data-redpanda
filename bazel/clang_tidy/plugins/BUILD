@@ -25,13 +25,15 @@ cc_library(
 cc_binary(
     name = "plugins.so",
     srcs = [
+        "redpanda_eager_json_serialization_check.cc",
+        "redpanda_eager_json_serialization_check.h",
         "redpanda_lambda_coroutine_deduces_this_check.cc",
         "redpanda_lambda_coroutine_deduces_this_check.h",
         "redpanda_noop_check.h",
         "redpanda_tidy_module.cc",
     ],
     copts = redpanda_copts() + [
-        "-Iexternal/toolchains_llvm++llvm+current_llvm_toolchain_llvm/include",
+        "-isystemexternal/toolchains_llvm++llvm+current_llvm_toolchain_llvm/include",
         "-Wno-deprecated-declarations",
         "-Wno-unused-parameter",
     ],

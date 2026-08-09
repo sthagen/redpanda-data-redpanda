@@ -20,11 +20,16 @@ namespace cloud_topics::l1 {
 struct metadata_row_value
   : public serde::envelope<
       metadata_row_value,
-      serde::version<1>,
+      serde::version<2>,
       serde::compat_version<0>> {
     auto serde_fields() {
         return std::tie(
-          start_offset, next_offset, compaction_epoch, size, num_extents);
+          start_offset,
+          next_offset,
+          compaction_epoch,
+          size,
+          num_extents,
+          migrating);
     }
     kafka::offset start_offset{};
     kafka::offset next_offset{};
@@ -34,19 +39,24 @@ struct metadata_row_value
     size_t size{0};
     // Number of extents in the partition, updated incrementally.
     size_t num_extents{0};
+    // True while mid tiered->cloud migration; for offline/remote consumers.
+    // Defaults to false for rows predating this field.
+    bool migrating{};
 };
 
 struct extent_row_value
   : public serde::
-      envelope<extent_row_value, serde::version<0>, serde::compat_version<0>> {
+      envelope<extent_row_value, serde::version<1>, serde::compat_version<0>> {
     auto serde_fields() {
-        return std::tie(last_offset, max_timestamp, filepos, len, oid);
+        return std::tie(
+          last_offset, max_timestamp, filepos, len, oid, imported_ts_info);
     }
     kafka::offset last_offset;
     model::timestamp max_timestamp;
     size_t filepos{0};
     size_t len{0};
     object_id oid{};
+    std::optional<imported_ts_segment_info> imported_ts_info;
 };
 
 struct term_row_value

@@ -1,6 +1,24 @@
 load("//bazel:test.bzl", "redpanda_cc_gtest")
 
 redpanda_cc_gtest(
+    name = "object_index_test",
+    timeout = "short",
+    srcs = [
+        "object_index_test.cc",
+    ],
+    deps = [
+        "//src/v/cloud_storage:offset_index",
+        "//src/v/cloud_topics/level_one/common:object",
+        "//src/v/cloud_topics/level_one/common:object_handle",
+        "//src/v/cloud_topics/level_one/common:ts_object",
+        "//src/v/model",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "object_test",
     timeout = "short",
     srcs = [
@@ -73,6 +91,49 @@ redpanda_cc_gtest(
         "//src/v/test_utils:scoped_config",
         "//src/v/test_utils:tmp_dir",
         "//src/v/utils:retry_chain_node",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "chunk_data_source_test",
+    timeout = "short",
+    srcs = [
+        "chunk_data_source_test.cc",
+    ],
+    deps = [
+        "//src/v/bytes:iobuf",
+        "//src/v/bytes:iostream",
+        "//src/v/cloud_topics/level_one/common:abstract_io",
+        "//src/v/cloud_topics/level_one/common:chunk_data_source",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "open_object_test",
+    timeout = "short",
+    srcs = [
+        "open_object_test.cc",
+    ],
+    deps = [
+        "//src/v/bytes:iostream",
+        "//src/v/cloud_io:admission_control_types",
+        "//src/v/cloud_storage",
+        "//src/v/cloud_topics/level_one/common:fake_io",
+        "//src/v/cloud_topics/level_one/common:object",
+        "//src/v/cloud_topics/level_one/common:object_handle",
+        "//src/v/cloud_topics/level_one/common:object_id",
+        "//src/v/cloud_topics/level_one/common:open_object",
+        "//src/v/model",
+        "//src/v/model/tests:random",
+        "//src/v/storage:record_batch_utils",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:scoped_config",
+        "@abseil-cpp//absl/container:btree",
         "@googletest//:gtest",
         "@seastar",
     ],

@@ -203,12 +203,15 @@ struct get_first_offset_for_bytes_request
 
 struct get_offsets_reply
   : serde::
-      envelope<get_offsets_reply, serde::version<0>, serde::compat_version<0>> {
-    auto serde_fields() { return std::tie(ec, start_offset, next_offset); }
+      envelope<get_offsets_reply, serde::version<1>, serde::compat_version<0>> {
+    auto serde_fields() {
+        return std::tie(ec, start_offset, next_offset, migrating);
+    }
 
     errc ec;
     kafka::offset start_offset;
     kafka::offset next_offset;
+    bool migrating{};
 };
 struct get_offsets_request
   : serde::envelope<
@@ -242,13 +245,16 @@ struct get_size_request
 struct extent_object_info
   : serde::envelope<
       extent_object_info,
-      serde::version<0>,
+      serde::version<1>,
       serde::compat_version<0>> {
-    auto serde_fields() { return std::tie(oid, footer_pos, object_size); }
+    auto serde_fields() {
+        return std::tie(oid, footer_pos, object_size, imported);
+    }
 
     object_id oid;
     size_t footer_pos{0};
     size_t object_size{0};
+    std::optional<imported_ts_info> imported;
 };
 
 struct extent_metadata
@@ -371,6 +377,27 @@ struct set_start_offset_request
 
     model::topic_id_partition tp;
     kafka::offset start_offset;
+};
+
+struct set_migrating_reply
+  : serde::envelope<
+      set_migrating_reply,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    auto serde_fields() { return std::tie(ec); }
+
+    errc ec;
+};
+struct set_migrating_request
+  : serde::envelope<
+      set_migrating_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    using resp_t = set_migrating_reply;
+    auto serde_fields() { return std::tie(tp, migrating); }
+
+    model::topic_id_partition tp;
+    bool migrating{};
 };
 
 struct remove_topics_reply
@@ -537,11 +564,17 @@ struct flush_domain_reply
 struct flush_domain_request
   : serde::envelope<
       flush_domain_request,
-      serde::version<0>,
+      serde::version<1>,
       serde::compat_version<0>> {
     using resp_t = flush_domain_reply;
-    auto serde_fields() { return std::tie(metastore_partition); }
+    auto serde_fields() {
+        return std::tie(metastore_partition, skip_if_recent);
+    }
     model::partition_id metastore_partition;
+
+    // When set, the domain may no-op if it flushed within half of
+    // cloud_topics_long_term_flush_interval.
+    bool skip_if_recent{false};
 };
 
 struct preregister_objects_reply
