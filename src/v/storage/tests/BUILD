@@ -286,6 +286,7 @@ redpanda_cc_gtest(
         "//src/v/model",
         "//src/v/storage:batch_cache",
         "//src/v/storage:record_batch_builder",
+        "//src/v/test_utils:async",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
         "@seastar",
@@ -560,7 +561,7 @@ redpanda_cc_gtest(
 
 redpanda_cc_gtest(
     name = "segment_concatenation_test",
-    timeout = "short",
+    timeout = "moderate",
     srcs = [
         "segment_concatenation_test.cc",
     ],
@@ -669,6 +670,7 @@ redpanda_cc_gtest(
         "//src/v/storage:resources",
         "//src/v/test_utils:gtest",
         "//src/v/utils:directory_walker",
+        "@fmt",
         "@googletest//:gtest",
         "@seastar",
     ],
@@ -1062,15 +1064,34 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/base",
         "//src/v/bytes:iostream",
+        "//src/v/config",
         "//src/v/container:chunked_vector",
         "//src/v/model",
         "//src/v/random:generators",
         "//src/v/storage",
+        "//src/v/storage:chunk_cache",
+        "//src/v/storage:resources",
         "//src/v/storage:segment_appender",
+        "//src/v/test_utils:async",
         "//src/v/test_utils:gtest",
+        "//src/v/test_utils:manual_file",
         "//src/v/test_utils:random_bytes",
+        "//src/v/test_utils:scoped_config",
         "@googletest//:gtest",
         "@seastar",
+    ],
+)
+
+redpanda_cc_bench(
+    name = "batch_cache_rpbench",
+    srcs = ["batch_cache_bench.cc"],
+    deps = [
+        "//src/v/bytes:iobuf",
+        "//src/v/model",
+        "//src/v/storage:batch_cache",
+        "//src/v/storage:record_batch_builder",
+        "@seastar",
+        "@seastar//:benchmark",
     ],
 )
 
