@@ -14,6 +14,7 @@
 #include "cluster/controller.h"
 #include "cluster/ephemeral_credential_frontend.h"
 #include "cluster/security_frontend.h"
+#include "cluster/topic_table.h"
 #include "config/configuration.h"
 #include "kafka/client/client.h"
 #include "kafka/data/record_batcher.h"
@@ -21,10 +22,15 @@
 #include "security/audit/audit_log_manager.h"
 #include "security/audit/audit_log_topic.h"
 #include "security/audit/logger.h"
+#include "security/authorizer.h"
 #include "utils/retry.h"
+
+#include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/exception.hh>
 
 #include <algorithm>
 #include <chrono>
+#include <optional>
 
 namespace security::audit {
 
@@ -100,6 +106,11 @@ public:
         return ss::now();
     }
     ss::future<> create_internal_topic() {
+        if (audit_topic_exists()) {
+            vlog(
+              adtlog.debug, "Audit log topic already exists, skipping create");
+            co_return;
+        }
         int16_t replication_factor
           = config::shard_local_cfg().audit_log_replication_factor().value_or(
             controller()->internal_topic_replication());
@@ -182,6 +193,27 @@ private:
 
 class kafka_sink_impl;
 
+namespace {
+
+/// The audit principal's permissions on the audit topic: created by
+/// set_auditing_permissions() and checked by audit_acls_exist().
+const security::resource_pattern audit_topic_pattern{
+  security::resource_type::topic,
+  model::kafka_audit_logging_topic,
+  security::pattern_type::literal};
+const security::acl_entry audit_create_acl{
+  audit_principal,
+  security::acl_host::wildcard_host(),
+  security::acl_operation::create,
+  security::acl_permission::allow};
+const security::acl_entry audit_write_acl{
+  audit_principal,
+  security::acl_host::wildcard_host(),
+  security::acl_operation::write,
+  security::acl_permission::allow};
+
+} // namespace
+
 class kafka_client_impl final : public audit_client {
 public:
     kafka_client_impl(
@@ -235,7 +267,37 @@ public:
     }
     ss::future<> client_shutdown() final { co_await _client.stop(); }
     ss::future<> do_configure() final {
+        // Set _misconfigured on a failure from any configuration step. Only
+        // create_internal_topic() reports through the kafka client's
+        // mitigate_error(), and it runs only while the local topic table has
+        // no audit topic.
+        auto fut = co_await ss::coroutine::as_future(configure_client());
+        if (fut.failed()) {
+            auto eptr = fut.get_exception();
+            if (const auto errc = misconfigured_auth_error(eptr)) {
+                co_await update_status(*errc);
+            }
+            co_await ss::coroutine::return_exception_ptr(std::move(eptr));
+        }
+        // Every step succeeded, so the authorization works. Clear a flag
+        // that an earlier attempt set.
+        co_await update_status(kafka::error_code::none);
+    }
+
+private:
+    kafka_sink_impl* sink();
+
+    ss::future<> configure_client() {
         co_await set_client_credentials();
+        // Propagate the audit principal's credential to every broker up
+        // front (best effort). Previously propagation relied on
+        // create_internal_topic() failing SASL and mitigate_error()
+        // calling inform(), and the lines after it were written on the
+        // hidden assumption that the create had already performed that
+        // authentication bootstrap -- _client.connect() has no SASL
+        // mitigation of its own. With the create skipped below that
+        // trigger is gone, so the propagation must happen here.
+        co_await inform(kafka::client::unknown_node_id);
         co_await set_auditing_permissions();
         co_await create_internal_topic();
         co_await _client.connect();
@@ -248,11 +310,30 @@ public:
         _client.set_max_retries(size_t{5});
     }
 
-private:
-    kafka_sink_impl* sink();
-
     auth_misconfigured_t _misconfigured{auth_misconfigured_t::no};
     kafka::client::client _client;
+
+    /// The error code in `eptr`, when it says authorization is misconfigured.
+    static std::optional<kafka::error_code>
+    misconfigured_auth_error(const std::exception_ptr& eptr) {
+        try {
+            std::rethrow_exception(eptr);
+        } catch (const kafka::exception_base& ex) {
+            if (indicates_misconfigured_auth(ex.error)) {
+                return ex.error;
+            }
+        } catch (...) {
+        }
+        return std::nullopt;
+    }
+
+    /// illegal_sasl_state means a listener rejects the audit client's SASL
+    /// handshake. topic_authorization_failed means the audit principal lacks
+    /// ACLs on the audit topic. Both need an operator to fix the cluster.
+    static bool indicates_misconfigured_auth(kafka::error_code errc) {
+        return errc == kafka::error_code::illegal_sasl_state
+               || errc == kafka::error_code::topic_authorization_failed;
+    }
 
     ss::future<> update_status(kafka::error_code errc);
     ss::future<> do_update_status(auth_misconfigured_t);
@@ -343,32 +424,64 @@ private:
           });
     }
 
-    ss::future<> set_auditing_permissions() {
-        /// Give permissions to create and write to the audit topic
-        security::acl_entry acl_create_entry{
-          audit_principal,
-          security::acl_host::wildcard_host(),
-          security::acl_operation::create,
-          security::acl_permission::allow};
-
-        security::acl_entry acl_write_entry{
-          audit_principal,
-          security::acl_host::wildcard_host(),
-          security::acl_operation::write,
-          security::acl_permission::allow};
-
-        security::resource_pattern audit_topic_pattern{
-          security::resource_type::topic,
-          model::kafka_audit_logging_topic,
-          security::pattern_type::literal};
-
-        co_await controller()->get_security_frontend().local().create_acls(
-          {security::acl_binding{audit_topic_pattern, acl_create_entry},
-           security::acl_binding{audit_topic_pattern, acl_write_entry}},
-          5s);
+    bool audit_acls_exist() {
+        auto& auth = controller()->get_authorizer().local();
+        auto has = [&](const security::acl_entry& entry) {
+            return !auth
+                      .acls(
+                        security::acl_binding_filter{
+                          audit_topic_pattern, entry})
+                      .empty();
+        };
+        return has(audit_create_acl) && has(audit_write_acl);
     }
 
+    ss::future<> set_auditing_permissions() {
+        // The ACL write below is a controller-leader-dependent raft-0 write;
+        // skip it when both bindings are already readable locally so that
+        // re-enabling auditing (or restarting a broker) does not depend on
+        // an elected controller. A stale-read miss here is benign: the
+        // create_acls call is idempotent. A stale-read false positive (the
+        // bindings were just deleted) degrades loudly via
+        // topic_authorization_failed in update_status().
+        if (audit_acls_exist()) {
+            vlog(adtlog.debug, "Audit ACLs already exist, skipping create");
+            co_return;
+        }
+        auto results
+          = co_await controller()->get_security_frontend().local().create_acls(
+            {security::acl_binding{audit_topic_pattern, audit_create_acl},
+             security::acl_binding{audit_topic_pattern, audit_write_acl}},
+            5s);
+        // Errors come back in-band (e.g. no_leader_controller); failing
+        // here keeps initialize() retrying instead of starting the
+        // auditing fibers without a write ACL.
+        const auto failed = std::ranges::find_if(results, [](cluster::errc ec) {
+            return ec != cluster::errc::success;
+        });
+        if (failed != results.end()) {
+            throw std::runtime_error(
+              fmt::format(
+                "Error creating ACLs for the audit log topic - "
+                "error_code: {}",
+                *failed));
+        }
+    }
+
+    /// Kafka-client sink flavor of the exists-skip. Historically this
+    /// create doubled as the credential bootstrap — its SASL failure was
+    /// what triggered inform() — so skipping it was unsafe. The proactive
+    /// inform-all in do_configure() now owns credential propagation, which
+    /// makes the skip safe and removes the last controller-leader
+    /// dependency from re-initialization (CreateTopics must be routed to
+    /// the controller broker, so without an elected leader it cannot even
+    /// be dispatched).
     ss::future<> create_internal_topic() {
+        if (audit_topic_exists()) {
+            vlog(
+              adtlog.debug, "Audit log topic already exists, skipping create");
+            co_return;
+        }
         int16_t replication_factor
           = config::shard_local_cfg().audit_log_replication_factor().value_or(
             controller()->internal_topic_replication());
@@ -476,6 +589,11 @@ audit_client::audit_client(audit_sink* sink, cluster::controller* controller)
   , _send_sem(_max_buffer_size, "audit_log_producer_semaphore")
   , _sink(sink)
   , _controller(controller) {}
+
+bool audit_client::audit_topic_exists() {
+    return _controller->get_topics_state().local().contains(
+      model::topic_namespace_view{model::kafka_audit_logging_nt});
+}
 
 ss::future<> audit_client::initialize() {
     static const auto base_backoff = 250ms;
@@ -776,15 +894,13 @@ kafka_client_impl::do_update_status(auth_misconfigured_t misconfigured) {
 }
 
 ss::future<> kafka_client_impl::update_status(kafka::error_code errc) {
-    /// If the status changed to erroneous from anything else
-    if (errc == kafka::error_code::illegal_sasl_state && !_misconfigured) {
+    /// If the status changed to erroneous from anything else.
+    if (indicates_misconfigured_auth(errc) && !_misconfigured) {
         return do_update_status(auth_misconfigured_t::yes);
     }
 
-    constexpr auto failed_codes = std::to_array(
-      {kafka::error_code::illegal_sasl_state,
-       kafka::error_code::broker_not_available});
-    const bool success = !std::ranges::contains(failed_codes, errc);
+    const bool success = !indicates_misconfigured_auth(errc)
+                         && errc != kafka::error_code::broker_not_available;
     if (success && _misconfigured) {
         /// The status changed from erroneous to anything else
         return do_update_status(auth_misconfigured_t::no);
